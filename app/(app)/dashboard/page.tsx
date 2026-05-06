@@ -1,0 +1,799 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ChevronLeft, ChevronRight, Expand, Check, Search, X,
+  Bold, Underline, Highlighter, Image, Mic, FileText, Pencil, Trash2
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase'
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const DIAS_SEMANA = ['dom','lun','mar','mié','jue','vie','sáb']
+
+type Pago = 'pendiente' | 'señado' | 'pagado'
+type SesionHistorial = { fecha: string; servicio: string; contexto: string }
+type Turno = {
+  id: string; pacienteId: string; pacienteNombre: string; pacienteDbId?: string
+  fecha: string; hora: string; duracion: number
+  servicio: string; precio: number; contexto: string
+  pago: Pago; sena: number; realizado: boolean
+  historial?: SesionHistorial[]
+}
+type Paciente = { id: string; nombre: string; apellido: string; celular: string; alias: string }
+type Servicio = { id: string; nombre: string; precio_base: number }
+
+function sinTildes(str: string) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+function formatDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function horaAMin(hora: string) {
+  const [h, m] = hora.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+const PAGO_CONFIG = {
+  pendiente: { label: '⚡ Pendiente', cls: 'tag-p' },
+  señado:    { label: '💛 Señado',    cls: 'tag-d' },
+  pagado:    { label: '✓ Pagado',     cls: 'tag-ok' },
+}
+
+export default function DashboardPage() {
+  const hoy = new Date()
+  const manana = new Date(); manana.setDate(hoy.getDate()+1)
+  const pasado = new Date(); pasado.setDate(hoy.getDate()+2)
+
+  const [mesIdx, setMesIdx] = useState(hoy.getMonth())
+  const [mesOffset, setMesOffset] = useState(Math.max(0, hoy.getMonth()-2))
+  const [diasPorMes, setDiasPorMes] = useState<Record<number,number>>({ [hoy.getMonth()]: hoy.getDate() })
+  const [diaOffset, setDiaOffset] = useState(Math.max(0, hoy.getDate()-3))
+  const [busqueda, setBusqueda] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [historialOpen, setHistorialOpen] = useState(false)
+  const [editandoFecha, setEditandoFecha] = useState(false)
+  const [borrarConfirm, setBorrarConfirm] = useState(false)
+  const [nuevaFechaEditar, setNuevaFechaEditar] = useState('')
+  const [nuevaHoraEditar, setNuevaHoraEditar] = useState('')
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null)
+  const [turnos, setTurnos] = useState<Turno[]>([])
+  const [pacientes, setPacientes] = useState<Paciente[]>([])
+  const [servicios, setServicios] = useState<Servicio[]>([])
+  const [loading, setLoading] = useState(true)
+  const [nombreTerapeuta, setNombreTerapeuta] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [sugerencias, setSugerencias] = useState<Paciente[]>([])
+  const [showSugerencias, setShowSugerencias] = useState(false)
+  const sugerenciasRef = useRef<HTMLDivElement>(null)
+
+  const diaSeleccionado = diasPorMes[mesIdx] ?? 1
+  const diasDelMes = new Date(hoy.getFullYear(), mesIdx+1, 0).getDate()
+  const fechaSeleccionada = `${hoy.getFullYear()}-${String(mesIdx+1).padStart(2,'0')}-${String(diaSeleccionado).padStart(2,'0')}`
+
+  const [nuevoTurno, setNuevoTurno] = useState({
+    pacienteNombre: '', pacienteCelular: '', pacienteDbId: '',
+    fecha: fechaSeleccionada, hora: '',
+    duracion: 60, servicio: '', servicioId: '', precio: 0,
+    contexto: '', pago: 'pendiente' as Pago, sena: 0,
+  })
+
+  useEffect(() => {
+    setNuevoTurno(prev => ({ ...prev, fecha: fechaSeleccionada }))
+  }, [fechaSeleccionada])
+
+  useEffect(() => {
+    async function cargarDatos() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { setLoading(false); return }
+
+        const [{ data: sesiones }, { data: pacs }, { data: servs }, { data: prof }] = await Promise.all([
+          supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
+          supabase.from('patients').select('*').eq('user_id', user.id),
+          supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
+          supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
+        ])
+
+        if (pacs) setPacientes(pacs)
+        if (servs) {
+          setServicios(servs)
+          if (servs.length > 0) {
+            setNuevoTurno(prev => ({ ...prev, servicio: servs[0].nombre, servicioId: servs[0].id, precio: servs[0].precio_base }))
+          }
+        }
+
+        if (prof?.nombre_profesional) {
+          setNombreTerapeuta(prof.nombre_profesional)
+        } else {
+          setNombreTerapeuta(user.email?.split('@')[0] || '')
+        }
+
+        if (sesiones && pacs) {
+          const convertidos: Turno[] = sesiones.map((s: any) => {
+            const pac = pacs.find((p: any) => p.id === s.patient_id)
+            const historial = sesiones
+              .filter((prev: any) => prev.patient_id === s.patient_id && new Date(prev.fecha) < new Date(s.fecha))
+              .map((prev: any) => ({
+                fecha: new Date(prev.fecha).toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+                servicio: prev.servicio_nombre || '',
+                contexto: prev.contexto_sesion || '',
+              }))
+            return {
+              id: s.id,
+              pacienteId: pac?.alias || pac?.celular?.slice(-4) || '',
+              pacienteNombre: pac ? `${pac.nombre} ${pac.apellido}`.trim() : '',
+              pacienteDbId: s.patient_id,
+              fecha: s.fecha?.split('T')[0] || '',
+              hora: s.hora || '',
+              duracion: s.duracion || 60,
+              servicio: s.servicio_nombre || '',
+              precio: s.precio || 0,
+              contexto: s.contexto_sesion || '',
+              pago: (s.estado_pago as Pago) || 'pendiente',
+              sena: s.sena || 0,
+              realizado: s.realizado || false,
+              historial,
+            }
+          })
+          setTurnos(convertidos)
+        }
+      } catch (err) {
+        console.error('Error cargando datos:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    cargarDatos()
+  }, [])
+
+  function cambiarMes(nuevoMes: number) {
+    setMesIdx(nuevoMes)
+    const dia = nuevoMes === hoy.getMonth() ? hoy.getDate() : (diasPorMes[nuevoMes] ?? 1)
+    setDiasPorMes(prev => ({ ...prev, [nuevoMes]: dia }))
+    setDiaOffset(Math.max(0, dia - 3))
+  }
+
+  function cambiarDia(dia: number) {
+    setDiasPorMes(prev => ({ ...prev, [mesIdx]: dia }))
+  }
+
+  const turnosFiltrados = useMemo(() => {
+    const q = sinTildes(busqueda)
+    return turnos.filter(t => {
+      const matchFecha = t.fecha === fechaSeleccionada
+      if (!busqueda) return matchFecha
+      return matchFecha && (
+        sinTildes(t.pacienteNombre).includes(q) ||
+        t.pacienteId.includes(busqueda) ||
+        sinTildes(t.servicio).includes(q)
+      )
+    })
+  }, [turnos, fechaSeleccionada, busqueda])
+
+  const turnosHoy = turnos.filter(t => t.fecha === formatDate(hoy)).length
+  const turnosManana = turnos.filter(t => t.fecha === formatDate(manana)).length
+  const turnosPasado = turnos.filter(t => t.fecha === formatDate(pasado)).length
+
+  function buscarSugerencias(valor: string) {
+    if (!valor || valor.length < 2) { setSugerencias([]); setShowSugerencias(false); return }
+    const q = sinTildes(valor)
+    const found = pacientes.filter(p =>
+      sinTildes(`${p.nombre} ${p.apellido}`).includes(q) ||
+      (p.celular && p.celular.includes(valor)) ||
+      (p.alias && p.alias.includes(valor))
+    ).slice(0, 5)
+    setSugerencias(found)
+    setShowSugerencias(found.length > 0)
+  }
+
+  function seleccionarPaciente(p: Paciente) {
+    setNuevoTurno(prev => ({
+      ...prev,
+      pacienteNombre: `${p.nombre} ${p.apellido}`.trim(),
+      pacienteCelular: p.celular || '',
+      pacienteDbId: p.id,
+    }))
+    setSugerencias([])
+    setShowSugerencias(false)
+  }
+
+  function toggleRealizado(id: string) {
+    const turno = turnos.find(t => t.id === id)
+    if (!turno) return
+    const supabase = createClient()
+    supabase.from('sessions').update({ realizado: !turno.realizado }).eq('id', id)
+    setTurnos(prev => prev.map(t => t.id === id ? {...t, realizado: !t.realizado} : t))
+    if (turnoSeleccionado?.id === id) setTurnoSeleccionado(prev => prev ? {...prev, realizado: !prev.realizado} : prev)
+  }
+
+  async function updatePago(id: string, pago: Pago) {
+    const supabase = createClient()
+    const { error } = await supabase.from('sessions').update({ estado_pago: pago }).eq('id', id)
+    if (!error) {
+      setTurnos(prev => prev.map(t => t.id === id ? {...t, pago} : t))
+      setTurnoSeleccionado(prev => prev?.id === id ? {...prev, pago} : prev)
+    }
+  }
+
+  async function updateSena(id: string, sena: number) {
+    const supabase = createClient()
+    const { error } = await supabase.from('sessions').update({ sena }).eq('id', id)
+    if (!error) {
+      setTurnos(prev => prev.map(t => t.id === id ? {...t, sena} : t))
+      setTurnoSeleccionado(prev => prev?.id === id ? {...prev, sena} : prev)
+    }
+  }
+
+  function updateContexto(id: string, contexto: string) {
+    const supabase = createClient()
+    supabase.from('sessions').update({ contexto_sesion: contexto }).eq('id', id)
+    setTurnos(prev => prev.map(t => t.id === id ? {...t, contexto} : t))
+    setTurnoSeleccionado(prev => prev?.id === id ? {...prev, contexto} : prev)
+  }
+
+  async function editarFechaHora(id: string, fecha: string, hora: string) {
+    const supabase = createClient()
+    await supabase.from('sessions').update({ fecha: fecha+'T'+hora+':00', hora }).eq('id', id)
+    setTurnos(prev => prev.map(t => t.id === id ? {...t, fecha, hora} : t))
+    setTurnoSeleccionado(prev => prev?.id === id ? {...prev, fecha, hora} : prev)
+    setEditandoFecha(false)
+  }
+
+  async function borrarTurno(id: string) {
+    const supabase = createClient()
+    await supabase.from('sessions').delete().eq('id', id)
+    setTurnos(prev => prev.filter(t => t.id !== id))
+    setTurnoSeleccionado(null)
+    setBorrarConfirm(false)
+  }
+
+  async function guardarTurno() {
+    if (!nuevoTurno.pacienteNombre || !nuevoTurno.hora) { alert('Completá nombre y hora'); return }
+
+    const horaInicioNuevo = horaAMin(nuevoTurno.hora)
+    const horaFinNuevo = horaInicioNuevo + nuevoTurno.duracion
+    const hayConflicto = turnos.some(t => {
+      if (t.fecha !== nuevoTurno.fecha) return false
+      const horaInicioExistente = horaAMin(t.hora)
+      const horaFinExistente = horaInicioExistente + t.duracion
+      return horaInicioNuevo < horaFinExistente && horaFinNuevo > horaInicioExistente
+    })
+    if (hayConflicto) {
+      alert('⚠️ Ya tenés un turno en ese horario. Revisá la agenda antes de agendar.')
+      return
+    }
+
+    setGuardando(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    let pacienteDbId = nuevoTurno.pacienteDbId
+    if (!pacienteDbId) {
+      const partes = nuevoTurno.pacienteNombre.trim().split(' ')
+      const { data: nuevoPac } = await supabase.from('patients').insert({
+        user_id: user.id,
+        nombre: partes[0],
+        apellido: partes.slice(1).join(' '),
+        celular: nuevoTurno.pacienteCelular,
+        alias: nuevoTurno.pacienteCelular ? nuevoTurno.pacienteCelular.slice(-4) : '',
+        contexto_general: '',
+      }).select().single()
+      if (nuevoPac) { pacienteDbId = nuevoPac.id; setPacientes(prev => [...prev, nuevoPac]) }
+    }
+
+    const historialPaciente = turnos
+      .filter(t => t.pacienteDbId === pacienteDbId)
+      .sort((a,b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+      .map(t => ({
+        fecha: new Date(t.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+        servicio: t.servicio, contexto: t.contexto,
+      }))
+
+    const { data: nuevaSesion, error } = await supabase.from('sessions').insert({
+      user_id: user.id,
+      patient_id: pacienteDbId,
+      service_id: nuevoTurno.servicioId || null,
+      fecha: nuevoTurno.fecha+'T'+nuevoTurno.hora+':00',
+      hora: nuevoTurno.hora,
+      duracion: nuevoTurno.duracion,
+      contexto_sesion: nuevoTurno.contexto,
+      servicio_nombre: nuevoTurno.servicio,
+      precio: nuevoTurno.precio,
+      sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
+      estado_pago: nuevoTurno.pago,
+      estado: 'programada',
+      realizado: false,
+    }).select().single()
+
+    if (error) { console.error(error); setGuardando(false); return }
+
+    const nuevo: Turno = {
+      id: nuevaSesion.id,
+      pacienteId: nuevoTurno.pacienteCelular ? nuevoTurno.pacienteCelular.slice(-4) : '----',
+      pacienteNombre: nuevoTurno.pacienteNombre,
+      pacienteDbId: pacienteDbId || '',
+      fecha: nuevoTurno.fecha, hora: nuevoTurno.hora, duracion: nuevoTurno.duracion,
+      servicio: nuevoTurno.servicio, precio: nuevoTurno.precio,
+      contexto: nuevoTurno.contexto, pago: nuevoTurno.pago,
+      sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
+      realizado: false, historial: historialPaciente,
+    }
+
+    setTurnos(prev => [...prev, nuevo])
+    setTurnoSeleccionado(nuevo)
+    setModalOpen(false)
+    setGuardando(false)
+    setNuevoTurno({
+      pacienteNombre: '', pacienteCelular: '', pacienteDbId: '',
+      fecha: fechaSeleccionada, hora: '', duracion: 60,
+      servicio: servicios[0]?.nombre || '', servicioId: servicios[0]?.id || '',
+      precio: servicios[0]?.precio_base || 0,
+      contexto: '', pago: 'pendiente', sena: 0,
+    })
+  }
+
+  const resta = turnoSeleccionado ? turnoSeleccionado.precio - turnoSeleccionado.sena : 0
+
+  function saludoHora() {
+    const hora = new Date().getHours()
+    if (hora >= 6 && hora < 12) return 'Buenos días'
+    if (hora >= 12 && hora < 19) return 'Buenas tardes'
+    return 'Buenas noches'
+  }
+
+  if (loading) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'#9B8EC4',background:'#F4F2FF'}}>
+      Cargando...
+    </div>
+  )
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        *{box-sizing:border-box}
+        .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:#F4F2FF;padding:12px 16px 12px 12px;gap:12px}
+        .dl{display:flex;flex-direction:column;gap:8px;overflow:hidden;background:white;border-radius:20px;padding:16px;height:100%;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF}
+        .dr{display:flex;flex-direction:column;gap:10px;background:white;overflow-y:auto;border-radius:20px;padding:18px;height:100%;box-shadow:0 8px 32px rgba(139,92,246,0.12),0 2px 8px rgba(139,92,246,0.06);border:0.5px solid #EDE9FF}
+        .wc{background:linear-gradient(135deg,#EDE8FF,#F5F0FF);border-radius:14px;padding:11px 14px;border:0.5px solid #DDD5F5;flex-shrink:0;box-shadow:0 2px 8px rgba(139,92,246,0.08)}
+        .wc-h{font-size:15px;font-weight:700;color:#3B0F8C}
+        .wc-s{font-size:12px;color:#7C6BAA;margin-top:2px}
+        .sr{position:relative;flex-shrink:0}
+        .si{width:100%;padding:8px 32px 8px 12px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:13px;background:#FAFAFF;color:#1A1035;outline:none;font-family:inherit;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
+        .si:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
+        .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:#A99CC4;pointer-events:none}
+        .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;flex-shrink:0}
+        .st{background:white;border-radius:14px;padding:10px 12px;border:0.5px solid #EDE9FF;text-align:center;box-shadow:0 2px 10px rgba(139,92,246,0.07)}
+        .st.ac{background:linear-gradient(135deg,#EDE8FF,#F0EBFF);border-color:#C4B8E8;box-shadow:0 4px 16px rgba(139,92,246,0.16)}
+        .st-l{font-size:10px;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+        .st.ac .st-l{color:#7C6BAA}
+        .st-n{font-size:20px;font-weight:700;color:#1A1035}
+        .st.ac .st-n{color:#3B0F8C}
+        .cal-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
+        .ca{width:22px;height:22px;border-radius:6px;border:0.5px solid #E2D9FF;background:white;color:#A99CC4;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 1px 3px rgba(139,92,246,0.06)}
+        .mons{display:flex;flex:1;justify-content:space-around}
+        .mo{font-size:11px;color:#C4B8E8;cursor:pointer;background:none;border:none;font-family:inherit;padding:2px}
+        .mo.ac{font-size:12px;font-weight:700;color:#3B0F8C}
+        .days-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
+        .days{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;flex:1}
+        .day{height:42px;border-radius:12px;border:0.5px solid #EDE9FF;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;transition:all 0.15s;box-shadow:0 2px 6px rgba(139,92,246,0.06)}
+        .day:hover{box-shadow:0 4px 12px rgba(139,92,246,0.12);transform:translateY(-1px)}
+        .day.ac{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border-color:#8B5CF6;box-shadow:0 6px 16px rgba(139,92,246,0.35);transform:translateY(-1px)}
+        .day.ht{border-color:#C4B8E8}
+        .dn{font-size:12px;font-weight:600;color:#6B5B8A}
+        .day.ac .dn{color:white;font-weight:700}
+        .day.ht .dn{color:#7C3AED}
+        .dd{font-size:9px;color:#C4B8E8}
+        .day.ac .dd{color:rgba(255,255,255,0.75)}
+        .tlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0;margin-top:6px;padding:4px 6px;margin-left:-6px;margin-right:-6px}
+        .tc{background:white;border-radius:14px;padding:10px 12px;border:none;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px rgba(139,92,246,0.09),0 1px 4px rgba(139,92,246,0.05)}
+        .tc:hover{box-shadow:0 4px 16px rgba(139,92,246,0.16),0 1px 4px rgba(139,92,246,0.08);transform:translateY(-1px)}
+        .tc.sel{background:#FDFCFF;box-shadow:0 6px 20px rgba(139,92,246,0.18),0 2px 8px rgba(139,92,246,0.10);transform:translateY(-1px)}
+        .tc.done{opacity:0.35}
+        .tdot{width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);flex-shrink:0}
+        .tb{flex:1;min-width:0}
+        .tn{font-size:13px;font-weight:600;color:#1A1035}
+        .ts2{font-size:11px;color:#A99CC4;margin-top:1px}
+        .ttags{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap}
+        .tg{font-size:10px;padding:2px 8px;border-radius:20px;border:0.5px solid}
+        .tg-s{background:#EDE8FF;color:#4C1D95;border-color:#C4B8E8}
+        .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
+        .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
+        .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
+        .chk{width:24px;height:24px;border-radius:50%;border:0.5px solid #E2D9FF;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 1px 3px rgba(139,92,246,0.06)}
+        .chk:hover{border-color:#BBF7D0;background:#F0FDF4}
+        .chk.ok{background:#DCFCE7;border-color:#BBF7D0;color:#166534}
+        .ab{background:white;border:1.5px dashed #C4B8E8;border-radius:14px;padding:10px;text-align:center;font-size:12px;color:#A99CC4;cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:all 0.15s}
+        .ab:hover{background:#F8F6FF;border-color:#8B5CF6;color:#7C3AED}
+        .re{flex:1;display:flex;align-items:center;justify-content:center;color:#C4B8E8;font-size:12px;text-align:center;line-height:2}
+        .rt{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
+        .rid{font-size:24px;font-weight:800;color:#1A1035;letter-spacing:-1px;line-height:1}
+        .rdt{font-size:10px;color:#A99CC4;margin-top:3px}
+        .r-actions{display:flex;gap:5px}
+        .rex{width:26px;height:26px;border-radius:8px;border:0.5px solid #E2D9FF;background:#F8F6FF;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#A99CC4;transition:all 0.15s;box-shadow:0 1px 3px rgba(139,92,246,0.06)}
+        .rex:hover{border-color:#8B5CF6;color:#7C3AED;box-shadow:0 2px 8px rgba(139,92,246,0.15)}
+        .rex.danger{color:#EF4444;border-color:#FECACA}
+        .rex.danger:hover{background:#FEF2F2;border-color:#EF4444}
+        .rname{font-size:15px;font-weight:700;color:#1A1035;flex-shrink:0}
+        .rbadges{display:flex;gap:5px;flex-wrap:wrap;align-items:center;flex-shrink:0}
+        .rb{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid}
+        .rb-s{background:#EDE8FF;color:#4C1D95;border-color:#C4B8E8}
+        .pago-dd{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid #FDE68A;background:#FEF9C3;color:#854D0E;cursor:pointer;outline:none;font-family:inherit;appearance:none;-webkit-appearance:none;transition:all 0.15s}
+        .pago-dd.ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
+        .pago-dd.dep{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
+        .sena-row{background:#FFFBEB;border-radius:10px;padding:8px 12px;border:0.5px solid #FDE68A;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;box-shadow:0 1px 4px rgba(253,230,138,0.3)}
+        .sena-l{font-size:11px;color:#854D0E}
+        .sena-r{font-size:11px;font-weight:700;color:#92400E}
+        .sena-input{font-size:12px;padding:3px 8px;border-radius:7px;border:0.5px solid #FDE68A;background:white;color:#92400E;width:80px;outline:none;font-family:inherit}
+        .ctxl{font-size:10px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
+        .editor{border:0.5px solid #E2D9FF;border-radius:14px;overflow:hidden;flex-shrink:0;box-shadow:0 2px 8px rgba(139,92,246,0.07)}
+        .etb{display:flex;gap:3px;padding:6px 7px;border-bottom:0.5px solid #EDE9FF;background:#F8F6FF;flex-wrap:wrap}
+        .eb{width:24px;height:24px;border-radius:6px;border:0.5px solid #E2D9FF;background:white;color:#6B5B8A;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(139,92,246,0.05)}
+        .eb:hover,.ebico:hover{background:#EDE8FF;color:#3B0F8C}
+        .ebico{width:24px;height:24px;border-radius:6px;border:0.5px solid #E2D9FF;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#6B5B8A;box-shadow:0 1px 2px rgba(139,92,246,0.05)}
+        .esep{width:0.5px;background:#E2D9FF;margin:2px 4px;align-self:stretch}
+        .ea{width:100%;padding:8px 11px;font-size:12px;color:#1A1035;resize:none;height:80px;font-family:inherit;background:transparent;outline:none;line-height:1.6;border:none}
+        .rdiv{border:none;border-top:0.5px solid #EDE9FF;flex-shrink:0}
+        .hl{font-size:10px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
+        .hi{background:#F8F6FF;border-radius:12px;padding:10px 12px;border:0.5px solid #EDE9FF;flex-shrink:0;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
+        .ht2{display:flex;gap:5px;font-size:10px;color:#A99CC4;margin-bottom:3px}
+        .htxt{font-size:12px;color:#6B5B8A;line-height:1.5}
+        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+        .mo-box{background:white;border-radius:20px;padding:24px;width:440px;max-height:88vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25),0 4px 16px rgba(100,60,200,0.1)}
+        .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+        .mo-title{font-size:15px;font-weight:700;color:#1A1035}
+        .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid #E2D9FF;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#A99CC4}
+        .field{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;position:relative}
+        .field label{font-size:12px;font-weight:600;color:#1A1035}
+        .field input,.field select,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:13px;font-family:inherit;color:#1A1035;background:#FAFAFF;outline:none;width:100%}
+        .field input:focus,.field select:focus,.field textarea:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
+        .field textarea{min-height:65px;resize:none}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s}
+        .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
+        .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+        .sug-list{position:absolute;top:100%;left:0;right:0;background:white;border:0.5px solid #E2D9FF;border-radius:10px;box-shadow:0 8px 24px rgba(100,60,200,0.12);z-index:50;overflow:hidden;margin-top:3px}
+        .sug-item{padding:9px 12px;font-size:12px;color:#1A1035;cursor:pointer;display:flex;flex-direction:column;gap:2px;border-bottom:0.5px solid #F4F2FF}
+        .sug-item:last-child{border-bottom:none}
+        .sug-item:hover{background:#F0EBFF}
+        .sug-item-sub{font-size:10px;color:#A99CC4}
+        .hist-box{background:white;border-radius:20px;padding:24px;width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .hist-sessions{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+        .hist-sc{background:#F8F6FF;border-radius:14px;padding:14px;border:0.5px solid #E2D9FF;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
+        .hist-sc.current{border-color:#8B5CF6;background:#FDFCFF;box-shadow:0 4px 12px rgba(139,92,246,0.1)}
+        .hist-sc-top{display:flex;justify-content:space-between;margin-bottom:7px}
+        .hist-sc-date{font-size:12px;font-weight:600;color:#7C3AED}
+        .hist-sc-serv{font-size:11px;color:#A99CC4}
+        .hist-sc-ctx{font-size:12px;color:#1A1035;line-height:1.6}
+      `}</style>
+
+      <div className="dw">
+        <div className="dl">
+          <div className="wc">
+            <div className="wc-h">¡{saludoHora()}, {nombreTerapeuta}! ✨</div>
+            <div className="wc-s">Tenés {turnosHoy} sesiones hoy · Todo listo para empezar</div>
+          </div>
+
+          <div className="sr">
+            <input className="si" placeholder="Buscar paciente, alias o servicio..."
+              value={busqueda} onChange={e => setBusqueda(e.target.value)}/>
+            <span className="sico"><Search size={13}/></span>
+          </div>
+
+          <div className="stats">
+            <div className="st ac"><div className="st-l">Hoy</div><div className="st-n">{turnosHoy}</div></div>
+            <div className="st"><div className="st-l">Mañana</div><div className="st-n">{turnosManana}</div></div>
+            <div className="st"><div className="st-l">Pasado</div><div className="st-n">{turnosPasado}</div></div>
+          </div>
+
+          <div className="cal-r">
+            <button className="ca" onClick={() => setMesOffset(o => Math.max(0,o-1))}><ChevronLeft size={11}/></button>
+            <div className="mons">
+              {MESES.slice(mesOffset, mesOffset+5).map((mes,i) => {
+                const real = mesOffset+i
+                return <button key={mes} className={`mo${mesIdx===real?' ac':''}`} onClick={() => cambiarMes(real)}>{mes.slice(0,3)}</button>
+              })}
+            </div>
+            <button className="ca" onClick={() => setMesOffset(o => Math.min(7,o+1))}><ChevronRight size={11}/></button>
+          </div>
+
+          <div className="days-r">
+            <button className="ca" onClick={() => setDiaOffset(o => Math.max(0,o-1))}><ChevronLeft size={11}/></button>
+            <div className="days">
+              {Array.from({length:diasDelMes}).slice(diaOffset, diaOffset+6).map((_,i) => {
+                const dia = diaOffset+i+1
+                const fecha = `${hoy.getFullYear()}-${String(mesIdx+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
+                const diaSemana = new Date(hoy.getFullYear(), mesIdx, dia).getDay()
+                const tieneTurnos = turnos.some(t => t.fecha === fecha)
+                const esSel = dia === diaSeleccionado
+                return (
+                  <button key={dia} className={`day${esSel?' ac':''}${tieneTurnos&&!esSel?' ht':''}`} onClick={() => cambiarDia(dia)}>
+                    <span className="dn">{dia}</span>
+                    <span className="dd">{DIAS_SEMANA[diaSemana]}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <button className="ca" onClick={() => setDiaOffset(o => Math.min(diasDelMes-6,o+1))}><ChevronRight size={11}/></button>
+          </div>
+
+          <div className="tlist">
+            {turnosFiltrados.length === 0 && (
+              <p style={{fontSize:'12px',color:'#A99CC4',textAlign:'center',padding:'12px 0'}}>No hay turnos para este día</p>
+            )}
+            {turnosFiltrados.map(turno => (
+              <div key={turno.id}
+                className={`tc${turnoSeleccionado?.id===turno.id?' sel':''}${turno.realizado?' done':''}`}
+                onClick={() => setTurnoSeleccionado(turno)}>
+                <div className="tdot"/>
+                <div className="tb">
+                  <div className="tn">{turno.pacienteNombre}</div>
+                  <div className="ts2">{turno.hora} · {turno.duracion} min</div>
+                  <div className="ttags">
+                    <span className="tg tg-s">{turno.servicio}</span>
+                    <span className={`tg ${PAGO_CONFIG[turno.pago].cls}`}>{PAGO_CONFIG[turno.pago].label}</span>
+                  </div>
+                </div>
+                <button className={`chk${turno.realizado?' ok':''}`}
+                  onClick={e => { e.stopPropagation(); toggleRealizado(turno.id) }}>
+                  <Check size={11}/>
+                </button>
+              </div>
+            ))}
+            <button className="ab" onClick={() => setModalOpen(true)}>+ Agendar turno</button>
+          </div>
+        </div>
+
+        <div className="dr">
+          {!turnoSeleccionado ? (
+            <div className="re">Seleccioná un turno<br/>para ver el detalle</div>
+          ) : (<>
+            <div className="rt">
+              <div>
+                <div className="rid">#{turnoSeleccionado.pacienteId}</div>
+                <div className="rdt">{turnoSeleccionado.hora} · {new Date(turnoSeleccionado.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long'})}</div>
+              </div>
+              <div className="r-actions">
+                <button className="rex" onClick={() => { setNuevaFechaEditar(turnoSeleccionado.fecha); setNuevaHoraEditar(turnoSeleccionado.hora); setEditandoFecha(true) }}>
+                  <Pencil size={11}/>
+                </button>
+                <button className="rex danger" onClick={() => setBorrarConfirm(true)}>
+                  <Trash2 size={11}/>
+                </button>
+                <button className="rex" onClick={() => setHistorialOpen(true)}>
+                  <Expand size={11}/>
+                </button>
+              </div>
+            </div>
+
+            <div className="rname">{turnoSeleccionado.pacienteNombre}</div>
+
+            <div className="rbadges">
+              <span className="rb rb-s">{turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}</span>
+              <select
+                className={`pago-dd${turnoSeleccionado.pago==='pagado'?' ok':turnoSeleccionado.pago==='señado'?' dep':''}`}
+                value={turnoSeleccionado.pago}
+                onChange={e => updatePago(turnoSeleccionado.id, e.target.value as Pago)}>
+                <option value="pendiente">⚡ Pendiente</option>
+                <option value="señado">💛 Señado</option>
+                <option value="pagado">✓ Pagado</option>
+              </select>
+            </div>
+
+            {turnoSeleccionado.pago === 'señado' && (
+              <div className="sena-row">
+                <div className="sena-l">Seña abonada</div>
+                <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
+                  <span style={{fontSize:'11px',color:'#854D0E'}}>$</span>
+                  <input className="sena-input" type="number"
+                    value={turnoSeleccionado.sena}
+                    onChange={e => updateSena(turnoSeleccionado.id, Number(e.target.value))}/>
+                  <span className="sena-r">Resta ${Math.max(0,resta).toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="ctxl">Contexto de esta sesión</div>
+            <div className="editor">
+              <div className="etb">
+                <button className="eb"><Bold size={11}/></button>
+                <button className="eb"><Underline size={11}/></button>
+                <button className="eb" style={{background:'#FEF08A',borderColor:'#FDE047',color:'#713F12'}}><Highlighter size={11}/></button>
+                <div className="esep"/>
+                <button className="ebico"><Image size={11}/></button>
+                <button className="ebico"><Mic size={11}/></button>
+                <button className="ebico"><FileText size={11}/></button>
+              </div>
+              <textarea
+                key={turnoSeleccionado.id}
+                className="ea"
+                value={turnoSeleccionado.contexto}
+                onChange={e => updateContexto(turnoSeleccionado.id, e.target.value)}
+                placeholder="Escribí el contexto de esta sesión..."/>
+            </div>
+
+            {turnoSeleccionado.historial && turnoSeleccionado.historial.length > 0 && (<>
+              <hr className="rdiv"/>
+              <div className="hl">Sesiones anteriores</div>
+              {turnoSeleccionado.historial.map((h,i) => (
+                <div key={i} className="hi">
+                  <div className="ht2"><span>{h.fecha}</span><span>·</span><span>{h.servicio}</span></div>
+                  <div className="htxt">{h.contexto}</div>
+                </div>
+              ))}
+            </>)}
+          </>)}
+        </div>
+      </div>
+
+      {modalOpen && (
+        <div className="mo-overlay" onClick={() => setModalOpen(false)}>
+          <div className="mo-box" onClick={e => e.stopPropagation()}>
+            <div className="mo-hdr">
+              <span className="mo-title">Agendar turno</span>
+              <button className="mo-close" onClick={() => setModalOpen(false)}><X size={12}/></button>
+            </div>
+            <div className="field" style={{position:'relative'}}>
+              <label>Nombre del paciente</label>
+              <input placeholder="Ej: María López" value={nuevoTurno.pacienteNombre}
+                onChange={e => { setNuevoTurno({...nuevoTurno, pacienteNombre: e.target.value, pacienteDbId: ''}); buscarSugerencias(e.target.value) }}
+                onFocus={() => buscarSugerencias(nuevoTurno.pacienteNombre)}
+                onBlur={() => setTimeout(() => setShowSugerencias(false), 150)}
+                autoComplete="off"/>
+              {showSugerencias && (
+                <div className="sug-list" ref={sugerenciasRef}>
+                  {sugerencias.map(p => (
+                    <div key={p.id} className="sug-item" onMouseDown={() => seleccionarPaciente(p)}>
+                      <span>{p.nombre} {p.apellido}</span>
+                      <span className="sug-item-sub">{p.celular ? `📱 ${p.celular}` : ''}{p.alias ? ` · #${p.alias}` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Celular</label>
+                <input placeholder="Ej: 2236789012" value={nuevoTurno.pacienteCelular}
+                  onChange={e => { setNuevoTurno({...nuevoTurno, pacienteCelular: e.target.value}); buscarSugerencias(e.target.value) }}/>
+              </div>
+              <div className="field">
+                <label>Fecha</label>
+                <input type="date" value={nuevoTurno.fecha}
+                  onChange={e => setNuevoTurno({...nuevoTurno, fecha: e.target.value})}/>
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Hora</label>
+                <input type="time" value={nuevoTurno.hora}
+                  onChange={e => setNuevoTurno({...nuevoTurno, hora: e.target.value})}/>
+              </div>
+              <div className="field">
+                <label>Duración (min)</label>
+                <input type="number" value={nuevoTurno.duracion}
+                  onChange={e => setNuevoTurno({...nuevoTurno, duracion: Number(e.target.value)})}/>
+              </div>
+            </div>
+            <div className="field">
+              <label>Servicio</label>
+              <select value={nuevoTurno.servicio}
+                onChange={e => {
+                  const s = servicios.find(sv => sv.nombre === e.target.value)
+                  setNuevoTurno({...nuevoTurno, servicio: e.target.value, servicioId: s?.id||'', precio: s?.precio_base||0})
+                }}>
+                {servicios.length === 0 && <option>Sin servicios cargados</option>}
+                {servicios.map(s => <option key={s.id} value={s.nombre}>{s.nombre} · ${s.precio_base?.toLocaleString()}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Estado de pago</label>
+              <select value={nuevoTurno.pago} onChange={e => setNuevoTurno({...nuevoTurno, pago: e.target.value as Pago})}>
+                <option value="pendiente">⚡ Pendiente</option>
+                <option value="señado">💛 Señado</option>
+                <option value="pagado">✓ Pagado</option>
+              </select>
+            </div>
+            {nuevoTurno.pago === 'señado' && (
+              <div className="field">
+                <label>Monto de la seña ($)</label>
+                <input type="number" placeholder="Ej: 1500" value={nuevoTurno.sena||''}
+                  onChange={e => setNuevoTurno({...nuevoTurno, sena: Number(e.target.value)})}/>
+              </div>
+            )}
+            <div className="field">
+              <label>Contexto inicial</label>
+              <textarea placeholder="¿De qué quiere hablar?" value={nuevoTurno.contexto}
+                onChange={e => setNuevoTurno({...nuevoTurno, contexto: e.target.value})}/>
+            </div>
+            <button className="save-btn" onClick={guardarTurno} disabled={guardando}>
+              {guardando ? 'Guardando...' : 'Guardar turno'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {editandoFecha && turnoSeleccionado && (
+        <div className="mo-overlay" onClick={() => setEditandoFecha(false)}>
+          <div className="mo-box" style={{width:'340px'}} onClick={e => e.stopPropagation()}>
+            <div className="mo-hdr">
+              <span className="mo-title">Editar fecha y hora</span>
+              <button className="mo-close" onClick={() => setEditandoFecha(false)}><X size={12}/></button>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Nueva fecha</label>
+                <input type="date" value={nuevaFechaEditar} onChange={e => setNuevaFechaEditar(e.target.value)}/>
+              </div>
+              <div className="field">
+                <label>Nueva hora</label>
+                <input type="time" value={nuevaHoraEditar} onChange={e => setNuevaHoraEditar(e.target.value)}/>
+              </div>
+            </div>
+            <button className="save-btn" onClick={() => editarFechaHora(turnoSeleccionado.id, nuevaFechaEditar, nuevaHoraEditar)}>
+              Guardar cambios
+            </button>
+          </div>
+        </div>
+      )}
+
+      {borrarConfirm && turnoSeleccionado && (
+        <div className="mo-overlay" onClick={() => setBorrarConfirm(false)}>
+          <div className="mo-box" style={{width:'340px'}} onClick={e => e.stopPropagation()}>
+            <div className="mo-hdr">
+              <span className="mo-title">¿Eliminar este turno?</span>
+              <button className="mo-close" onClick={() => setBorrarConfirm(false)}><X size={12}/></button>
+            </div>
+            <p style={{fontSize:'13px',color:'#6B5B8A',marginBottom:'20px',lineHeight:'1.6'}}>
+              Se eliminará el turno de <strong>{turnoSeleccionado.pacienteNombre}</strong> del {new Date(turnoSeleccionado.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long'})}. Esta acción no se puede deshacer.
+            </p>
+            <div style={{display:'flex',gap:'8px'}}>
+              <button onClick={() => setBorrarConfirm(false)}
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'0.5px solid #E2D9FF',background:'white',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',color:'#6B5B8A'}}>
+                Cancelar
+              </button>
+              <button onClick={() => borrarTurno(turnoSeleccionado.id)}
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'none',background:'#EF4444',color:'white',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',boxShadow:'0 4px 12px rgba(239,68,68,0.3)'}}>
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historialOpen && turnoSeleccionado && (
+        <div className="mo-overlay" onClick={() => setHistorialOpen(false)}>
+          <div className="hist-box" onClick={e => e.stopPropagation()}>
+            <div className="mo-hdr">
+              <div>
+                <div className="mo-title">{turnoSeleccionado.pacienteNombre}</div>
+                <div style={{fontSize:'11px',color:'#A99CC4',marginTop:'2px'}}>Historial completo · #{turnoSeleccionado.pacienteId}</div>
+              </div>
+              <button className="mo-close" onClick={() => setHistorialOpen(false)}><X size={12}/></button>
+            </div>
+            <div className="hist-sessions">
+              <div className="hist-sc current">
+                <div className="hist-sc-top">
+                  <span className="hist-sc-date">Sesión actual</span>
+                  <span className="hist-sc-serv">{turnoSeleccionado.servicio}</span>
+                </div>
+                <div className="hist-sc-ctx">{turnoSeleccionado.contexto || 'Sin contexto aún.'}</div>
+              </div>
+              {turnoSeleccionado.historial?.map((h,i) => (
+                <div key={i} className="hist-sc">
+                  <div className="hist-sc-top">
+                    <span className="hist-sc-date">{h.fecha}</span>
+                    <span className="hist-sc-serv">{h.servicio}</span>
+                  </div>
+                  <div className="hist-sc-ctx">{h.contexto}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
