@@ -85,7 +85,8 @@ export default function AgendaPage() {
   useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -147,7 +148,11 @@ export default function AgendaPage() {
       setDispLocal(DISPONIBILIDAD_DEFAULT)
     }
 
+  } catch (err) {
+    console.error('Error en agenda:', err)
+  } finally {
     setLoading(false)
+  }
   }
 
   const diasSemana = useMemo(() => {

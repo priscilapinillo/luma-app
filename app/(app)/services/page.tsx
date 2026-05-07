@@ -45,36 +45,40 @@ export default function ServiciosPage() {
   useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const [{ data: servs }, { data: sess }] = await Promise.all([
-      supabase.from('services').select('*').eq('user_id', user.id).order('created_at'),
-      supabase.from('sessions').select('servicio_nombre,precio,estado_pago').eq('user_id', user.id),
-    ])
+      const [{ data: servs }, { data: sess }] = await Promise.all([
+        supabase.from('services').select('*').eq('user_id', user.id).order('created_at'),
+        supabase.from('sessions').select('servicio_nombre,precio,estado_pago').eq('user_id', user.id),
+      ])
 
-    if (servs) setServicios(servs)
+      if (servs) setServicios(servs)
 
-    if (servs && sess) {
-      const stats: EstadServicio[] = servs.map(s => {
-        const sesionesDelServicio = sess.filter(se => se.servicio_nombre === s.nombre)
-        const ingresos = sesionesDelServicio
-          .filter(se => se.estado_pago === 'pagado')
-          .reduce((acc, se) => acc + (se.precio || 0), 0)
-        return {
-          id: s.id, nombre: s.nombre, color: s.color,
-          total_sesiones: sesionesDelServicio.length,
-          ingresos_total: ingresos, precio_base: s.precio_base,
-        }
-      }).sort((a, b) => b.total_sesiones - a.total_sesiones)
+      if (servs && sess) {
+        const stats: EstadServicio[] = servs.map(s => {
+          const sesionesDelServicio = sess.filter(se => se.servicio_nombre === s.nombre)
+          const ingresos = sesionesDelServicio
+            .filter(se => se.estado_pago === 'pagado')
+            .reduce((acc, se) => acc + (se.precio || 0), 0)
+          return {
+            id: s.id, nombre: s.nombre, color: s.color,
+            total_sesiones: sesionesDelServicio.length,
+            ingresos_total: ingresos, precio_base: s.precio_base,
+          }
+        }).sort((a, b) => b.total_sesiones - a.total_sesiones)
 
-      setEstadisticas(stats)
-      setTotalSesiones(sess.length)
-      setTotalIngresos(sess.filter(s => s.estado_pago === 'pagado').reduce((acc, s) => acc + (s.precio || 0), 0))
+        setEstadisticas(stats)
+        setTotalSesiones(sess.length)
+        setTotalIngresos(sess.filter(s => s.estado_pago === 'pagado').reduce((acc, s) => acc + (s.precio || 0), 0))
+      }
+    } catch (err) {
+      console.error('Error cargando:', err)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   function abrirNuevo() {
@@ -94,31 +98,38 @@ export default function ServiciosPage() {
   }
 
   async function guardar() {
+    
     if (!form.nombre) { alert('El nombre es obligatorio'); return }
     setGuardando(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setGuardando(false); return }
 
-    if (editando) {
-      const { data } = await supabase.from('services').update({
-        nombre: form.nombre, descripcion: form.descripcion,
-        duracion_estimada: form.duracion_estimada, precio_base: form.precio_base,
-        color: form.color, activo: form.activo,
-      }).eq('id', editando.id).select().single()
-      if (data) setServicios(prev => prev.map(s => s.id === data.id ? data : s))
-    } else {
-      const { data } = await supabase.from('services').insert({
-        user_id: user.id, nombre: form.nombre, descripcion: form.descripcion,
-        duracion_estimada: form.duracion_estimada, precio_base: form.precio_base,
-        color: form.color, activo: form.activo,
-      }).select().single()
-      if (data) setServicios(prev => [...prev, data])
+      if (editando) {
+        const { data } = await supabase.from('services').update({
+          nombre: form.nombre, descripcion: form.descripcion,
+          duracion_estimada: form.duracion_estimada, precio_base: form.precio_base,
+          color: form.color, activo: form.activo,
+        }).eq('id', editando.id).select().single()
+        if (data) setServicios(prev => prev.map(s => s.id === data.id ? data : s))
+      } else {
+        const { data } = await supabase.from('services').insert({
+          user_id: user.id, nombre: form.nombre, descripcion: form.descripcion,
+          duracion_estimada: form.duracion_estimada, precio_base: form.precio_base,
+          color: form.color, activo: form.activo,
+        }).select().single()
+        if (data) setServicios(prev => [...prev, data])
+      }
+
+      setModalOpen(false)
+      cargarDatos()
+    } catch (err) {
+      console.error('Error guardando:', err)
+      alert('Hubo un error al guardar')
+    } finally {
+      setGuardando(false)
     }
-
-    setModalOpen(false)
-    setGuardando(false)
-    cargarDatos()
   }
 
   async function toggleActivo(s: Servicio) {
@@ -141,7 +152,7 @@ export default function ServiciosPage() {
   const servicioTop = estadisticas[0]
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:'13px', color:'#9B8EC4', background:'#F4F2FF' }}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'#9B8EC4',background:'#F4F2FF'}}>
       Cargando...
     </div>
   )
@@ -152,17 +163,14 @@ export default function ServiciosPage() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box}
         .sw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:#F4F2FF;padding:20px 24px}
-
         .s-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
         .s-title{font-size:22px;font-weight:800;color:#1A1035;letter-spacing:-0.5px}
         .s-sub{font-size:12px;color:#A99CC4;margin-top:3px}
         .s-new-btn{display:flex;align-items:center;gap:6px;padding:10px 16px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s;white-space:nowrap}
         .s-new-btn:hover{box-shadow:0 6px 18px rgba(139,92,246,0.4);transform:translateY(-1px)}
-
         .s-section-label{font-size:11px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px}
         .s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:28px}
-
-        .sc{border-radius:20px;overflow:hidden;border:none;box-shadow:0 2px 12px rgba(139,92,246,0.08),0 1px 4px rgba(139,92,246,0.04);transition:all 0.15s;position:relative}
+        .sc{border-radius:20px;overflow:hidden;border:none;box-shadow:0 2px 12px rgba(139,92,246,0.08);transition:all 0.15s;position:relative}
         .sc:hover{box-shadow:0 8px 24px rgba(139,92,246,0.14);transform:translateY(-2px)}
         .sc.inactivo{opacity:0.55}
         .sc-inner{padding:20px}
@@ -180,30 +188,25 @@ export default function ServiciosPage() {
         .sc-precio{font-size:22px;font-weight:800;color:#1A1035;letter-spacing:-0.5px}
         .sc-precio-label{font-size:10px;color:#9B8EC4;margin-top:1px}
         .sc-toggle{padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:0.5px solid;font-family:inherit;transition:all 0.15s}
-        .sc-toggle.on{background:rgba(236, 220, 252, 0.8);color:#166534;border-color:#BBF7D0}
+        .sc-toggle.on{background:rgba(220,252,231,0.8);color:#166534;border-color:#BBF7D0}
         .sc-toggle.on:hover{background:#DCFCE7}
         .sc-toggle.off{background:rgba(243,244,246,0.8);color:#6B7280;border-color:#E5E7EB}
         .sc-toggle.off:hover{background:#E5E7EB}
-
         .s-empty{text-align:center;padding:40px 20px;color:#C4B8E8;font-size:13px;background:white;border-radius:16px;border:1.5px dashed #E2D9FF;margin-bottom:28px}
-
-        /* ESTADÍSTICAS */
         .stats-section{background:white;border-radius:20px;padding:22px 24px;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF;margin-bottom:24px}
         .stats-title{font-size:16px;font-weight:800;color:#1A1035;letter-spacing:-0.3px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
         .stats-sub{font-size:12px;color:#A99CC4;margin-bottom:20px}
-
         .stats-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
         .stat-card{border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px}
         .stat-card.purple{background:linear-gradient(135deg,#EDE8FF,#E0D9FF);border:0.5px solid #C4B8E8}
-        .stat-card.green{background:linear-gradient(135deg,#DCFCE7,#D1FAE5);border:0.5px solidrgb(187, 193, 247)}
-        .stat-card.yellow{background:linear-gradient(135deg,#FEF9C3,#FEF3C7);border:0.5px solidrgb(155, 157, 195)}
+        .stat-card.green{background:linear-gradient(135deg,#DCFCE7,#D1FAE5);border:0.5px solid #BBF7D0}
+        .stat-card.yellow{background:linear-gradient(135deg,#FEF9C3,#FEF3C7);border:0.5px solid #FDE68A}
         .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .stat-icon.purple{background:rgba(139,92,246,0.15);color:#7C3AED}
         .stat-icon.green{background:rgba(16,185,129,0.15);color:#059669}
         .stat-icon.yellow{background:rgba(245,158,11,0.15);color:#D97706}
         .stat-num{font-size:22px;font-weight:800;color:#1A1035;letter-spacing:-0.5px;line-height:1}
         .stat-lbl{font-size:11px;color:#6B5B8A;margin-top:3px}
-
         .ranking-label{font-size:11px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px}
         .ranking-list{display:flex;flex-direction:column;gap:10px}
         .ranking-item{display:flex;align-items:center;gap:12px}
@@ -215,8 +218,6 @@ export default function ServiciosPage() {
         .ranking-bar{height:100%;border-radius:20px;transition:width 0.6s ease}
         .ranking-count{font-size:12px;font-weight:600;color:#1A1035;min-width:50px;text-align:right}
         .ranking-ingresos{font-size:11px;color:#A99CC4;min-width:70px;text-align:right}
-
-        /* MODAL */
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
         .mo-box{background:white;border-radius:20px;padding:24px;width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
@@ -241,8 +242,8 @@ export default function ServiciosPage() {
         .activo-switch input{opacity:0;width:0;height:0}
         .activo-slider{position:absolute;inset:0;background:#E2D9FF;border-radius:22px;transition:all 0.2s}
         .activo-slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:white;border-radius:50%;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
-        input:checked + .activo-slider{background:#8B5CF6}
-        input:checked + .activo-slider:before{transform:translateX(18px)}
+        .activo-switch input:checked + .activo-slider{background:#8B5CF6}
+.activo-switch input:checked + .activo-slider:before{transform:translateX(18px)}
       `}</style>
 
       <div className="sw">
@@ -256,30 +257,23 @@ export default function ServiciosPage() {
           </button>
         </div>
 
-        {/* ACTIVOS */}
         {activos.length > 0 && (<>
           <div className="s-section-label">Activos</div>
           <div className="s-grid">
             {activos.map((s, idx) => (
-              <div key={s.id} className="sc" style={{background: FONDOS_CARDS[idx % FONDOS_CARDS.length]}}>
+              <div key={s.id} className="sc" style={{background: s.color ? s.color + '22' : FONDOS_CARDS[idx % FONDOS_CARDS.length]}}>
                 <div className="sc-inner">
                   <div className="sc-top-row">
                     <span className="sc-badge">{s.duracion_estimada || 60} min</span>
                     <div className="sc-actions-top">
-                      <div className="sc-btn" onClick={() => abrirEditar(s)} title="Editar">
-                        <Edit2 size={11}/>
-                      </div>
-                      <div className="sc-btn danger" onClick={() => setConfirmBorrar(s)} title="Eliminar">
-                        <Trash2 size={11}/>
-                      </div>
+                      <div className="sc-btn" onClick={() => abrirEditar(s)}><Edit2 size={11}/></div>
+                      <div className="sc-btn danger" onClick={() => setConfirmBorrar(s)}><Trash2 size={11}/></div>
                     </div>
                   </div>
                   <div className="sc-name">{s.nombre}</div>
                   <div className="sc-desc">{s.descripcion || 'Sin descripción'}</div>
                   <div className="sc-tags">
-                    <span className="sc-tag" style={{background: s.color+'22', color: s.color, borderColor: s.color+'44'}}>
-                      ● Activo
-                    </span>
+                    <span className="sc-tag" style={{background: s.color+'22', color: s.color, borderColor: s.color+'44'}}>● Activo</span>
                     <span className="sc-tag">{s.duracion_estimada || 60} min por sesión</span>
                   </div>
                   <div className="sc-footer">
@@ -295,12 +289,11 @@ export default function ServiciosPage() {
           </div>
         </>)}
 
-        {/* INACTIVOS */}
         {inactivos.length > 0 && (<>
           <div className="s-section-label">Inactivos</div>
           <div className="s-grid">
             {inactivos.map((s, idx) => (
-              <div key={s.id} className="sc inactivo" style={{background: FONDOS_CARDS[idx % FONDOS_CARDS.length]}}>
+              <div key={s.id} className="sc inactivo" style={{background: s.color ? s.color + '22' : FONDOS_CARDS[idx % FONDOS_CARDS.length]}}>
                 <div className="sc-inner">
                   <div className="sc-top-row">
                     <span className="sc-badge">{s.duracion_estimada || 60} min</span>
@@ -336,15 +329,10 @@ export default function ServiciosPage() {
           </div>
         )}
 
-        {/* ESTADÍSTICAS */}
         {estadisticas.length > 0 && (
           <div className="stats-section">
-            <div className="stats-title">
-              <BarChart2 size={16} color="#8B5CF6"/>
-              Estadísticas de servicios
-            </div>
+            <div className="stats-title"><BarChart2 size={16} color="#8B5CF6"/>Estadísticas de servicios</div>
             <div className="stats-sub">Basado en todas las sesiones registradas hasta hoy</div>
-
             <div className="stats-summary">
               <div className="stat-card purple">
                 <div className="stat-icon purple"><TrendingUp size={16}/></div>
@@ -368,22 +356,16 @@ export default function ServiciosPage() {
                 </div>
               </div>
             </div>
-
             <div className="ranking-label">Ranking por sesiones</div>
             <div className="ranking-list">
-              {estadisticas.filter(e => e.total_sesiones > 0 || true).map((e, i) => (
+              {estadisticas.map((e, i) => (
                 <div key={e.id} className="ranking-item">
                   <div className={`ranking-pos ${i === 0 ? 'top' : 'rest'}`}>{i+1}</div>
                   <div className="ranking-name">{e.nombre}</div>
                   <div className="ranking-bar-wrap">
-                    <div className="ranking-bar"
-                      style={{
-                        width: `${maxSesiones > 0 ? (e.total_sesiones / maxSesiones) * 100 : 0}%`,
-                        background: e.color || '#8B5CF6',
-                        opacity: 0.7,
-                      }}/>
+                    <div className="ranking-bar" style={{width:`${(e.total_sesiones/maxSesiones)*100}%`,background:e.color||'#8B5CF6',opacity:0.7}}/>
                   </div>
-                  <div className="ranking-count">{e.total_sesiones} sesiones</div>
+                  <div className="ranking-count">{e.total_sesiones} ses.</div>
                   <div className="ranking-ingresos">${e.ingresos_total.toLocaleString()}</div>
                 </div>
               ))}
@@ -392,7 +374,6 @@ export default function ServiciosPage() {
         )}
       </div>
 
-      {/* MODAL NUEVO / EDITAR */}
       {modalOpen && (
         <div className="mo-overlay" onClick={() => setModalOpen(false)}>
           <div className="mo-box" onClick={e => e.stopPropagation()}>
@@ -419,7 +400,7 @@ export default function ServiciosPage() {
               </div>
               <div className="field">
                 <label>Precio base ($)</label>
-                <input type="number" min="0" value={form.precio_base}
+                <input type="number" min="0" value={form.precio_base || ''}
                   onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
               </div>
             </div>
@@ -450,7 +431,6 @@ export default function ServiciosPage() {
         </div>
       )}
 
-      {/* MODAL CONFIRMAR BORRADO */}
       {confirmBorrar && (
         <div className="mo-overlay" onClick={() => setConfirmBorrar(null)}>
           <div className="mo-box" style={{width:'340px'}} onClick={e => e.stopPropagation()}>
@@ -459,7 +439,7 @@ export default function ServiciosPage() {
               <button className="mo-close" onClick={() => setConfirmBorrar(null)}><X size={12}/></button>
             </div>
             <p style={{fontSize:'13px',color:'#6B5B8A',marginBottom:'20px',lineHeight:'1.6'}}>
-              Se eliminará <strong>{confirmBorrar.nombre}</strong> permanentemente. Los turnos ya agendados con este servicio no se verán afectados.
+              Se eliminará <strong>{confirmBorrar.nombre}</strong> permanentemente. Los turnos ya agendados no se verán afectados.
             </p>
             <div style={{display:'flex',gap:'8px'}}>
               <button onClick={() => setConfirmBorrar(null)}
@@ -467,7 +447,7 @@ export default function ServiciosPage() {
                 Cancelar
               </button>
               <button onClick={() => borrar(confirmBorrar)}
-                style={{flex:1,padding:'11px',borderRadius:'10px',border:'none',background:'#EF4444',color:'white',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',boxShadow:'0 4px 12px rgba(239,68,68,0.3)'}}>
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'none',background:'#EF4444',color:'white',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>
                 Eliminar
               </button>
             </div>

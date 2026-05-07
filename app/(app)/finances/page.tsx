@@ -38,7 +38,8 @@ export default function FinanzasPage() {
   useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -59,7 +60,11 @@ export default function FinanzasPage() {
     const metaGuardada = localStorage.getItem('luma_meta_mensual')
     if (metaGuardada) setMeta(Number(metaGuardada))
 
-    setLoading(false)
+    } catch (err) {
+      console.error('Error cargando:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function guardarMeta() {

@@ -60,7 +60,8 @@ export default function AjustesPage() {
   useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -88,7 +89,11 @@ export default function AjustesPage() {
     }
 
     if (subs) setSuscripcion(subs)
-    setLoading(false)
+    } catch (err) {
+      console.error('Error cargando:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function guardarPerfil() {

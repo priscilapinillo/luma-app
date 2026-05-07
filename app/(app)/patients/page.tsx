@@ -64,7 +64,8 @@ export default function PacientesPage() {
   }, [pacienteSeleccionado?.id])
 
   async function cargarDatos() {
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -91,7 +92,12 @@ export default function PacientesPage() {
       pacs.forEach(p => { porPac[p.id] = nots.filter(n => n.patient_id === p.id) })
       setNotas(porPac)
     }
-    setLoading(false)
+    
+    } catch (error) {
+      console.error('Error al cargar datos:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const pacientesFiltrados = useMemo(() => {
