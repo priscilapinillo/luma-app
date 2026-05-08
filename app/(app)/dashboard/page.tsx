@@ -354,11 +354,11 @@ export default function DashboardPage() {
       <style>{`
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   *{box-sizing:border-box}
-  .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);padding:12px 16px 12px 12px;gap:12px}
+  .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;
   .dl{display:flex;flex-direction:column;gap:8px;overflow:hidden;background:var(--bg-card);border-radius:20px;padding:16px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
   .dr{display:flex;flex-direction:column;gap:10px;background:var(--bg-card);overflow-y:auto;border-radius:20px;padding:18px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light)}
   .wc{background:var(--accent-light);border-radius:14px;padding:11px 14px;border:0.5px solid var(--border);flex-shrink:0}
-  .wc-h{font-size:15px;font-weight:700;color:var(--accent)}
+  .wc-h{font-size:15px;font-weight:700;color:var(--accent);font-family:'Manrope',sans-serif}
   .wc-s{font-size:12px;color:var(--text-secondary);margin-top:2px}
   .sr{position:relative;flex-shrink:0}
   .si{width:100%;padding:8px 32px 8px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
@@ -408,14 +408,14 @@ export default function DashboardPage() {
   .ab:hover{border-color:var(--accent);color:var(--accent)}
   .re{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;line-height:2}
   .rt{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
-  .rid{font-size:24px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1}
+  .rid{font-size:24px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1;font-family:'Manrope',sans-serif}
   .rdt{font-size:10px;color:var(--text-muted);margin-top:3px}
   .r-actions{display:flex;gap:5px}
   .rex{width:26px;height:26px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-input);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);transition:all 0.15s}
   .rex:hover{border-color:var(--accent);color:var(--accent)}
   .rex.danger{color:#EF4444;border-color:#FECACA}
   .rex.danger:hover{background:#FEF2F2;border-color:#EF4444}
-  .rname{font-size:15px;font-weight:700;color:var(--text-primary);flex-shrink:0}
+  .rname{font-size:15px;font-weight:700;color:var(--text-primary);flex-shrink:0;font-family:'Manrope',sans-serif}
   .rbadges{display:flex;gap:5px;flex-wrap:wrap;align-items:center;flex-shrink:0}
   .rb{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid}
   .rb-s{background:var(--accent-light);color:var(--accent);border-color:var(--border)}
