@@ -8,6 +8,8 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
+        <title>Luma — Tu práctica, en orden</title>
+        <meta name="description" content="Agenda, historial, cobros y finanzas para terapeutas y profesionales del bienestar"/>
         <script dangerouslySetInnerHTML={{__html: `
           try {
             const theme = localStorage.getItem('luma-theme');

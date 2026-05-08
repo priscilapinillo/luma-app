@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800;900&display=swap');
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -5,15 +7,15 @@
 }
 
 body {
-  font-family: sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 :root {
-  --bg: #F4F2FF;
+  --bg: #F0EEFF;
   --bg-card: #ffffff;
-  --bg-sidebar: #ffffff;
+  --bg-sidebar: linear-gradient(160deg, #F8F0FF 0%, #EEE8FF 40%, #F5E8FF 70%, #FFE8F5 100%);
   --bg-input: #FAFAFF;
-  --border: #E2D9FF;
+  --border: #DDD5F5;
   --border-light: #EDE9FF;
   --text-primary: #1A1035;
   --text-secondary: #7C6BAA;
@@ -22,20 +24,54 @@ body {
   --accent-light: #EDE8FF;
   --accent-hover: #F0EBFF;
   --shadow: rgba(139,92,246,0.08);
+  --shadow-card: 0 2px 20px rgba(139,92,246,0.10);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --font-display: 'Manrope', sans-serif;
+  --font-ui: 'Inter', sans-serif;
+  --gradient-sidebar: linear-gradient(160deg, #F8F0FF 0%, #EEE8FF 40%, #F5E8FF 70%, #FFE8F5 100%);
+  --gradient-accent: linear-gradient(135deg, #8B5CF6, #A78BFA);
+  --gradient-hero: linear-gradient(135deg, #8B5CF6 0%, #C084FC 50%, #F472B6 100%);
+  --amber: #F59E0B;
+  --amber-light: #FEF3C7;
+  --amber-border: #FDE68A;
+  --green: #10B981;
+  --green-light: #DCFCE7;
+  --red: #EF4444;
+  --red-light: #FEF2F2;
+  --teal: #14B8A6;
+  --teal-light: #CCFBF1;
 }
 
 html.dark {
-  --bg: #1C1A2E;
-  --bg-card: #252338;
-  --bg-sidebar: #1E1C30;
-  --bg-input: #2A2840;
+  --bg: #13111F;
+  --bg-card: #1E1B30;
+  --bg-sidebar: linear-gradient(160deg, #1A1628 0%, #1E1A2E 40%, #211828 70%, #1E1520 100%);
+  --bg-input: #252238;
   --border: #3D3860;
-  --border-light: #322F50;
+  --border-light: #2E2A48;
   --text-primary: #F0EEFF;
   --text-secondary: #B8AEDE;
   --text-muted: #7A72A8;
   --accent: #9B6FF7;
   --accent-light: #2D2550;
   --accent-hover: #2A2448;
-  --shadow: rgba(0,0,0,0.3);
+  --shadow: rgba(0,0,0,0.4);
+  --shadow-card: 0 2px 20px rgba(0,0,0,0.3);
+  --gradient-sidebar: linear-gradient(160deg, #1A1628 0%, #1E1A2E 40%, #211828 70%, #1E1520 100%);
+  --amber-light: #2D2000;
+  --green-light: #052015;
+  --red-light: #200808;
+  --teal-light: #041A18;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Transiciones globales */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
