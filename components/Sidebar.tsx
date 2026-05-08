@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, Moon, Sun } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 const links = [
@@ -16,6 +17,24 @@ const links = [
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const [dark, setDark] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('luma-theme')
+    if (saved === 'dark') setDark(true)
+  }, [])
+
+  function toggleTheme() {
+    const newDark = !dark
+    setDark(newDark)
+    if (newDark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('luma-theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('luma-theme', 'light')
+    }
+  }
 
   async function handleLogout() {
     const supabase = createClient()
@@ -26,21 +45,29 @@ export default function Sidebar() {
   return (
     <>
       <style>{`
-        .sb{width:180px;height:100vh;background:white;border-right:0.5px solid #E2D9FF;display:flex;flex-direction:column;padding:14px 8px;gap:2px;flex-shrink:0;overflow:hidden}
+        .sb{width:180px;height:100vh;background:var(--bg-sidebar);border-right:0.5px solid var(--border);display:flex;flex-direction:column;padding:14px 8px;gap:2px;flex-shrink:0;overflow:hidden;transition:background 0.2s,border-color 0.2s}
         .sb-logo{padding:0 8px;margin-bottom:16px}
-        .sb-logo-title{font-size:17px;font-weight:800;color:#3B0F8C;letter-spacing:-0.5px;font-family:Georgia,serif}
-        .sb-logo-sub{font-size:9px;color:#A99CC4;letter-spacing:0.3px;margin-top:1px}
-        .sb-link{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:500;color:#7C6BAA;text-decoration:none;transition:all 0.1s;white-space:nowrap}
-        .sb-link:hover,.sb-link.active{background:#F0EBFF;color:#3B0F8C}
-        .sb-div{border:none;border-top:0.5px solid #EDE9FF;margin:4px 0}
+        .sb-logo-title{font-size:17px;font-weight:800;color:var(--accent);letter-spacing:-0.5px;font-family:Georgia,serif}
+        .sb-logo-sub{font-size:9px;color:var(--text-muted);letter-spacing:0.3px;margin-top:1px}
+        .sb-link{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:500;color:var(--text-secondary);text-decoration:none;transition:all 0.1s;white-space:nowrap}
+        .sb-link:hover,.sb-link.active{background:var(--accent-hover);color:var(--text-primary)}
+        .sb-div{border:none;border-top:0.5px solid var(--border-light);margin:4px 0}
         .sb-spacer{flex:1;min-height:0}
-        .sb-trial{background:#F8F5FF;border-radius:8px;padding:8px 10px;border:0.5px solid #E2D9FF;margin-bottom:4px;flex-shrink:0}
-        .sb-trial-t{font-size:10px;font-weight:700;color:#3B0F8C;margin-bottom:1px}
-        .sb-trial-s{font-size:9px;color:#A99CC4;line-height:1.3}
-        .sb-bar{height:3px;background:#E2D9FF;border-radius:3px;margin-top:5px;overflow:hidden}
-        .sb-fill{height:100%;width:65%;background:#8B5CF6;border-radius:3px}
-        .sb-btn{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:500;color:#A99CC4;background:none;border:none;cursor:pointer;width:100%;font-family:inherit;flex-shrink:0}
-        .sb-btn:hover{background:#F0EBFF;color:#3B0F8C}
+        .sb-trial{background:var(--accent-light);border-radius:8px;padding:8px 10px;border:0.5px solid var(--border);margin-bottom:4px;flex-shrink:0}
+        .sb-trial-t{font-size:10px;font-weight:700;color:var(--accent);margin-bottom:1px}
+        .sb-trial-s{font-size:9px;color:var(--text-muted);line-height:1.3}
+        .sb-bar{height:3px;background:var(--border);border-radius:3px;margin-top:5px;overflow:hidden}
+        .sb-fill{height:100%;width:65%;background:var(--accent);border-radius:3px}
+        .sb-btn{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:500;color:var(--text-muted);background:none;border:none;cursor:pointer;width:100%;font-family:inherit;flex-shrink:0}
+        .sb-btn:hover{background:var(--accent-hover);color:var(--text-primary)}
+        .sb-theme{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:8px;margin-bottom:2px}
+        .sb-theme-lbl{font-size:12px;font-weight:500;color:var(--text-muted)}
+        .sb-toggle{width:36px;height:20px;border-radius:20px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0}
+        .sb-toggle.on{background:var(--accent)}
+        .sb-toggle.off{background:var(--border)}
+        .sb-toggle-dot{position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:white;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+        .sb-toggle.on .sb-toggle-dot{left:19px}
+        .sb-toggle.off .sb-toggle-dot{left:3px}
       `}</style>
       <aside className="sb">
         <div className="sb-logo">
@@ -58,6 +85,12 @@ export default function Sidebar() {
           <Settings size={13} />Ajustes
         </Link>
         <div className="sb-spacer" />
+        <div className="sb-theme">
+          <span className="sb-theme-lbl">{dark ? <Moon size={12}/> : <Sun size={12}/>}</span>
+          <button className={`sb-toggle${dark?' on':' off'}`} onClick={toggleTheme}>
+            <div className="sb-toggle-dot"/>
+          </button>
+        </div>
         <div className="sb-trial">
           <div className="sb-trial-t">✦ Trial activo</div>
           <div className="sb-trial-s">5 días restantes</div>

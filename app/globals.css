@@ -7,3 +7,35 @@
 body {
   font-family: sans-serif;
 }
+
+:root {
+  --bg: #F4F2FF;
+  --bg-card: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-input: #FAFAFF;
+  --border: #E2D9FF;
+  --border-light: #EDE9FF;
+  --text-primary: #1A1035;
+  --text-secondary: #7C6BAA;
+  --text-muted: #A99CC4;
+  --accent: #8B5CF6;
+  --accent-light: #EDE8FF;
+  --accent-hover: #F0EBFF;
+  --shadow: rgba(139,92,246,0.08);
+}
+
+html.dark {
+  --bg: #1C1A2E;
+  --bg-card: #252338;
+  --bg-sidebar: #1E1C30;
+  --bg-input: #2A2840;
+  --border: #3D3860;
+  --border-light: #322F50;
+  --text-primary: #F0EEFF;
+  --text-secondary: #B8AEDE;
+  --text-muted: #7A72A8;
+  --accent: #9B6FF7;
+  --accent-light: #2D2550;
+  --accent-hover: #2A2448;
+  --shadow: rgba(0,0,0,0.3);
+}

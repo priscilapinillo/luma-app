@@ -7,6 +7,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
+      <head>
+        <script dangerouslySetInnerHTML={{__html: `
+          try {
+            const theme = localStorage.getItem('luma-theme');
+            if (theme === 'dark') document.documentElement.classList.add('dark');
+          } catch(e) {}
+        `}}/>
+      </head>
       <body>{children}</body>
     </html>
   );
