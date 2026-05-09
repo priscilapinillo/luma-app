@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, Expand, Check, Search, X,
-  Bold, Underline, Highlighter, Image, Mic, FileText, Pencil, Trash2
+  Bold, Underline, Highlighter, Mic, FileText, Pencil, Trash2, Plus
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
@@ -20,7 +20,9 @@ type Turno = {
   historial?: SesionHistorial[]
 }
 type Paciente = { id: string; nombre: string; apellido: string; celular: string; alias: string }
-type Servicio = { id: string; nombre: string; precio_base: number }
+type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number }
+type Task = { id: string; texto: string; completada: boolean }
+type Disponibilidad = { dia_semana: number; activo: boolean; hora_inicio: string; hora_fin: string }
 
 function sinTildes(str: string) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -59,11 +61,16 @@ export default function DashboardPage() {
   const [turnos, setTurnos] = useState<Turno[]>([])
   const [pacientes, setPacientes] = useState<Paciente[]>([])
   const [servicios, setServicios] = useState<Servicio[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [nuevaTask, setNuevaTask] = useState('')
   const [loading, setLoading] = useState(true)
   const [nombreTerapeuta, setNombreTerapeuta] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [sugerencias, setSugerencias] = useState<Paciente[]>([])
   const [showSugerencias, setShowSugerencias] = useState(false)
+  const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
+  const [ingresosMes, setIngresosMes] = useState(0)
+  const [pendientesMes, setPendientesMes] = useState(0)
   const sugerenciasRef = useRef<HTMLDivElement>(null)
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
@@ -88,11 +95,16 @@ export default function DashboardPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setLoading(false); return }
 
-        const [{ data: sesiones }, { data: pacs }, { data: servs }, { data: prof }] = await Promise.all([
+        const mesInicio = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
+        const mesFin = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-31`
+
+        const [{ data: sesiones }, { data: pacs }, { data: servs }, { data: prof }, { data: tsks }, { data: avail }] = await Promise.all([
           supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
           supabase.from('patients').select('*').eq('user_id', user.id),
           supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
           supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
+          supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
+          supabase.from('availability').select('*').eq('user_id', user.id),
         ])
 
         if (pacs) setPacientes(pacs)
@@ -102,11 +114,20 @@ export default function DashboardPage() {
             setNuevoTurno(prev => ({ ...prev, servicio: servs[0].nombre, servicioId: servs[0].id, precio: servs[0].precio_base }))
           }
         }
+        if (tsks) setTasks(tsks.map((t: any) => ({ id: t.id, texto: t.texto, completada: t.completada })))
+        if (avail) setDisponibilidad(avail)
+        if (prof?.nombre_profesional) setNombreTerapeuta(prof.nombre_profesional)
+        else setNombreTerapeuta(user.email?.split('@')[0] || '')
 
-        if (prof?.nombre_profesional) {
-          setNombreTerapeuta(prof.nombre_profesional)
-        } else {
-          setNombreTerapeuta(user.email?.split('@')[0] || '')
+        if (sesiones) {
+          const cobrado = sesiones
+            .filter((s: any) => s.estado_pago === 'pagado' && s.fecha >= mesInicio && s.fecha <= mesFin)
+            .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
+          const pendiente = sesiones
+            .filter((s: any) => s.estado_pago === 'pendiente' && s.fecha >= mesInicio && s.fecha <= mesFin)
+            .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
+          setIngresosMes(cobrado)
+          setPendientesMes(pendiente)
         }
 
         if (sesiones && pacs) {
@@ -146,6 +167,37 @@ export default function DashboardPage() {
     }
     cargarDatos()
   }, [])
+
+  const proximoEspacioLibre = useMemo(() => {
+    const diaSemana = hoy.getDay()
+    const dispHoy = disponibilidad.find(d => d.dia_semana === diaSemana)
+    if (!dispHoy || !dispHoy.activo) return null
+
+    const turnosHoyList = turnos
+      .filter(t => t.fecha === formatDate(hoy))
+      .sort((a, b) => horaAMin(a.hora) - horaAMin(b.hora))
+
+    const inicioDisp = horaAMin(dispHoy.hora_inicio)
+    const finDisp = horaAMin(dispHoy.hora_fin)
+    const durMin = servicios.length > 0
+      ? Math.round(servicios.reduce((a, s) => a + (s.duracion_estimada || 60), 0) / servicios.length)
+      : 60
+
+    let cursor = inicioDisp
+    for (const turno of turnosHoyList) {
+      const ini = horaAMin(turno.hora)
+      const fin = ini + turno.duracion
+      if (cursor + durMin <= ini) break
+      cursor = Math.max(cursor, fin)
+    }
+
+    if (cursor + durMin <= finDisp) {
+      const h = Math.floor(cursor / 60)
+      const m = cursor % 60
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+    }
+    return null
+  }, [turnos, disponibilidad, servicios, hoy])
 
   function cambiarMes(nuevoMes: number) {
     setMesIdx(nuevoMes)
@@ -209,10 +261,21 @@ export default function DashboardPage() {
 
   async function updatePago(id: string, pago: Pago) {
     const supabase = createClient()
+    const turno = turnos.find(t => t.id === id)
     const { error } = await supabase.from('sessions').update({ estado_pago: pago }).eq('id', id)
     if (!error) {
       setTurnos(prev => prev.map(t => t.id === id ? {...t, pago} : t))
       setTurnoSeleccionado(prev => prev?.id === id ? {...prev, pago} : prev)
+      if (turno) {
+        const precio = turno.precio || 0
+        if (pago === 'pagado') {
+          setIngresosMes(prev => prev + precio)
+          if (turno.pago === 'pendiente') setPendientesMes(prev => Math.max(0, prev - precio))
+        } else if (pago === 'pendiente' && turno.pago === 'pagado') {
+          setIngresosMes(prev => Math.max(0, prev - precio))
+          setPendientesMes(prev => prev + precio)
+        }
+      }
     }
   }
 
@@ -248,9 +311,34 @@ export default function DashboardPage() {
     setBorrarConfirm(false)
   }
 
+  async function agregarTask() {
+    if (!nuevaTask.trim()) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('tasks').insert({
+      user_id: user.id, texto: nuevaTask.trim(), completada: false
+    }).select().single()
+    if (data) setTasks(prev => [...prev, { id: data.id, texto: data.texto, completada: data.completada }])
+    setNuevaTask('')
+  }
+
+  async function toggleTask(id: string) {
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+    const supabase = createClient()
+    await supabase.from('tasks').update({ completada: !task.completada }).eq('id', id)
+    setTasks(prev => prev.map(t => t.id === id ? {...t, completada: !t.completada} : t))
+  }
+
+  async function borrarTask(id: string) {
+    const supabase = createClient()
+    await supabase.from('tasks').delete().eq('id', id)
+    setTasks(prev => prev.filter(t => t.id !== id))
+  }
+
   async function guardarTurno() {
     if (!nuevoTurno.pacienteNombre || !nuevoTurno.hora) { alert('Completá nombre y hora'); return }
-
     const horaInicioNuevo = horaAMin(nuevoTurno.hora)
     const horaFinNuevo = horaInicioNuevo + nuevoTurno.duracion
     const hayConflicto = turnos.some(t => {
@@ -260,10 +348,9 @@ export default function DashboardPage() {
       return horaInicioNuevo < horaFinExistente && horaFinNuevo > horaInicioExistente
     })
     if (hayConflicto) {
-      alert('⚠️ Ya tenés un turno en ese horario. Revisá la agenda antes de agendar.')
+      alert('⚠️ Ya tenés un turno en ese horario.')
       return
     }
-
     setGuardando(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -273,9 +360,7 @@ export default function DashboardPage() {
     if (!pacienteDbId) {
       const partes = nuevoTurno.pacienteNombre.trim().split(' ')
       const { data: nuevoPac } = await supabase.from('patients').insert({
-        user_id: user.id,
-        nombre: partes[0],
-        apellido: partes.slice(1).join(' '),
+        user_id: user.id, nombre: partes[0], apellido: partes.slice(1).join(' '),
         celular: nuevoTurno.pacienteCelular,
         alias: nuevoTurno.pacienteCelular ? nuevoTurno.pacienteCelular.slice(-4) : '',
         contexto_general: '',
@@ -283,44 +368,32 @@ export default function DashboardPage() {
       if (nuevoPac) { pacienteDbId = nuevoPac.id; setPacientes(prev => [...prev, nuevoPac]) }
     }
 
-    const historialPaciente = turnos
-      .filter(t => t.pacienteDbId === pacienteDbId)
-      .sort((a,b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
-      .map(t => ({
-        fecha: new Date(t.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
-        servicio: t.servicio, contexto: t.contexto,
-      }))
-
     const { data: nuevaSesion, error } = await supabase.from('sessions').insert({
-      user_id: user.id,
-      patient_id: pacienteDbId,
+      user_id: user.id, patient_id: pacienteDbId,
       service_id: nuevoTurno.servicioId || null,
       fecha: nuevoTurno.fecha+'T'+nuevoTurno.hora+':00',
-      hora: nuevoTurno.hora,
-      duracion: nuevoTurno.duracion,
+      hora: nuevoTurno.hora, duracion: nuevoTurno.duracion,
       contexto_sesion: nuevoTurno.contexto,
-      servicio_nombre: nuevoTurno.servicio,
-      precio: nuevoTurno.precio,
+      servicio_nombre: nuevoTurno.servicio, precio: nuevoTurno.precio,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
-      estado_pago: nuevoTurno.pago,
-      estado: 'programada',
-      realizado: false,
+      estado_pago: nuevoTurno.pago, estado: 'programada', realizado: false,
     }).select().single()
 
     if (error) { console.error(error); setGuardando(false); return }
 
+    if (nuevoTurno.pago === 'pagado') setIngresosMes(prev => prev + nuevoTurno.precio)
+    if (nuevoTurno.pago === 'pendiente') setPendientesMes(prev => prev + nuevoTurno.precio)
+
     const nuevo: Turno = {
       id: nuevaSesion.id,
       pacienteId: nuevoTurno.pacienteCelular ? nuevoTurno.pacienteCelular.slice(-4) : '----',
-      pacienteNombre: nuevoTurno.pacienteNombre,
-      pacienteDbId: pacienteDbId || '',
+      pacienteNombre: nuevoTurno.pacienteNombre, pacienteDbId: pacienteDbId || '',
       fecha: nuevoTurno.fecha, hora: nuevoTurno.hora, duracion: nuevoTurno.duracion,
       servicio: nuevoTurno.servicio, precio: nuevoTurno.precio,
       contexto: nuevoTurno.contexto, pago: nuevoTurno.pago,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
-      realizado: false, historial: historialPaciente,
+      realizado: false, historial: [],
     }
-
     setTurnos(prev => [...prev, nuevo])
     setTurnoSeleccionado(nuevo)
     setModalOpen(false)
@@ -329,8 +402,7 @@ export default function DashboardPage() {
       pacienteNombre: '', pacienteCelular: '', pacienteDbId: '',
       fecha: fechaSeleccionada, hora: '', duracion: 60,
       servicio: servicios[0]?.nombre || '', servicioId: servicios[0]?.id || '',
-      precio: servicios[0]?.precio_base || 0,
-      contexto: '', pago: 'pendiente', sena: 0,
+      precio: servicios[0]?.precio_base || 0, contexto: '', pago: 'pendiente', sena: 0,
     })
   }
 
@@ -343,8 +415,10 @@ export default function DashboardPage() {
     return 'Buenas noches'
   }
 
+  const mesNombre = MESES[hoy.getMonth()]
+
   if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'#9B8EC4',background:'#F4F2FF'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
     </div>
   )
@@ -352,125 +426,173 @@ export default function DashboardPage() {
   return (
     <>
       <style>{`
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  *{box-sizing:border-box}
-  .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;
-  .dl{display:flex;flex-direction:column;gap:8px;overflow:hidden;background:var(--bg-card);border-radius:20px;padding:16px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
-  .dr{display:flex;flex-direction:column;gap:10px;background:var(--bg-card);overflow-y:auto;border-radius:20px;padding:18px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light)}
-  .wc{background:var(--accent-light);border-radius:14px;padding:11px 14px;border:0.5px solid var(--border);flex-shrink:0}
-  .wc-h{font-size:15px;font-weight:700;color:var(--accent);font-family:'Manrope',sans-serif}
-  .wc-s{font-size:12px;color:var(--text-secondary);margin-top:2px}
-  .sr{position:relative;flex-shrink:0}
-  .si{width:100%;padding:8px 32px 8px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
-  .si:focus{border-color:var(--accent)}
-  .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;flex-shrink:0}
-  .st{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:0.5px solid var(--border-light);text-align:center;box-shadow:0 2px 10px var(--shadow)}
-  .st.ac{background:var(--accent-light);border-color:var(--border)}
-  .st-l{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
-  .st.ac .st-l{color:var(--text-secondary)}
-  .st-n{font-size:20px;font-weight:700;color:var(--text-primary)}
-  .st.ac .st-n{color:var(--accent)}
-  .cal-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
-  .ca{width:22px;height:22px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
-  .mons{display:flex;flex:1;justify-content:space-around}
-  .mo{font-size:11px;color:var(--text-muted);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px}
-  .mo.ac{font-size:12px;font-weight:700;color:var(--accent)}
-  .days-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
-  .days{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;flex:1}
-  .day{height:42px;border-radius:12px;border:0.5px solid var(--border-light);background:var(--bg-card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;transition:all 0.15s}
-  .day:hover{transform:translateY(-1px)}
-  .day.ac{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border-color:#8B5CF6;box-shadow:0 6px 16px rgba(139,92,246,0.35);transform:translateY(-1px)}
-  .day.ht{border-color:var(--accent)}
-  .dn{font-size:12px;font-weight:600;color:var(--text-secondary)}
-  .day.ac .dn{color:white;font-weight:700}
-  .day.ht .dn{color:var(--accent)}
-  .dd{font-size:9px;color:var(--text-muted)}
-  .day.ac .dd{color:rgba(255,255,255,0.75)}
-  .tlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0;margin-top:6px;padding:4px 6px;margin-left:-6px;margin-right:-6px}
-  .tc{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:none;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px var(--shadow)}
-  .tc:hover{transform:translateY(-1px)}
-  .tc.sel{box-shadow:0 6px 20px var(--shadow);transform:translateY(-1px)}
-  .tc.done{opacity:0.35}
-  .tdot{width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);flex-shrink:0}
-  .tb{flex:1;min-width:0}
-  .tn{font-size:13px;font-weight:600;color:var(--text-primary)}
-  .ts2{font-size:11px;color:var(--text-muted);margin-top:1px}
-  .ttags{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap}
-  .tg{font-size:10px;padding:2px 8px;border-radius:20px;border:0.5px solid}
-  .tg-s{background:var(--accent-light);color:var(--accent);border-color:var(--border)}
-  .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
-  .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
-  .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
-  .chk{width:24px;height:24px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all 0.15s}
-  .chk.ok{background:#DCFCE7;border-color:#BBF7D0;color:#166534}
-  .ab{background:var(--bg-card);border:1.5px dashed var(--border);border-radius:14px;padding:10px;text-align:center;font-size:12px;color:var(--text-muted);cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:all 0.15s}
-  .ab:hover{border-color:var(--accent);color:var(--accent)}
-  .re{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;line-height:2}
-  .rt{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
-  .rid{font-size:24px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1;font-family:'Manrope',sans-serif}
-  .rdt{font-size:10px;color:var(--text-muted);margin-top:3px}
-  .r-actions{display:flex;gap:5px}
-  .rex{width:26px;height:26px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-input);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);transition:all 0.15s}
-  .rex:hover{border-color:var(--accent);color:var(--accent)}
-  .rex.danger{color:#EF4444;border-color:#FECACA}
-  .rex.danger:hover{background:#FEF2F2;border-color:#EF4444}
-  .rname{font-size:15px;font-weight:700;color:var(--text-primary);flex-shrink:0;font-family:'Manrope',sans-serif}
-  .rbadges{display:flex;gap:5px;flex-wrap:wrap;align-items:center;flex-shrink:0}
-  .rb{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid}
-  .rb-s{background:var(--accent-light);color:var(--accent);border-color:var(--border)}
-  .pago-dd{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid #FDE68A;background:#FEF9C3;color:#854D0E;cursor:pointer;outline:none;font-family:inherit;appearance:none;-webkit-appearance:none;transition:all 0.15s}
-  .pago-dd.ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
-  .pago-dd.dep{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
-  .sena-row{background:#FFFBEB;border-radius:10px;padding:8px 12px;border:0.5px solid #FDE68A;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-  .sena-l{font-size:11px;color:#854D0E}
-  .sena-r{font-size:11px;font-weight:700;color:#92400E}
-  .sena-input{font-size:12px;padding:3px 8px;border-radius:7px;border:0.5px solid #FDE68A;background:white;color:#92400E;width:80px;outline:none;font-family:inherit}
-  .ctxl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
-  .editor{border:0.5px solid var(--border);border-radius:14px;overflow:hidden;flex-shrink:0}
-  .etb{display:flex;gap:3px;padding:6px 7px;border-bottom:0.5px solid var(--border-light);background:var(--bg-input);flex-wrap:wrap}
-  .eb{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center}
-  .eb:hover,.ebico:hover{background:var(--accent-hover);color:var(--accent)}
-  .ebico{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary)}
-  .esep{width:0.5px;background:var(--border);margin:2px 4px;align-self:stretch}
-  .ea{width:100%;padding:8px 11px;font-size:12px;color:var(--text-primary);resize:none;height:80px;font-family:inherit;background:transparent;outline:none;line-height:1.6;border:none}
-  .rdiv{border:none;border-top:0.5px solid var(--border-light);flex-shrink:0}
-  .hl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
-  .hi{background:var(--bg-input);border-radius:12px;padding:10px 12px;border:0.5px solid var(--border-light);flex-shrink:0}
-  .ht2{display:flex;gap:5px;font-size:10px;color:var(--text-muted);margin-bottom:3px}
-  .htxt{font-size:12px;color:var(--text-secondary);line-height:1.5}
-  .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-  .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:440px;max-height:88vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
-  .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-  .mo-title{font-size:15px;font-weight:700;color:var(--text-primary)}
-  .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
-  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;position:relative}
-  .field label{font-size:12px;font-weight:600;color:var(--text-primary)}
-  .field input,.field select,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
-  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
-  .field textarea{min-height:65px;resize:none}
-  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s}
-  .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
-  .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
-  .sug-list{position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px var(--shadow);z-index:50;overflow:hidden;margin-top:3px}
-  .sug-item{padding:9px 12px;font-size:12px;color:var(--text-primary);cursor:pointer;display:flex;flex-direction:column;gap:2px;border-bottom:0.5px solid var(--border-light)}
-  .sug-item:last-child{border-bottom:none}
-  .sug-item:hover{background:var(--accent-hover)}
-  .sug-item-sub{font-size:10px;color:var(--text-muted)}
-  .hist-box{background:var(--bg-card);border-radius:20px;padding:24px;width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
-  .hist-sessions{display:flex;flex-direction:column;gap:10px;margin-top:12px}
-  .hist-sc{background:var(--bg-input);border-radius:14px;padding:14px;border:0.5px solid var(--border)}
-  .hist-sc.current{border-color:var(--accent);background:var(--bg-card)}
-  .hist-sc-top{display:flex;justify-content:space-between;margin-bottom:7px}
-  .hist-sc-date{font-size:12px;font-weight:600;color:var(--accent)}
-  .hist-sc-serv{font-size:11px;color:var(--text-muted)}
-  .hist-sc-ctx{font-size:12px;color:var(--text-primary);line-height:1.6}
-`}</style>
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box}
+        .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);padding:14px 16px 14px 14px;gap:14px}
+        .dl{display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;background:var(--bg-card);border-radius:22px;padding:18px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
+        .dr{display:flex;flex-direction:column;gap:10px;background:var(--bg-card);overflow-y:auto;border-radius:22px;padding:18px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light)}
+
+        .wc{background:var(--accent-light);border-radius:16px;padding:13px 16px;border:0.5px solid var(--border);flex-shrink:0;position:relative;overflow:hidden}
+        .wc-blob{position:absolute;border-radius:50%;background:var(--accent);opacity:0.12;width:80px;height:80px;top:-20px;right:-20px;pointer-events:none}
+        .wc-h{font-size:16px;font-weight:800;color:var(--accent);font-family:'Manrope',sans-serif}
+        .wc-s{font-size:12px;color:var(--text-secondary);margin-top:3px}
+
+        .sr{position:relative;flex-shrink:0}
+        .si{width:100%;padding:9px 32px 9px 12px;border-radius:11px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
+        .si:focus{border-color:var(--accent)}
+        .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
+
+        .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0}
+        .st{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:0.5px solid var(--border-light);text-align:center;box-shadow:0 2px 10px var(--shadow)}
+        .st.ac{background:var(--accent-light);border-color:var(--border)}
+        .st-l{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+        .st.ac .st-l{color:var(--text-secondary)}
+        .st-n{font-size:22px;font-weight:800;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .st.ac .st-n{color:var(--accent)}
+
+       .widget-card{border-radius:20px;padding:14px 16px;border:0.5px solid;position:relative;overflow:hidden;flex-shrink:0}
+html.dark .widget-ingresos{background:#1A1200 !important;border-color:#3D2E00 !important}
+html.dark .widget-ingresos .widget-label{color:#FCD34D !important}
+html.dark .widget-ingresos .widget-title{color:#FDE68A !important}
+html.dark .widget-ingresos .widget-sub{color:#FCA5A5 !important}
+html.dark .widget-ingresos .widget-pill{background:#2D1F00 !important;color:#FCD34D !important}
+html.dark .widget-espacio{background:#052015 !important;border-color:#065f46 !important}
+html.dark .widget-espacio .widget-label{color:#6EE7B7 !important}
+html.dark .widget-espacio .widget-title{color:#A7F3D0 !important}
+html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
+        .widget-blob{position:absolute;border-radius:50%;pointer-events:none;opacity:0.3}
+        .widget-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:5px}
+        .widget-title{font-size:20px;font-weight:800;font-family:'Manrope',sans-serif;line-height:1.1;margin-bottom:3px}
+        .widget-sub{font-size:11px;line-height:1.5}
+        .widget-pill{display:inline-block;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;margin-top:8px;cursor:pointer;border:none;font-family:inherit}
+        .widget-bar-wrap{height:4px;border-radius:4px;margin-top:10px;overflow:hidden;opacity:0.3}
+        .widget-bar{height:100%;border-radius:4px}
+
+        .cal-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
+        .ca{width:22px;height:22px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+        .mons{display:flex;flex:1;justify-content:space-around}
+        .mo{font-size:11px;color:var(--text-muted);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px}
+        .mo.ac{font-size:12px;font-weight:700;color:var(--accent)}
+        .days-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
+        .days{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;flex:1}
+        .day{height:42px;border-radius:12px;border:0.5px solid var(--border-light);background:var(--bg-card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;transition:all 0.15s}
+        .day:hover{transform:translateY(-1px)}
+        .day.ac{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border-color:#8B5CF6;box-shadow:0 6px 16px rgba(139,92,246,0.35);transform:translateY(-1px)}
+        .day.ht{border-color:var(--accent)}
+        .dn{font-size:12px;font-weight:600;color:var(--text-secondary)}
+        .day.ac .dn{color:white;font-weight:700}
+        .day.ht .dn{color:var(--accent)}
+        .dd{font-size:9px;color:var(--text-muted)}
+        .day.ac .dd{color:rgba(255,255,255,0.75)}
+
+        .tlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:7px;min-height:0;padding:2px 4px;margin:0 -4px}
+        .tc{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:none;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px var(--shadow)}
+        .tc:hover{transform:translateY(-1px)}
+        .tc.sel{box-shadow:0 6px 20px var(--shadow);transform:translateY(-1px);border:0.5px solid var(--border)}
+        .tc.done{opacity:0.35}
+        .tdot{width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);flex-shrink:0}
+        .tb{flex:1;min-width:0}
+        .tn{font-size:13px;font-weight:600;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .ts2{font-size:11px;color:var(--text-muted);margin-top:1px}
+        .ttags{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap}
+        .tg{font-size:10px;padding:2px 8px;border-radius:20px;border:0.5px solid}
+        .tg-s{background:var(--accent-light);color:var(--accent);border-color:var(--border)}
+        .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
+        .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
+        .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
+        .chk{width:24px;height:24px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all 0.15s}
+        .chk.ok{background:#DCFCE7;border-color:#BBF7D0;color:#166534}
+        .ab{background:var(--bg-card);border:1.5px dashed var(--border);border-radius:14px;padding:10px;text-align:center;font-size:12px;color:var(--text-muted);cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:all 0.15s;margin-top:2px}
+        .ab:hover{border-color:var(--accent);color:var(--accent)}
+
+        .tasks-card{background:#FFFBEB;border-radius:20px;padding:14px 16px;border:0.5px solid #FDE68A;position:relative;overflow:hidden;flex-shrink:0}
+        html.dark .tasks-card{background:#1A1200;border-color:#3D2E00}
+        .tasks-blob{position:absolute;border-radius:50%;background:#F59E0B;opacity:0.2;pointer-events:none}
+        .tasks-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#B45309;margin-bottom:8px}
+        html.dark .tasks-label{color:#FCD34D}
+        .task-item{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+        .task-cb{width:16px;height:16px;border-radius:5px;border:1.5px solid #FDE68A;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;background:transparent}
+        .task-cb.done{background:#8B5CF6;border-color:#8B5CF6;color:white}
+        .task-txt{font-size:12px;color:#92400E;flex:1;font-family:'Inter',sans-serif}
+        html.dark .task-txt{color:#FCD34D}
+        .task-txt.done{text-decoration:line-through;opacity:0.5}
+        .task-del{width:16px;height:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#FCA5A5;opacity:0;transition:opacity 0.15s;border:none;background:transparent;padding:0}
+        .task-item:hover .task-del{opacity:1}
+        .task-input-row{display:flex;gap:6px;margin-top:8px}
+        .task-input{flex:1;padding:6px 10px;border-radius:8px;border:0.5px solid #FDE68A;font-size:12px;background:rgba(255,255,255,0.7);color:#92400E;outline:none;font-family:inherit}
+        html.dark .task-input{background:rgba(255,255,255,0.05);color:#FCD34D;border-color:#3D2E00}
+        .task-add-btn{padding:6px 10px;border-radius:8px;border:none;background:#F59E0B;color:white;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600}
+
+        .re{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;line-height:2}
+        .rt{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
+        .rid{font-size:24px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1;font-family:'Manrope',sans-serif}
+        .rdt{font-size:10px;color:var(--text-muted);margin-top:3px}
+        .r-actions{display:flex;gap:5px}
+        .rex{width:26px;height:26px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-input);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);transition:all 0.15s}
+        .rex:hover{border-color:var(--accent);color:var(--accent)}
+        .rex.danger{color:#EF4444;border-color:#FECACA}
+        .rex.danger:hover{background:#FEF2F2;border-color:#EF4444}
+        .rname{font-size:15px;font-weight:700;color:var(--text-primary);flex-shrink:0;font-family:'Manrope',sans-serif}
+        .rbadges{display:flex;gap:5px;flex-wrap:wrap;align-items:center;flex-shrink:0}
+        .rb{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid}
+        .rb-s{background:var(--accent-light);color:var(--accent);border-color:var(--border)}
+        .pago-dd{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid #FDE68A;background:#FEF9C3;color:#854D0E;cursor:pointer;outline:none;font-family:inherit;appearance:none;-webkit-appearance:none;transition:all 0.15s}
+        .pago-dd.ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
+        .pago-dd.dep{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
+        .sena-row{background:#FFFBEB;border-radius:10px;padding:8px 12px;border:0.5px solid #FDE68A;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+        .sena-l{font-size:11px;color:#854D0E}
+        .sena-r{font-size:11px;font-weight:700;color:#92400E}
+        .sena-input{font-size:12px;padding:3px 8px;border-radius:7px;border:0.5px solid #FDE68A;background:white;color:#92400E;width:80px;outline:none;font-family:inherit}
+        .ctxl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
+        .editor{border:0.5px solid var(--border);border-radius:14px;overflow:hidden;flex-shrink:0}
+        .etb{display:flex;gap:3px;padding:6px 7px;border-bottom:0.5px solid var(--border-light);background:var(--bg-input);flex-wrap:wrap}
+        .eb{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .eb:hover,.ebico:hover{background:var(--accent-hover);color:var(--accent)}
+        .ebico{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary)}
+        .esep{width:0.5px;background:var(--border);margin:2px 4px;align-self:stretch}
+        .ea{width:100%;padding:8px 11px;font-size:12px;color:var(--text-primary);resize:none;height:75px;font-family:inherit;background:transparent;outline:none;line-height:1.6;border:none}
+        .rdiv{border:none;border-top:0.5px solid var(--border-light);flex-shrink:0}
+        .hl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
+        .hi{background:var(--bg-input);border-radius:12px;padding:10px 12px;border:0.5px solid var(--border-light);flex-shrink:0}
+        .ht2{display:flex;gap:5px;font-size:10px;color:var(--text-muted);margin-bottom:3px}
+        .htxt{font-size:12px;color:var(--text-secondary);line-height:1.5}
+        .ver-mas{text-align:center;font-size:11px;color:var(--accent);cursor:pointer;padding:4px;flex-shrink:0}
+        .ver-mas:hover{text-decoration:underline}
+
+        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+        .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:440px;max-height:88vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+        .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+        .field{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;position:relative}
+        .field label{font-size:12px;font-weight:600;color:var(--text-primary)}
+        .field input,.field select,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
+        .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+        .field textarea{min-height:65px;resize:none}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s}
+        .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
+        .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+        .sug-list{position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px var(--shadow);z-index:50;overflow:hidden;margin-top:3px}
+        .sug-item{padding:9px 12px;font-size:12px;color:var(--text-primary);cursor:pointer;display:flex;flex-direction:column;gap:2px;border-bottom:0.5px solid var(--border-light)}
+        .sug-item:last-child{border-bottom:none}
+        .sug-item:hover{background:var(--accent-hover)}
+        .sug-item-sub{font-size:10px;color:var(--text-muted)}
+        .hist-box{background:var(--bg-card);border-radius:22px;padding:24px;width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .hist-sessions{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+        .hist-sc{background:var(--bg-input);border-radius:14px;padding:14px;border:0.5px solid var(--border)}
+        .hist-sc.current{border-color:var(--accent);background:var(--bg-card)}
+        .hist-sc-top{display:flex;justify-content:space-between;margin-bottom:7px}
+        .hist-sc-date{font-size:12px;font-weight:600;color:var(--accent)}
+        .hist-sc-serv{font-size:11px;color:var(--text-muted)}
+        .hist-sc-ctx{font-size:12px;color:var(--text-primary);line-height:1.6}
+      `}</style>
 
       <div className="dw">
+        {/* COLUMNA IZQUIERDA */}
         <div className="dl">
           <div className="wc">
+            <div className="wc-blob"/>
             <div className="wc-h">¡{saludoHora()}, {nombreTerapeuta}! ✨</div>
             <div className="wc-s">Tenés {turnosHoy} sesiones hoy · Todo listo para empezar</div>
           </div>
@@ -485,6 +607,36 @@ export default function DashboardPage() {
             <div className="st ac"><div className="st-l">Hoy</div><div className="st-n">{turnosHoy}</div></div>
             <div className="st"><div className="st-l">Mañana</div><div className="st-n">{turnosManana}</div></div>
             <div className="st"><div className="st-l">Pasado</div><div className="st-n">{turnosPasado}</div></div>
+          </div>
+
+          {/* WIDGET INGRESOS */}
+          <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
+            <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
+            <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
+            <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
+            <div className="widget-sub" style={{color:'#B45309'}}>
+              cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pendientes</span>
+            </div>
+            <div className="widget-bar-wrap" style={{background:'#FDE68A'}}>
+              <div className="widget-bar" style={{
+                width: ingresosMes+pendientesMes > 0 ? `${Math.round((ingresosMes/(ingresosMes+pendientesMes))*100)}%` : '0%',
+                background:'linear-gradient(90deg,#F59E0B,#FCD34D)'
+              }}/>
+            </div>
+            <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}}>Ver finanzas →</button>
+          </div>
+
+          {/* WIDGET ESPACIO LIBRE */}
+         <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
+            <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
+            <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
+            {proximoEspacioLibre ? (<>
+              <div className="widget-title" style={{color:'#166534',fontSize:'15px'}}>¡Tenés lugar hoy!</div>
+              <div className="widget-sub" style={{color:'#059669'}}>Próximo espacio libre: <strong>{proximoEspacioLibre} hs</strong></div>
+            </>) : (<>
+              <div className="widget-title" style={{color:'#166534',fontSize:'15px'}}>Agenda completa 🎉</div>
+              <div className="widget-sub" style={{color:'#059669'}}>No quedan espacios para hoy</div>
+            </>)}
           </div>
 
           <div className="cal-r">
@@ -520,7 +672,7 @@ export default function DashboardPage() {
 
           <div className="tlist">
             {turnosFiltrados.length === 0 && (
-              <p style={{fontSize:'12px',color:'#A99CC4',textAlign:'center',padding:'12px 0'}}>No hay turnos para este día</p>
+              <p style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'12px 0'}}>No hay turnos para este día</p>
             )}
             {turnosFiltrados.map(turno => (
               <div key={turno.id}
@@ -545,7 +697,32 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* COLUMNA DERECHA */}
         <div className="dr">
+          {/* TASKS */}
+          <div className="tasks-card">
+            <div className="tasks-blob" style={{width:'80px',height:'80px',top:'-20px',right:'-20px'}}/>
+            <div className="tasks-label">Mis tareas</div>
+            {tasks.slice(0,5).map(task => (
+              <div key={task.id} className="task-item">
+                <button className={`task-cb${task.completada?' done':''}`} onClick={() => toggleTask(task.id)}>
+                  {task.completada && <Check size={9}/>}
+                </button>
+                <span className={`task-txt${task.completada?' done':''}`}>{task.texto}</span>
+                <button className="task-del" onClick={() => borrarTask(task.id)}>
+                  <X size={10}/>
+                </button>
+              </div>
+            ))}
+            <div className="task-input-row">
+              <input className="task-input" placeholder="Nueva tarea..."
+                value={nuevaTask}
+                onChange={e => setNuevaTask(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && agregarTask()}/>
+              <button className="task-add-btn" onClick={agregarTask}><Plus size={12}/></button>
+            </div>
+          </div>
+
           {!turnoSeleccionado ? (
             <div className="re">Seleccioná un turno<br/>para ver el detalle</div>
           ) : (<>
@@ -601,7 +778,6 @@ export default function DashboardPage() {
                 <button className="eb"><Underline size={11}/></button>
                 <button className="eb" style={{background:'#FEF08A',borderColor:'#FDE047',color:'#713F12'}}><Highlighter size={11}/></button>
                 <div className="esep"/>
-                <button className="ebico"><Image size={11}/></button>
                 <button className="ebico"><Mic size={11}/></button>
                 <button className="ebico"><FileText size={11}/></button>
               </div>
@@ -616,17 +792,23 @@ export default function DashboardPage() {
             {turnoSeleccionado.historial && turnoSeleccionado.historial.length > 0 && (<>
               <hr className="rdiv"/>
               <div className="hl">Sesiones anteriores</div>
-              {turnoSeleccionado.historial.map((h,i) => (
+              {turnoSeleccionado.historial.slice(0,2).map((h,i) => (
                 <div key={i} className="hi">
                   <div className="ht2"><span>{h.fecha}</span><span>·</span><span>{h.servicio}</span></div>
                   <div className="htxt">{h.contexto}</div>
                 </div>
               ))}
+              {turnoSeleccionado.historial.length > 2 && (
+                <div className="ver-mas" onClick={() => setHistorialOpen(true)}>
+                  ver historial completo ({turnoSeleccionado.historial.length} sesiones) →
+                </div>
+              )}
             </>)}
           </>)}
         </div>
       </div>
 
+      {/* MODAL NUEVO TURNO */}
       {modalOpen && (
         <div className="mo-overlay" onClick={() => setModalOpen(false)}>
           <div className="mo-box" onClick={e => e.stopPropagation()}>
@@ -681,7 +863,7 @@ export default function DashboardPage() {
               <select value={nuevoTurno.servicio}
                 onChange={e => {
                   const s = servicios.find(sv => sv.nombre === e.target.value)
-                  setNuevoTurno({...nuevoTurno, servicio: e.target.value, servicioId: s?.id||'', precio: s?.precio_base||0})
+                  setNuevoTurno({...nuevoTurno, servicio: e.target.value, servicioId: s?.id||'', precio: s?.precio_base||0, duracion: s?.duracion_estimada||60})
                 }}>
                 {servicios.length === 0 && <option>Sin servicios cargados</option>}
                 {servicios.map(s => <option key={s.id} value={s.nombre}>{s.nombre} · ${s.precio_base?.toLocaleString()}</option>)}
@@ -714,6 +896,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* MODAL EDITAR FECHA */}
       {editandoFecha && turnoSeleccionado && (
         <div className="mo-overlay" onClick={() => setEditandoFecha(false)}>
           <div className="mo-box" style={{width:'340px'}} onClick={e => e.stopPropagation()}>
@@ -738,6 +921,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* MODAL BORRAR */}
       {borrarConfirm && turnoSeleccionado && (
         <div className="mo-overlay" onClick={() => setBorrarConfirm(false)}>
           <div className="mo-box" style={{width:'340px'}} onClick={e => e.stopPropagation()}>
@@ -745,16 +929,16 @@ export default function DashboardPage() {
               <span className="mo-title">¿Eliminar este turno?</span>
               <button className="mo-close" onClick={() => setBorrarConfirm(false)}><X size={12}/></button>
             </div>
-            <p style={{fontSize:'13px',color:'#6B5B8A',marginBottom:'20px',lineHeight:'1.6'}}>
+            <p style={{fontSize:'13px',color:'var(--text-secondary)',marginBottom:'20px',lineHeight:'1.6'}}>
               Se eliminará el turno de <strong>{turnoSeleccionado.pacienteNombre}</strong> del {new Date(turnoSeleccionado.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'long'})}. Esta acción no se puede deshacer.
             </p>
             <div style={{display:'flex',gap:'8px'}}>
               <button onClick={() => setBorrarConfirm(false)}
-                style={{flex:1,padding:'11px',borderRadius:'10px',border:'0.5px solid #E2D9FF',background:'white',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',color:'#6B5B8A'}}>
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'0.5px solid var(--border)',background:' var(--bg-card)',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',color:'var(--text-secondary)'}}>
                 Cancelar
               </button>
               <button onClick={() => borrarTurno(turnoSeleccionado.id)}
-                style={{flex:1,padding:'11px',borderRadius:'10px',border:'none',background:'#EF4444',color:'white',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',boxShadow:'0 4px 12px rgba(239,68,68,0.3)'}}>
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'none',background:'#EF4444',color:'white',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>
                 Eliminar
               </button>
             </div>
@@ -762,13 +946,14 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* MODAL HISTORIAL */}
       {historialOpen && turnoSeleccionado && (
         <div className="mo-overlay" onClick={() => setHistorialOpen(false)}>
           <div className="hist-box" onClick={e => e.stopPropagation()}>
             <div className="mo-hdr">
               <div>
                 <div className="mo-title">{turnoSeleccionado.pacienteNombre}</div>
-                <div style={{fontSize:'11px',color:'#A99CC4',marginTop:'2px'}}>Historial completo · #{turnoSeleccionado.pacienteId}</div>
+                <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>Historial completo · #{turnoSeleccionado.pacienteId}</div>
               </div>
               <button className="mo-close" onClick={() => setHistorialOpen(false)}><X size={12}/></button>
             </div>
