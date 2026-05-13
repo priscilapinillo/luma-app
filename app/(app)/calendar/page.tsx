@@ -87,72 +87,71 @@ export default function AgendaPage() {
   async function cargarDatos() {
     try {
       const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const [{ data: sess }, { data: pacs }, { data: blocks }, { data: avail }] = await Promise.all([
-      supabase.from('sessions').select('*').eq('user_id', user.id),
-      supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
-      supabase.from('calendar_blocks').select('*').eq('user_id', user.id),
-      supabase.from('availability').select('*').eq('user_id', user.id),
-    ])
+      const [{ data: sess }, { data: pacs }, { data: blocks }, { data: avail }] = await Promise.all([
+        supabase.from('sessions').select('*').eq('user_id', user.id),
+        supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
+        supabase.from('calendar_blocks').select('*').eq('user_id', user.id),
+        supabase.from('availability').select('*').eq('user_id', user.id),
+      ])
 
-    if (pacs && sess) {
-      const map: Record<string, string> = {}
-      pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
-      setTurnos(sess.map(s => ({
-        id: s.id, patient_id: s.patient_id,
-        paciente_nombre: map[s.patient_id] || 'Paciente',
-        fecha: s.fecha?.split('T')[0] || '',
-        hora: s.hora || '09:00',
-        duracion: s.duracion || 60,
-        servicio_nombre: s.servicio_nombre || '',
-        precio: s.precio || 0,
-        estado_pago: s.estado_pago || 'pendiente',
-        estado_sesion: s.estado_sesion || 'confirmada',
-      })))
+      if (pacs && sess) {
+        const map: Record<string, string> = {}
+        pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
+        setTurnos(sess.map(s => ({
+          id: s.id, patient_id: s.patient_id,
+          paciente_nombre: map[s.patient_id] || 'Paciente',
+          fecha: s.fecha?.split('T')[0] || '',
+          hora: s.hora || '09:00',
+          duracion: s.duracion || 60,
+          servicio_nombre: s.servicio_nombre || '',
+          precio: s.precio || 0,
+          estado_pago: s.estado_pago || 'pendiente',
+          estado_sesion: s.estado_sesion || 'confirmada',
+        })))
+      }
+
+      if (blocks) {
+        setBloqueos(blocks.map(b => {
+          const parseHora = (ts: string) => {
+            if (!ts) return '00:00'
+            const normalizado = ts.replace(' ', 'T')
+            const fecha = new Date(normalizado)
+            return `${String(fecha.getHours()).padStart(2,'0')}:${String(fecha.getMinutes()).padStart(2,'0')}`
+          }
+          const parseFecha = (ts: string) => {
+            if (!ts) return ''
+            const normalizado = ts.replace(' ', 'T')
+            const fecha = new Date(normalizado)
+            return formatDate(fecha)
+          }
+          return {
+            ...b,
+            fecha_inicio: parseFecha(b.fecha_inicio),
+            fecha_fin: parseFecha(b.fecha_fin),
+            hora_inicio_solo: parseHora(b.fecha_inicio),
+            hora_fin_solo: parseHora(b.fecha_fin),
+          }
+        }))
+      }
+
+      if (avail && avail.length > 0) {
+        const dispCompleta = DISPONIBILIDAD_DEFAULT.map(def => {
+          const guardada = avail.find(a => a.dia_semana === def.dia_semana)
+          return guardada ? { ...guardada } : def
+        })
+        setDisponibilidad(dispCompleta)
+        setDispLocal(dispCompleta)
+      } else {
+        setDispLocal(DISPONIBILIDAD_DEFAULT)
+      }
+    } catch (err) {
+      console.error('Error en agenda:', err)
+    } finally {
+      setLoading(false)
     }
-
-    if (blocks) {
-      setBloqueos(blocks.map(b => {
-        const parseHora = (ts: string) => {
-          if (!ts) return '00:00'
-          const normalizado = ts.replace(' ', 'T')
-          const fecha = new Date(normalizado)
-          return `${String(fecha.getHours()).padStart(2,'0')}:${String(fecha.getMinutes()).padStart(2,'0')}`
-        }
-        const parseFecha = (ts: string) => {
-          if (!ts) return ''
-          const normalizado = ts.replace(' ', 'T')
-          const fecha = new Date(normalizado)
-          return formatDate(fecha)
-        }
-        return {
-          ...b,
-          fecha_inicio: parseFecha(b.fecha_inicio),
-          fecha_fin: parseFecha(b.fecha_fin),
-          hora_inicio_solo: parseHora(b.fecha_inicio),
-          hora_fin_solo: parseHora(b.fecha_fin),
-        }
-      }))
-    }
-
-    if (avail && avail.length > 0) {
-      const dispCompleta = DISPONIBILIDAD_DEFAULT.map(def => {
-        const guardada = avail.find(a => a.dia_semana === def.dia_semana)
-        return guardada ? { ...guardada } : def
-      })
-      setDisponibilidad(dispCompleta)
-      setDispLocal(dispCompleta)
-    } else {
-      setDispLocal(DISPONIBILIDAD_DEFAULT)
-    }
-
-  } catch (err) {
-    console.error('Error en agenda:', err)
-  } finally {
-    setLoading(false)
-  }
   }
 
   const diasSemana = useMemo(() => {
@@ -221,8 +220,7 @@ export default function AgendaPage() {
   function esFueraDeHorario(fecha: Date, hora: number): boolean {
     const diaSemana = fecha.getDay()
     const disp = disponibilidad.find(d => d.dia_semana === diaSemana)
-    if (!disp) return true
-    if (!disp.activo) return true
+    if (!disp || !disp.activo) return true
     const horaMin = hora * 60
     const ini = horaAMin(disp.hora_inicio)
     const fin = horaAMin(disp.hora_fin)
@@ -232,8 +230,7 @@ export default function AgendaPage() {
   async function moverTurno(turnoId: string, nuevaFecha: string, nuevaHora: string) {
     const supabase = createClient()
     await supabase.from('sessions').update({
-      fecha: nuevaFecha + 'T' + nuevaHora + ':00',
-      hora: nuevaHora,
+      fecha: nuevaFecha + 'T' + nuevaHora + ':00', hora: nuevaHora,
     }).eq('id', turnoId)
     setTurnos(prev => prev.map(t => t.id === turnoId ? {...t, fecha: nuevaFecha, hora: nuevaHora} : t))
     setArrastrando(null)
@@ -249,31 +246,33 @@ export default function AgendaPage() {
   async function guardarBloqueo() {
     if (!formBloqueo.titulo || !formBloqueo.fecha_inicio) return
     setGuardandoBloqueo(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data } = await supabase.from('calendar_blocks').insert({
-      user_id: user.id,
-      titulo: formBloqueo.titulo,
-      fecha_inicio: formBloqueo.fecha_inicio + 'T' + formBloqueo.hora_inicio + ':00',
-      fecha_fin: (formBloqueo.fecha_fin || formBloqueo.fecha_inicio) + 'T' + formBloqueo.hora_fin + ':00',
-      tipo: formBloqueo.tipo,
-      color: COLORES_TIPO[formBloqueo.tipo]?.bg || '#F1F5F9',
-    }).select().single()
-
-    if (data) {
-      setBloqueos(prev => [...prev, {
-        ...data,
-        fecha_inicio: formBloqueo.fecha_inicio,
-        fecha_fin: formBloqueo.fecha_fin || formBloqueo.fecha_inicio,
-        hora_inicio_solo: formBloqueo.hora_inicio,
-        hora_fin_solo: formBloqueo.hora_fin,
-      }])
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('calendar_blocks').insert({
+        user_id: user.id, titulo: formBloqueo.titulo,
+        fecha_inicio: formBloqueo.fecha_inicio + 'T' + formBloqueo.hora_inicio + ':00',
+        fecha_fin: (formBloqueo.fecha_fin || formBloqueo.fecha_inicio) + 'T' + formBloqueo.hora_fin + ':00',
+        tipo: formBloqueo.tipo,
+        color: COLORES_TIPO[formBloqueo.tipo]?.bg || '#F1F5F9',
+      }).select().single()
+      if (data) {
+        setBloqueos(prev => [...prev, {
+          ...data,
+          fecha_inicio: formBloqueo.fecha_inicio,
+          fecha_fin: formBloqueo.fecha_fin || formBloqueo.fecha_inicio,
+          hora_inicio_solo: formBloqueo.hora_inicio,
+          hora_fin_solo: formBloqueo.hora_fin,
+        }])
+      }
+      setModalBloqueo(false)
+      setFormBloqueo({ titulo: '', fecha_inicio: '', hora_inicio: '09:00', fecha_fin: '', hora_fin: '10:00', tipo: 'bloqueo' })
+    } catch (err) {
+      console.error('Error guardando bloqueo:', err)
+    } finally {
+      setGuardandoBloqueo(false)
     }
-    setModalBloqueo(false)
-    setGuardandoBloqueo(false)
-    setFormBloqueo({ titulo: '', fecha_inicio: '', hora_inicio: '09:00', fecha_fin: '', hora_fin: '10:00', tipo: 'bloqueo' })
   }
 
   async function borrarBloqueo(id: string) {
@@ -284,22 +283,24 @@ export default function AgendaPage() {
 
   async function guardarDisponibilidad() {
     setGuardandoDisp(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase.from('availability').delete().eq('user_id', user.id)
-    const { data } = await supabase.from('availability').insert(
-      dispLocal.map(d => ({
-        user_id: user.id,
-        dia_semana: d.dia_semana,
-        hora_inicio: d.hora_inicio,
-        hora_fin: d.hora_fin,
-        activo: d.activo,
-      }))
-    ).select()
-    if (data) setDisponibilidad(dispLocal)
-    setModalDisponibilidad(false)
-    setGuardandoDisp(false)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('availability').delete().eq('user_id', user.id)
+      await supabase.from('availability').insert(
+        dispLocal.map(d => ({
+          user_id: user.id, dia_semana: d.dia_semana,
+          hora_inicio: d.hora_inicio, hora_fin: d.hora_fin, activo: d.activo,
+        }))
+      )
+      setDisponibilidad(dispLocal)
+      setModalDisponibilidad(false)
+    } catch (err) {
+      console.error('Error guardando disponibilidad:', err)
+    } finally {
+      setGuardandoDisp(false)
+    }
   }
 
   const cargaSemanal = useMemo(() => {
@@ -314,13 +315,12 @@ export default function AgendaPage() {
 
   const maxCarga = Math.max(...cargaSemanal.map(d => d.count), 1)
   const cancelados = turnos.filter(t => t.estado_sesion === 'cancelada')
-
   const periodoLabel = vista === 'semana'
     ? `${diasSemana[0].getDate()} ${MESES[diasSemana[0].getMonth()].slice(0,3)} — ${diasSemana[6].getDate()} ${MESES[diasSemana[6].getMonth()].slice(0,3)} ${diasSemana[6].getFullYear()}`
     : `${MESES[fechaBase.getMonth()]} ${fechaBase.getFullYear()}`
 
   if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'#9B8EC4',background:'#F4F2FF'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
     </div>
   )
@@ -328,42 +328,44 @@ export default function AgendaPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
-        .aw{height:100vh;display:flex;flex-direction:column;font-family:'Inter',sans-serif;background:#F4F2FF;padding:12px 14px;gap:10px;overflow:hidden}
+        .aw{height:100vh;display:flex;flex-direction:column;font-family:'Inter',sans-serif;background:var(--bg);padding:14px;gap:10px;overflow:hidden}
         .a-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
-        .a-title{font-size:17px;font-weight:800;color:#1A1035;letter-spacing:-0.5px}
-        .a-periodo{font-size:11px;color:#7C6BAA;margin-top:1px}
+        .a-title{font-size:17px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
+        .a-periodo{font-size:11px;color:var(--text-secondary);margin-top:1px}
         .a-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-        .a-tabs{display:flex;gap:2px;background:white;padding:3px;border-radius:10px;border:0.5px solid #EDE9FF;box-shadow:0 1px 4px rgba(139,92,246,0.06)}
-        .a-tab{padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:#A99CC4;font-family:inherit;transition:all 0.15s;display:flex;align-items:center;gap:4px;white-space:nowrap}
-        .a-tab.active{background:#F0EBFF;color:#7C3AED}
-        .a-vista{display:flex;gap:2px;background:white;padding:3px;border-radius:10px;border:0.5px solid #EDE9FF;box-shadow:0 1px 4px rgba(139,92,246,0.06)}
-        .a-vista-btn{padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:#A99CC4;font-family:inherit;transition:all 0.15s}
+        .a-tabs{display:flex;gap:2px;background:var(--bg-card);padding:3px;border-radius:10px;border:0.5px solid var(--border-light)}
+        .a-tab{padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;display:flex;align-items:center;gap:4px;white-space:nowrap}
+        .a-tab.active{background:var(--accent-light);color:var(--accent)}
+        .a-vista{display:flex;gap:2px;background:var(--bg-card);padding:3px;border-radius:10px;border:0.5px solid var(--border-light)}
+        .a-vista-btn{padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s}
         .a-vista-btn.active{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;box-shadow:0 2px 6px rgba(139,92,246,0.25)}
         .a-nav{display:flex;align-items:center;gap:4px}
-        .a-nav-btn{width:28px;height:28px;border-radius:7px;border:0.5px solid #E2D9FF;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#7C6BAA;box-shadow:0 1px 3px rgba(139,92,246,0.06)}
-        .a-nav-btn:hover{border-color:#8B5CF6;color:#7C3AED}
-        .a-hoy-btn{padding:5px 12px;border-radius:7px;border:0.5px solid #E2D9FF;background:white;font-size:11px;font-weight:600;color:#7C3AED;cursor:pointer;font-family:inherit}
-        .a-bloqueo-btn{display:flex;align-items:center;gap:4px;padding:6px 11px;background:#F0EBFF;color:#7C3AED;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
-        .a-bloqueo-btn:hover{background:#EDE8FF}
-        .a-disp-btn{display:flex;align-items:center;gap:4px;padding:6px 11px;background:white;color:#7C6BAA;border:0.5px solid #E2D9FF;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 3px rgba(139,92,246,0.06)}
-        .a-disp-btn:hover{border-color:#8B5CF6;color:#7C3AED}
-        .semana-outer{flex:1;min-height:0;display:flex;flex-direction:column;background:white;border-radius:16px;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF;overflow:hidden}
-        .semana-headers{display:grid;grid-template-columns:44px repeat(7,1fr);flex-shrink:0;border-bottom:0.5px solid #EDE9FF;background:#FAFAFF}
-        .semana-corner{border-right:0.5px solid #EDE9FF}
-        .sdh{padding:8px 4px;text-align:center;border-right:0.5px solid #EDE9FF}
-        .sdh-dia{font-size:10px;font-weight:600;color:#A99CC4;text-transform:uppercase}
-        .sdh-num{font-size:15px;font-weight:800;color:#1A1035;line-height:1;margin-top:2px}
+        .a-nav-btn{width:28px;height:28px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary)}
+        .a-nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .a-hoy-btn{padding:5px 12px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;font-family:inherit}
+        .a-bloqueo-btn{display:flex;align-items:center;gap:4px;padding:6px 11px;background:var(--accent-light);color:var(--accent);border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+        .a-bloqueo-btn:hover{background:var(--accent-hover)}
+        .a-disp-btn{display:flex;align-items:center;gap:4px;padding:6px 11px;background:var(--bg-card);color:var(--text-secondary);border:0.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+        .a-disp-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+        .semana-outer{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg-card);border-radius:18px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);overflow:hidden}
+        .semana-headers{display:grid;grid-template-columns:44px repeat(7,1fr);flex-shrink:0;border-bottom:0.5px solid var(--border-light);background:var(--bg-input)}
+        .semana-corner{border-right:0.5px solid var(--border-light)}
+        .sdh{padding:8px 4px;text-align:center;border-right:0.5px solid var(--border-light)}
+        .sdh-dia{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase}
+        .sdh-num{font-size:15px;font-weight:800;color:var(--text-primary);line-height:1;margin-top:2px;font-family:'Manrope',sans-serif}
         .sdh-num.hoy{width:26px;height:26px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;margin:2px auto 0}
         .semana-scroll{flex:1;overflow-y:auto;min-height:0}
         .semana-grid{display:grid;grid-template-columns:44px repeat(7,1fr)}
-        .hora-lbl{border-right:0.5px solid #EDE9FF;border-bottom:0.5px solid #F0EBFF;height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 5px 0;font-size:10px;color:#C4B8E8;font-weight:500;background:#FAFAFF}
-        .celda{border-right:0.5px solid #F0EBFF;border-bottom:0.5px solid #F0EBFF;height:56px;position:relative;transition:background 0.1s}
-        .celda.fuera{background:repeating-linear-gradient(-45deg,#F8F6FF,#F8F6FF 3px,#F4F2FF 3px,#F4F2FF 7px)}
-        .celda.bloqueada{background:repeating-linear-gradient(45deg,#FEF9C3,#FEF9C3 3px,#FFFBEB 3px,#FFFBEB 7px)}
-        .celda.hoy-col{background:rgba(139,92,246,0.015)}
-        .celda:not(.fuera):not(.bloqueada):hover{background:#FDFCFF;cursor:pointer}
+        .hora-lbl{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 5px 0;font-size:10px;color:var(--text-muted);font-weight:500;background:var(--bg-input)}
+        .celda{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);height:56px;position:relative;transition:background 0.1s}
+        .celda.fuera{background:var(--bg-input);opacity:0.6}
+        .celda.bloqueada{background:#FFFBEB}
+        html.dark .celda.bloqueada{background:#1A1200}
+        .celda.hoy-col{background:rgba(139,92,246,0.02)}
+        .celda:not(.fuera):not(.bloqueada):hover{background:var(--accent-hover);cursor:pointer}
         .bloqueo-chip{position:absolute;inset:2px 3px;border-radius:6px;padding:3px 6px;z-index:2;display:flex;align-items:center;gap:4px;overflow:hidden}
         .bloqueo-chip-label{font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .bloqueo-x{width:14px;height:14px;border-radius:50%;background:rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:9px;margin-left:auto}
@@ -373,84 +375,90 @@ export default function AgendaPage() {
         .tc-nombre{font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .tc-serv{font-size:9px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .tc-hora{font-size:9px;opacity:0.55;margin-top:1px}
-        .mes-outer{flex:1;min-height:0;display:flex;flex-direction:column;background:white;border-radius:16px;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF;overflow:hidden}
-        .mes-hdr-row{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:0.5px solid #EDE9FF;background:#FAFAFF;flex-shrink:0}
-        .mes-hdr-dia{padding:8px;text-align:center;font-size:10px;font-weight:700;color:#A99CC4;text-transform:uppercase}
+
+        .mes-outer{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg-card);border-radius:18px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);overflow:hidden}
+        .mes-hdr-row{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:0.5px solid var(--border-light);background:var(--bg-input);flex-shrink:0}
+        .mes-hdr-dia{padding:8px;text-align:center;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase}
         .mes-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;overflow:hidden}
-        .mes-celda{border-right:0.5px solid #F0EBFF;border-bottom:0.5px solid #F0EBFF;padding:5px;cursor:pointer;overflow:hidden;transition:background 0.1s}
-        .mes-celda:hover{background:#FDFCFF}
+        .mes-celda{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);padding:5px;cursor:pointer;overflow:hidden;transition:background 0.1s}
+        .mes-celda:hover{background:var(--accent-hover)}
         .mes-celda.hoy-c{background:rgba(139,92,246,0.04)}
-        .mes-celda.vacio{background:#FAFAFF;cursor:default}
-        .mes-celda.fuera-rango{background:repeating-linear-gradient(-45deg,#F8F6FF,#F8F6FF 3px,#F4F2FF 3px,#F4F2FF 7px)}
-        .mes-num{font-size:11px;font-weight:700;color:#6B5B8A;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;margin-bottom:3px}
+        .mes-celda.vacio{background:var(--bg-input);cursor:default}
+        .mes-celda.fuera-rango{background:var(--bg-input);opacity:0.5}
+        .mes-num{font-size:11px;font-weight:700;color:var(--text-secondary);width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;margin-bottom:3px}
         .mes-num.hoy{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;font-size:10px}
         .mes-chip{font-size:9px;padding:2px 5px;border-radius:4px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;cursor:pointer}
-        .mes-mas{font-size:9px;color:#A99CC4;padding-left:3px}
-        .carga-outer{flex:1;background:white;border-radius:16px;padding:18px;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF;overflow-y:auto}
+        .mes-mas{font-size:9px;color:var(--text-muted);padding-left:3px}
+
+        .carga-outer{flex:1;background:var(--bg-card);border-radius:18px;padding:18px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);overflow-y:auto}
         .carga-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px}
-        .carga-dia{border-radius:14px;padding:14px 10px;text-align:center;border:0.5px solid #EDE9FF;background:#FAFAFF}
-        .carga-dia.hoy{border-color:#8B5CF6;background:linear-gradient(135deg,#EDE8FF,#F5F0FF)}
-        .carga-dia-lbl{font-size:11px;font-weight:700;color:#1A1035;margin-bottom:2px}
-        .carga-dia-fecha{font-size:9px;color:#A99CC4;margin-bottom:10px}
-        .carga-bar-bg{height:70px;background:#F0EBFF;border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;margin-bottom:8px}
+        .carga-dia{border-radius:14px;padding:14px 10px;text-align:center;border:0.5px solid var(--border-light);background:var(--bg-input)}
+        .carga-dia.hoy{border-color:var(--accent);background:var(--accent-light)}
+        .carga-dia-lbl{font-size:11px;font-weight:700;color:var(--text-primary);margin-bottom:2px;font-family:'Manrope',sans-serif}
+        .carga-dia-fecha{font-size:9px;color:var(--text-muted);margin-bottom:10px}
+        .carga-bar-bg{height:70px;background:var(--accent-light);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;margin-bottom:8px}
         .carga-bar-fill{width:100%;background:linear-gradient(180deg,#8B5CF6,#A78BFA);border-radius:8px;transition:height 0.5s}
-        .carga-count{font-size:16px;font-weight:800;color:#1A1035}
-        .carga-lbl{font-size:9px;color:#A99CC4}
-        .carga-h{font-size:10px;color:#7C6BAA;margin-top:3px;font-weight:500}
-        .canc-outer{flex:1;background:white;border-radius:16px;padding:18px;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF;overflow-y:auto}
+        .carga-count{font-size:16px;font-weight:800;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .carga-lbl{font-size:9px;color:var(--text-muted)}
+        .carga-h{font-size:10px;color:var(--text-secondary);margin-top:3px;font-weight:500}
+
+        .canc-outer{flex:1;background:var(--bg-card);border-radius:18px;padding:18px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);overflow-y:auto}
         .canc-list{display:flex;flex-direction:column;gap:7px;margin-top:12px}
         .canc-item{background:#FEF2F2;border-radius:12px;padding:11px 13px;border:0.5px solid #FECACA;display:flex;align-items:center;gap:10px}
+        html.dark .canc-item{background:#200808;border-color:#7F1D1D}
         .canc-dot{width:7px;height:7px;border-radius:50%;background:#EF4444;flex-shrink:0}
         .canc-body{flex:1}
-        .canc-nombre{font-size:12px;font-weight:600;color:#1A1035}
-        .canc-info{font-size:10px;color:#A99CC4;margin-top:1px}
-        .canc-restore{padding:5px 10px;border-radius:7px;background:white;border:0.5px solid #E2D9FF;color:#7C3AED;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
-        .canc-restore:hover{background:#F0EBFF}
+        .canc-nombre{font-size:12px;font-weight:600;color:var(--text-primary)}
+        .canc-info{font-size:10px;color:var(--text-muted);margin-top:1px}
+        .canc-restore{padding:5px 10px;border-radius:7px;background:var(--bg-card);border:0.5px solid var(--border);color:var(--accent);font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
+        .canc-restore:hover{background:var(--accent-light)}
+
         .det-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.35);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(3px)}
-        .det-panel{background:white;border-radius:20px;padding:22px;width:340px;box-shadow:0 24px 60px rgba(100,60,200,0.2)}
+        .det-panel{background:var(--bg-card);border-radius:20px;padding:22px;width:340px;box-shadow:0 24px 60px rgba(100,60,200,0.2)}
         .det-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
-        .det-nombre{font-size:15px;font-weight:800;color:#1A1035;letter-spacing:-0.3px}
-        .det-serv{font-size:11px;color:#A99CC4;margin-top:2px}
-        .det-close{width:26px;height:26px;border-radius:7px;border:0.5px solid #E2D9FF;background:#F8F6FF;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#A99CC4}
-        .det-info{background:#F8F6FF;border-radius:12px;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        .det-info-lbl{font-size:9px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
-        .det-info-val{font-size:12px;font-weight:600;color:#1A1035}
+        .det-nombre{font-size:15px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
+        .det-serv{font-size:11px;color:var(--text-muted);margin-top:2px}
+        .det-close{width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-input);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted)}
+        .det-info{background:var(--bg-input);border-radius:12px;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .det-info-lbl{font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
+        .det-info-val{font-size:12px;font-weight:600;color:var(--text-primary)}
         .det-badge{font-size:10px;padding:3px 8px;border-radius:20px;border:0.5px solid;font-weight:500;display:inline-block}
         .det-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
         .det-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
         .det-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
-        .det-move-hint{font-size:10px;color:#A99CC4;display:flex;align-items:center;gap:5px;margin-bottom:10px;padding:7px 10px;background:#F8F6FF;border-radius:8px}
+        .det-move-hint{font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-bottom:10px;padding:7px 10px;background:var(--bg-input);border-radius:8px}
         .det-btn{width:100%;padding:9px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:none;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;margin-bottom:6px}
         .det-btn.danger{background:#FEF2F2;color:#EF4444;border:0.5px solid #FECACA}
-        .det-btn.sec{background:#F0EBFF;color:#7C3AED}
+        .det-btn.sec{background:var(--accent-light);color:var(--accent)}
+
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}
-        .mo-box{background:white;border-radius:20px;padding:22px;width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-box{background:var(--bg-card);border-radius:20px;padding:22px;width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-        .mo-title{font-size:14px;font-weight:700;color:#1A1035}
-        .mo-close{width:26px;height:26px;border-radius:7px;border:0.5px solid #E2D9FF;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#A99CC4}
+        .mo-title{font-size:14px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .mo-close{width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
         .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-        .field label{font-size:11px;font-weight:600;color:#1A1035}
-        .field input,.field select{padding:8px 10px;border-radius:9px;border:0.5px solid #E2D9FF;font-size:12px;font-family:inherit;color:#1A1035;background:#FAFAFF;outline:none;width:100%}
-        .field input:focus,.field select:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
+        .field label{font-size:11px;font-weight:600;color:var(--text-primary)}
+        .field input,.field select{padding:8px 10px;border-radius:9px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
+        .field input:focus,.field select:focus{border-color:var(--accent)}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .save-btn{width:100%;padding:10px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3)}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed}
         .tipo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:4px}
-        .tipo-btn{padding:9px;border-radius:9px;border:0.5px solid #E2D9FF;background:#FAFAFF;cursor:pointer;text-align:center;font-size:11px;font-weight:600;color:#7C6BAA;transition:all 0.15s;font-family:inherit}
-        .tipo-btn.sel{border-color:#8B5CF6;background:#EDE8FF;color:#7C3AED}
-        .disp-box{background:white;border-radius:20px;padding:22px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
-        .disp-dia-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:0.5px solid #EDE9FF;background:#FAFAFF;margin-bottom:8px}
-        .disp-dia-nombre{font-size:12px;font-weight:700;color:#1A1035;min-width:80px}
+        .tipo-btn{padding:9px;border-radius:9px;border:0.5px solid var(--border);background:var(--bg-input);cursor:pointer;text-align:center;font-size:11px;font-weight:600;color:var(--text-secondary);transition:all 0.15s;font-family:inherit}
+        .tipo-btn.sel{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
+        .disp-box{background:var(--bg-card);border-radius:20px;padding:22px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .disp-dia-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:0.5px solid var(--border-light);background:var(--bg-input);margin-bottom:8px}
+        .disp-dia-nombre{font-size:12px;font-weight:700;color:var(--text-primary);min-width:80px}
         .disp-switch{position:relative;width:36px;height:20px;cursor:pointer;flex-shrink:0}
         .disp-switch input{opacity:0;width:0;height:0}
-        .disp-slider{position:absolute;inset:0;background:#E2D9FF;border-radius:20px;transition:all 0.2s}
+        .disp-slider{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:all 0.2s}
         .disp-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:white;border-radius:50%;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.1)}
-        input:checked + .disp-slider{background:#8B5CF6}
-        input:checked + .disp-slider:before{transform:translateX(16px)}
-        .disp-hora{padding:5px 8px;border-radius:7px;border:0.5px solid #E2D9FF;font-size:11px;font-family:inherit;color:#1A1035;background:white;outline:none;width:80px}
-        .disp-hora:focus{border-color:#8B5CF6}
+        .disp-switch input:checked + .disp-slider{background:var(--accent)}
+        .disp-switch input:checked + .disp-slider:before{transform:translateX(16px)}
+        .disp-hora{padding:5px 8px;border-radius:7px;border:0.5px solid var(--border);font-size:11px;font-family:inherit;color:var(--text-primary);background:var(--bg-card);outline:none;width:80px}
+        .disp-hora:focus{border-color:var(--accent)}
         .disp-hora:disabled{opacity:0.4;cursor:not-allowed}
-        .disp-sep{font-size:11px;color:#A99CC4}
+        .disp-sep{font-size:11px;color:var(--text-muted)}
       `}</style>
 
       <div className="aw">
@@ -504,8 +512,7 @@ export default function AgendaPage() {
                       const esHoy = formatDate(dia) === formatDate(hoy)
                       const turnosHora = turnosEnHora(dia, hora)
                       return (
-                        <div
-                          key={`${hora}-${di}`}
+                        <div key={`${hora}-${di}`}
                           className={`celda${esBloqueada?' bloqueada':esFuera?' fuera':''}${esHoy?' hoy-col':''}`}
                           onDragOver={e => { if (!esBloqueada && !esFuera) e.preventDefault() }}
                           onDrop={e => {
@@ -516,7 +523,7 @@ export default function AgendaPage() {
                           {esBloqueada && bsCelda.map(b => {
                             const c = COLORES_TIPO[b.tipo] || COLORES_TIPO.bloqueo
                             return (
-                              <div key={b.id} className="bloqueo-chip" style={{background:c.bg, border:`1px dashed ${c.border}`}}>
+                              <div key={b.id} className="bloqueo-chip" style={{background:c.bg,border:`1px dashed ${c.border}`}}>
                                 <span className="bloqueo-chip-label" style={{color:c.text}}>🔒 {b.titulo}</span>
                                 <span className="bloqueo-x" onClick={() => borrarBloqueo(b.id)}>×</span>
                               </div>
@@ -528,10 +535,9 @@ export default function AgendaPage() {
                             const minutos = parseInt(t.hora.split(':')[1] || '0')
                             const offsetTop = (minutos / 60) * 56
                             return (
-                              <div
-                                key={t.id}
+                              <div key={t.id}
                                 className={`turno-chip${arrastrando===t.id?' dragging':''}`}
-                                style={{background:cs.bg, top: offsetTop + ti*2, height:`${h}px`, left:ti>0?`${3+ti*8}px`:'3px'}}
+                                style={{background:cs.bg,top:offsetTop+ti*2,height:`${h}px`,left:ti>0?`${3+ti*8}px`:'3px'}}
                                 draggable
                                 onDragStart={e => { e.dataTransfer.setData('turnoId',t.id); setArrastrando(t.id) }}
                                 onDragEnd={() => setArrastrando(null)}
@@ -588,8 +594,8 @@ export default function AgendaPage() {
 
         {vistaTab === 'carga' && (
           <div className="carga-outer">
-            <div style={{fontSize:'14px',fontWeight:'700',color:'#1A1035'}}>Carga semanal</div>
-            <div style={{fontSize:'11px',color:'#A99CC4',marginTop:'2px'}}>Distribución de turnos esta semana</div>
+            <div style={{fontSize:'14px',fontWeight:'700',color:'var(--text-primary)',fontFamily:"'Manrope',sans-serif"}}>Carga semanal</div>
+            <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>Distribución de turnos esta semana</div>
             <div className="carga-grid">
               {cargaSemanal.map((d,i) => (
                 <div key={i} className={`carga-dia${d.esHoy?' hoy':''}`}>
@@ -609,10 +615,10 @@ export default function AgendaPage() {
 
         {vistaTab === 'cancelados' && (
           <div className="canc-outer">
-            <div style={{fontSize:'14px',fontWeight:'700',color:'#1A1035'}}>Turnos cancelados</div>
-            <div style={{fontSize:'11px',color:'#A99CC4',marginTop:'2px'}}>{cancelados.length} en total</div>
+            <div style={{fontSize:'14px',fontWeight:'700',color:'var(--text-primary)',fontFamily:"'Manrope',sans-serif"}}>Turnos cancelados</div>
+            <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>{cancelados.length} en total</div>
             {cancelados.length === 0 ? (
-              <div style={{textAlign:'center',padding:'40px',color:'#C4B8E8',fontSize:'12px'}}>
+              <div style={{textAlign:'center',padding:'40px',color:'var(--text-muted)',fontSize:'12px'}}>
                 <div style={{fontSize:'28px',marginBottom:'10px'}}>✓</div>No hay turnos cancelados
               </div>
             ) : (
@@ -724,7 +730,7 @@ export default function AgendaPage() {
               <span className="mo-title">Configurar disponibilidad</span>
               <button className="mo-close" onClick={() => setModalDisponibilidad(false)}><X size={11}/></button>
             </div>
-            <p style={{fontSize:'12px',color:'#A99CC4',marginBottom:'14px',lineHeight:'1.5'}}>
+            <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'14px',lineHeight:'1.5'}}>
               Definí tus días y horarios laborales. Las horas fuera de tu disponibilidad aparecen sombreadas en el calendario.
             </p>
             {[1,2,3,4,5,6,0].map(dia => {
