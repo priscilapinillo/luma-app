@@ -134,12 +134,13 @@ export default function DashboardPage() {
           const convertidos: Turno[] = sesiones.map((s: any) => {
             const pac = pacs.find((p: any) => p.id === s.patient_id)
             const historial = sesiones
-              .filter((prev: any) => prev.patient_id === s.patient_id && new Date(prev.fecha) < new Date(s.fecha))
-              .map((prev: any) => ({
-                fecha: new Date(prev.fecha).toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
-                servicio: prev.servicio_nombre || '',
-                contexto: prev.contexto_sesion || '',
-              }))
+            .filter((prev: any) => prev.patient_id === s.patient_id && prev.id !== s.id && new Date(prev.fecha+'T12:00:00') < new Date(s.fecha+'T12:00:00'))
+            .sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+            .map((prev: any) => ({
+              fecha: new Date(prev.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+              servicio: prev.servicio_nombre || '',
+              contexto: prev.contexto_sesion || '',
+            }))
             return {
               id: s.id,
               pacienteId: pac?.alias || pac?.celular?.slice(-4) || '',

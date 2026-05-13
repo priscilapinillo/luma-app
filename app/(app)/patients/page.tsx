@@ -13,12 +13,8 @@ type Sesion = {
   id: string; fecha: string; servicio_nombre: string
   contexto_sesion: string; estado_pago: string; precio: number
 }
-type Archivo = {
-  id: string; nombre_archivo: string; tipo: string; url: string; created_at: string
-}
-type Nota = {
-  id: string; contenido: string; created_at: string
-}
+type Archivo = { id: string; nombre_archivo: string; tipo: string; url: string; created_at: string }
+type Nota = { id: string; contenido: string; created_at: string }
 
 function sinTildes(str: string) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -66,33 +62,32 @@ export default function PacientesPage() {
   async function cargarDatos() {
     try {
       const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const [{ data: pacs }, { data: sess }, { data: archs }, { data: nots }] = await Promise.all([
-      supabase.from('patients').select('*').eq('user_id', user.id).order('nombre'),
-      supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: false }),
-      supabase.from('files').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('quick_notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-    ])
+      const [{ data: pacs }, { data: sess }, { data: archs }, { data: nots }] = await Promise.all([
+        supabase.from('patients').select('*').eq('user_id', user.id).order('nombre'),
+        supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: false }),
+        supabase.from('files').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('quick_notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      ])
 
-    if (pacs) setPacientes(pacs)
-    if (pacs && sess) {
-      const porPac: Record<string, Sesion[]> = {}
-      pacs.forEach(p => { porPac[p.id] = sess.filter(s => s.patient_id === p.id) })
-      setSesiones(porPac)
-    }
-    if (pacs && archs) {
-      const porPac: Record<string, Archivo[]> = {}
-      pacs.forEach(p => { porPac[p.id] = archs.filter(a => a.patient_id === p.id) })
-      setArchivos(porPac)
-    }
-    if (pacs && nots) {
-      const porPac: Record<string, Nota[]> = {}
-      pacs.forEach(p => { porPac[p.id] = nots.filter(n => n.patient_id === p.id) })
-      setNotas(porPac)
-    }
-    
+      if (pacs) setPacientes(pacs)
+      if (pacs && sess) {
+        const porPac: Record<string, Sesion[]> = {}
+        pacs.forEach(p => { porPac[p.id] = sess.filter(s => s.patient_id === p.id) })
+        setSesiones(porPac)
+      }
+      if (pacs && archs) {
+        const porPac: Record<string, Archivo[]> = {}
+        pacs.forEach(p => { porPac[p.id] = archs.filter(a => a.patient_id === p.id) })
+        setArchivos(porPac)
+      }
+      if (pacs && nots) {
+        const porPac: Record<string, Nota[]> = {}
+        pacs.forEach(p => { porPac[p.id] = nots.filter(n => n.patient_id === p.id) })
+        setNotas(porPac)
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
@@ -141,41 +136,46 @@ export default function PacientesPage() {
   async function guardarPaciente() {
     if (!form.nombre) { alert('El nombre es obligatorio'); return }
     setGuardando(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setGuardando(false); return }
 
-    if (editando && pacienteSeleccionado) {
-      const { data } = await supabase.from('patients').update({
-        nombre: form.nombre, apellido: form.apellido, celular: form.celular,
-        email: form.email, fecha_nacimiento: form.fecha_nacimiento || null,
-        contexto_general: form.contexto_general,
-        alias: form.alias || form.celular?.slice(-4) || '',
-      }).eq('id', pacienteSeleccionado.id).select().single()
-      if (data) {
-        const actualizado = { ...data, etiquetas: form.etiquetas }
-        setPacientes(prev => prev.map(p => p.id === data.id ? actualizado : p))
-        setPacienteSeleccionado(actualizado)
+      if (editando && pacienteSeleccionado) {
+        const { data } = await supabase.from('patients').update({
+          nombre: form.nombre, apellido: form.apellido, celular: form.celular,
+          email: form.email, fecha_nacimiento: form.fecha_nacimiento || null,
+          contexto_general: form.contexto_general,
+          alias: form.alias || form.celular?.slice(-4) || '',
+        }).eq('id', pacienteSeleccionado.id).select().single()
+        if (data) {
+          const actualizado = { ...data, etiquetas: form.etiquetas }
+          setPacientes(prev => prev.map(p => p.id === data.id ? actualizado : p))
+          setPacienteSeleccionado(actualizado)
+        }
+      } else {
+        const { data } = await supabase.from('patients').insert({
+          user_id: user.id, nombre: form.nombre, apellido: form.apellido,
+          celular: form.celular, email: form.email,
+          fecha_nacimiento: form.fecha_nacimiento || null,
+          contexto_general: form.contexto_general,
+          alias: form.alias || form.celular?.slice(-4) || '',
+        }).select().single()
+        if (data) {
+          const nuevo = { ...data, etiquetas: form.etiquetas }
+          setPacientes(prev => [...prev, nuevo])
+          setPacienteSeleccionado(nuevo)
+          setSesiones(prev => ({ ...prev, [data.id]: [] }))
+          setArchivos(prev => ({ ...prev, [data.id]: [] }))
+          setNotas(prev => ({ ...prev, [data.id]: [] }))
+        }
       }
-    } else {
-      const { data } = await supabase.from('patients').insert({
-        user_id: user.id, nombre: form.nombre, apellido: form.apellido,
-        celular: form.celular, email: form.email,
-        fecha_nacimiento: form.fecha_nacimiento || null,
-        contexto_general: form.contexto_general,
-        alias: form.alias || form.celular?.slice(-4) || '',
-      }).select().single()
-      if (data) {
-        const nuevo = { ...data, etiquetas: form.etiquetas }
-        setPacientes(prev => [...prev, nuevo])
-        setPacienteSeleccionado(nuevo)
-        setSesiones(prev => ({ ...prev, [data.id]: [] }))
-        setArchivos(prev => ({ ...prev, [data.id]: [] }))
-        setNotas(prev => ({ ...prev, [data.id]: [] }))
-      }
+      setModalNuevo(false)
+    } catch (err) {
+      console.error('Error guardando paciente:', err)
+    } finally {
+      setGuardando(false)
     }
-    setModalNuevo(false)
-    setGuardando(false)
   }
 
   async function guardarContexto(id: string, contexto: string) {
@@ -202,10 +202,7 @@ export default function PacientesPage() {
     if (!pacienteSeleccionado) return
     const supabase = createClient()
     await supabase.from('quick_notes').delete().eq('id', notaId)
-    setNotas(prev => ({
-      ...prev,
-      [pacienteSeleccionado.id]: (prev[pacienteSeleccionado.id] || []).filter(n => n.id !== notaId)
-    }))
+    setNotas(prev => ({ ...prev, [pacienteSeleccionado.id]: (prev[pacienteSeleccionado.id] || []).filter(n => n.id !== notaId) }))
   }
 
   async function subirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -215,11 +212,9 @@ export default function PacientesPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     const ext = file.name.split('.').pop()
     const path = `${user.id}/${pacienteSeleccionado.id}/${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage.from('patient-files').upload(path, file)
-
     if (!uploadError) {
       const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(path)
       const tipo = file.type.startsWith('image') ? 'imagen' : file.type.includes('pdf') ? 'pdf' : file.type.startsWith('audio') ? 'audio' : 'archivo'
@@ -227,29 +222,24 @@ export default function PacientesPage() {
         user_id: user.id, patient_id: pacienteSeleccionado.id,
         nombre_archivo: file.name, tipo, url: urlData.publicUrl,
       }).select().single()
-      if (data) {
-        setArchivos(prev => ({ ...prev, [pacienteSeleccionado.id]: [data, ...(prev[pacienteSeleccionado.id] || [])] }))
-      }
+      if (data) setArchivos(prev => ({ ...prev, [pacienteSeleccionado.id]: [data, ...(prev[pacienteSeleccionado.id] || [])] }))
     }
     setSubiendoArchivo(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  async function borrarArchivo(archivoId: string, url: string) {
+  async function borrarArchivo(archivoId: string) {
     if (!pacienteSeleccionado) return
     const supabase = createClient()
     await supabase.from('files').delete().eq('id', archivoId)
-    setArchivos(prev => ({
-      ...prev,
-      [pacienteSeleccionado.id]: (prev[pacienteSeleccionado.id] || []).filter(a => a.id !== archivoId)
-    }))
+    setArchivos(prev => ({ ...prev, [pacienteSeleccionado.id]: (prev[pacienteSeleccionado.id] || []).filter(a => a.id !== archivoId) }))
   }
 
   function iconoArchivo(tipo: string) {
-    if (tipo === 'imagen') return <Image size={14} />
-    if (tipo === 'audio') return <Mic size={14} />
-    if (tipo === 'pdf') return <FileText size={14} />
-    return <File size={14} />
+    if (tipo === 'imagen') return <Image size={14}/>
+    if (tipo === 'audio') return <Mic size={14}/>
+    if (tipo === 'pdf') return <FileText size={14}/>
+    return <File size={14}/>
   }
 
   const sesionsPaciente = pacienteSeleccionado ? (sesiones[pacienteSeleccionado.id] || []) : []
@@ -257,7 +247,7 @@ export default function PacientesPage() {
   const notasPaciente = pacienteSeleccionado ? (notas[pacienteSeleccionado.id] || []) : []
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:'13px', color:'#9B8EC4', background:'#F4F2FF' }}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
     </div>
   )
@@ -265,136 +255,129 @@ export default function PacientesPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
-        .pw{display:grid;grid-template-columns:55% 45%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:#F4F2FF;padding:12px 16px 12px 12px;gap:12px}
-        .pl{display:flex;flex-direction:column;gap:10px;overflow:hidden;background:white;border-radius:20px;padding:18px;height:100%;box-shadow:0 4px 20px rgba(139,92,246,0.08);border:0.5px solid #EDE9FF}
-        .pr{display:flex;flex-direction:column;gap:0;background:white;border-radius:20px;height:100%;box-shadow:0 8px 32px rgba(139,92,246,0.12),0 2px 8px rgba(139,92,246,0.06);border:0.5px solid #EDE9FF;margin-right:4px;overflow:hidden}
+        .pw{display:grid;grid-template-columns:55% 45%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);padding:14px 16px 14px 14px;gap:14px}
+        .pl{display:flex;flex-direction:column;gap:10px;overflow:hidden;background:var(--bg-card);border-radius:22px;padding:18px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
+        .pr{display:flex;flex-direction:column;gap:0;background:var(--bg-card);border-radius:22px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light);overflow:hidden}
 
         .p-header{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-        .p-title{font-size:18px;font-weight:800;color:#1A1035;letter-spacing:-0.5px}
-        .p-count{font-size:12px;color:#A99CC4;margin-top:2px}
+        .p-title{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
+        .p-count{font-size:12px;color:var(--text-muted);margin-top:2px}
         .p-new-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s;flex-shrink:0}
         .p-new-btn:hover{box-shadow:0 6px 16px rgba(139,92,246,0.4);transform:translateY(-1px)}
 
         .sr{position:relative;flex-shrink:0}
-        .si{width:100%;padding:9px 34px 9px 12px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:13px;background:#FAFAFF;color:#1A1035;outline:none;font-family:inherit;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
-        .si:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
-        .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:#A99CC4;pointer-events:none}
+        .si{width:100%;padding:9px 34px 9px 12px;border-radius:11px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
+        .si:focus{border-color:var(--accent)}
+        .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
 
         .plist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0;padding:4px 6px;margin-left:-6px;margin-right:-6px}
-        .pc{background:white;border-radius:14px;padding:12px 14px;border:none;display:flex;align-items:center;gap:12px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px rgba(139,92,246,0.09),0 1px 4px rgba(139,92,246,0.05)}
-        .pc:hover{box-shadow:0 4px 16px rgba(139,92,246,0.14);transform:translateY(-1px)}
-        .pc.sel{background:#FDFCFF;box-shadow:0 6px 20px rgba(139,92,246,0.16),0 2px 8px rgba(139,92,246,0.08);transform:translateY(-1px)}
-        .pc-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#EDE8FF,#DDD6FE);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#4C1D95;flex-shrink:0}
+        .pc{background:var(--bg-card);border-radius:14px;padding:12px 14px;border:none;display:flex;align-items:center;gap:12px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px var(--shadow)}
+        .pc:hover{transform:translateY(-1px)}
+        .pc.sel{box-shadow:0 6px 20px var(--shadow);transform:translateY(-1px);border:0.5px solid var(--border)}
+        .pc-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),#DDD6FE);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0}
         .pc-body{flex:1;min-width:0}
-        .pc-name{font-size:13px;font-weight:600;color:#1A1035}
-        .pc-sub{font-size:11px;color:#A99CC4;margin-top:1px}
+        .pc-name{font-size:13px;font-weight:600;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .pc-sub{font-size:11px;color:var(--text-muted);margin-top:1px}
         .pc-tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
-        .pc-tag{font-size:9px;padding:2px 7px;border-radius:20px;background:#EDE8FF;color:#4C1D95;border:0.5px solid #C4B8E8}
-        .pc-sessions{font-size:10px;color:#A99CC4;flex-shrink:0;text-align:right}
+        .pc-tag{font-size:9px;padding:2px 7px;border-radius:20px;background:var(--accent-light);color:var(--accent);border:0.5px solid var(--border)}
+        .pc-sessions{font-size:10px;color:var(--text-muted);flex-shrink:0;text-align:right}
 
-        .re{flex:1;display:flex;align-items:center;justify-content:center;color:#C4B8E8;font-size:12px;text-align:center;line-height:2}
+        .re{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;line-height:2}
 
-        /* PERFIL FIJO ARRIBA */
-        .pr-fixed{padding:18px 20px 14px;flex-shrink:0;border-bottom:0.5px solid #EDE9FF}
+        .pr-fixed{padding:18px 20px 14px;flex-shrink:0;border-bottom:0.5px solid var(--border-light)}
         .pr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
         .pr-left{display:flex;align-items:center;gap:12px}
         .pr-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0;box-shadow:0 4px 14px rgba(139,92,246,0.3)}
-        .pr-name{font-size:16px;font-weight:800;color:#1A1035;letter-spacing:-0.3px}
-        .pr-alias{font-size:11px;color:#A99CC4;margin-top:1px}
-        .pr-edit-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;background:#F0EBFF;color:#7C3AED;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;flex-shrink:0}
-        .pr-edit-btn:hover{background:#EDE8FF}
+        .pr-name{font-size:16px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
+        .pr-alias{font-size:11px;color:var(--text-muted);margin-top:1px}
+        .pr-edit-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--accent-light);color:var(--accent);border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;flex-shrink:0}
+        .pr-edit-btn:hover{background:var(--accent-hover)}
 
         .pr-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}
-        .pr-info-item{background:#F8F6FF;border-radius:9px;padding:8px 11px;border:0.5px solid #EDE9FF}
-        .pr-info-label{font-size:9px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;display:flex;align-items:center;gap:4px}
-        .pr-info-value{font-size:12px;color:#1A1035;font-weight:500}
+        .pr-info-item{background:var(--bg-input);border-radius:9px;padding:8px 11px;border:0.5px solid var(--border-light)}
+        .pr-info-label{font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+        .pr-info-value{font-size:12px;color:var(--text-primary);font-weight:500}
 
-        .ctx-label{font-size:9px;font-weight:700;color:#A99CC4;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
-        .ctx-area{width:100%;padding:9px 11px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:12px;color:#1A1035;resize:none;height:70px;font-family:inherit;background:#FAFAFF;outline:none;line-height:1.6;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
-        .ctx-area:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
+        .ctx-label{font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
+        .ctx-area{width:100%;padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:12px;color:var(--text-primary);resize:none;height:70px;font-family:inherit;background:var(--bg-input);outline:none;line-height:1.6}
+        .ctx-area:focus{border-color:var(--accent)}
 
         .pr-etiquetas{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px}
-        .pr-tag{font-size:10px;padding:3px 9px;border-radius:20px;background:#EDE8FF;color:#4C1D95;border:0.5px solid #C4B8E8}
+        .pr-tag{font-size:10px;padding:3px 9px;border-radius:20px;background:var(--accent-light);color:var(--accent);border:0.5px solid var(--border)}
 
-        /* PESTAÑAS */
-        .tabs{display:flex;gap:2px;padding:10px 20px 0;flex-shrink:0;background:white}
-        .tab{padding:8px 14px;border-radius:8px 8px 0 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:transparent;color:#A99CC4;font-family:inherit;transition:all 0.15s;border-bottom:2px solid transparent}
-        .tab.active{color:#7C3AED;border-bottom-color:#8B5CF6;background:#F8F6FF}
-        .tab:hover{color:#7C3AED;background:#F8F6FF}
+        .tabs{display:flex;gap:2px;padding:10px 20px 0;flex-shrink:0;background:var(--bg-card)}
+        .tab{padding:8px 14px;border-radius:8px 8px 0 0;font-size:12px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;border-bottom:2px solid transparent}
+        .tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg-input)}
+        .tab:hover{color:var(--accent);background:var(--bg-input)}
 
-        /* CONTENIDO PESTAÑAS */
         .tab-content{flex:1;overflow-y:auto;padding:14px 20px 16px;display:flex;flex-direction:column;gap:8px;min-height:0}
 
-        .hist-empty{font-size:12px;color:#C4B8E8;text-align:center;padding:20px 0}
-        .hist-item{background:#F8F6FF;border-radius:12px;padding:10px 13px;border:0.5px solid #EDE9FF;box-shadow:0 1px 4px rgba(139,92,246,0.05);flex-shrink:0}
+        .hist-empty{font-size:12px;color:var(--text-muted);text-align:center;padding:20px 0}
+        .hist-item{background:var(--bg-input);border-radius:12px;padding:10px 13px;border:0.5px solid var(--border-light);flex-shrink:0}
         .hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-        .hist-date{font-size:11px;font-weight:600;color:#7C3AED}
-        .hist-serv{font-size:10px;color:#A99CC4}
-        .hist-ctx{font-size:11px;color:#6B5B8A;line-height:1.5}
+        .hist-date{font-size:11px;font-weight:600;color:var(--accent)}
+        .hist-serv{font-size:10px;color:var(--text-muted)}
+        .hist-ctx{font-size:11px;color:var(--text-secondary);line-height:1.5}
         .hist-badges{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
         .hbadge{font-size:9px;padding:2px 7px;border-radius:20px;border:0.5px solid}
         .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
         .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
         .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
 
-        /* ARCHIVOS */
-        .upload-area{border:1.5px dashed #C4B8E8;border-radius:12px;padding:16px;text-align:center;cursor:pointer;transition:all 0.15s;background:#FAFAFF;flex-shrink:0}
-        .upload-area:hover{border-color:#8B5CF6;background:#F8F6FF}
-        .upload-title{font-size:12px;font-weight:600;color:#7C6BAA;margin-bottom:4px}
-        .upload-sub{font-size:10px;color:#A99CC4}
+        .upload-area{border:1.5px dashed var(--border);border-radius:12px;padding:16px;text-align:center;cursor:pointer;transition:all 0.15s;background:var(--bg-input);flex-shrink:0}
+        .upload-area:hover{border-color:var(--accent);background:var(--accent-hover)}
+        .upload-title{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:4px}
+        .upload-sub{font-size:10px;color:var(--text-muted)}
         .upload-types{display:flex;justify-content:center;gap:8px;margin-top:8px}
-        .upload-type{display:flex;align-items:center;gap:4px;font-size:10px;color:#A99CC4}
-        .arch-item{background:#F8F6FF;border-radius:12px;padding:10px 13px;border:0.5px solid #EDE9FF;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
-        .arch-icon{width:32px;height:32px;border-radius:8px;background:#EDE8FF;display:flex;align-items:center;justify-content:center;color:#7C3AED;flex-shrink:0}
+        .upload-type{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)}
+        .arch-item{background:var(--bg-input);border-radius:12px;padding:10px 13px;border:0.5px solid var(--border-light);display:flex;align-items:center;gap:10px;flex-shrink:0}
+        .arch-icon{width:32px;height:32px;border-radius:8px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
         .arch-body{flex:1;min-width:0}
-        .arch-name{font-size:12px;font-weight:500;color:#1A1035;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .arch-date{font-size:10px;color:#A99CC4;margin-top:1px}
+        .arch-name{font-size:12px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .arch-date{font-size:10px;color:var(--text-muted);margin-top:1px}
         .arch-actions{display:flex;gap:5px}
-        .arch-btn{width:26px;height:26px;border-radius:7px;border:0.5px solid #E2D9FF;background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#A99CC4;transition:all 0.15s}
-        .arch-btn:hover{border-color:#8B5CF6;color:#7C3AED}
+        .arch-btn{width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);transition:all 0.15s}
+        .arch-btn:hover{border-color:var(--accent);color:var(--accent)}
         .arch-btn.danger:hover{border-color:#EF4444;color:#EF4444;background:#FEF2F2}
 
-        /* NOTAS */
-        .nota-input-wrap{background:#F8F6FF;border-radius:12px;padding:10px 13px;border:0.5px solid #EDE9FF;flex-shrink:0}
-        .nota-input{width:100%;border:none;background:transparent;font-size:12px;color:#1A1035;outline:none;resize:none;height:60px;font-family:inherit;line-height:1.6}
+        .nota-input-wrap{background:var(--bg-input);border-radius:12px;padding:10px 13px;border:0.5px solid var(--border-light);flex-shrink:0}
+        .nota-input{width:100%;border:none;background:transparent;font-size:12px;color:var(--text-primary);outline:none;resize:none;height:60px;font-family:inherit;line-height:1.6}
         .nota-actions{display:flex;justify-content:flex-end;margin-top:6px}
         .nota-save-btn{padding:5px 12px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
-        .nota-item{background:#F8F6FF;border-radius:12px;padding:10px 13px;border:0.5px solid #EDE9FF;flex-shrink:0;box-shadow:0 1px 4px rgba(139,92,246,0.05)}
+        .nota-item{background:var(--bg-input);border-radius:12px;padding:10px 13px;border:0.5px solid var(--border-light);flex-shrink:0}
         .nota-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
-        .nota-date{font-size:9px;color:#A99CC4}
-        .nota-del{width:20px;height:20px;border-radius:5px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#C4B8E8;transition:all 0.15s}
+        .nota-date{font-size:9px;color:var(--text-muted)}
+        .nota-del{width:20px;height:20px;border-radius:5px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);transition:all 0.15s}
         .nota-del:hover{color:#EF4444;background:#FEF2F2}
-        .nota-text{font-size:12px;color:#1A1035;line-height:1.6;white-space:pre-wrap}
+        .nota-text{font-size:12px;color:var(--text-primary);line-height:1.6;white-space:pre-wrap}
 
-        /* MODAL */
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-        .mo-box{background:white;border-radius:20px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-        .mo-title{font-size:15px;font-weight:700;color:#1A1035}
-        .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid #E2D9FF;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#A99CC4}
+        .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
+        .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
         .field{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
-        .field label{font-size:12px;font-weight:600;color:#1A1035}
-        .field input,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:13px;font-family:inherit;color:#1A1035;background:#FAFAFF;outline:none;width:100%}
-        .field input:focus,.field textarea:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.08)}
+        .field label{font-size:12px;font-weight:600;color:var(--text-primary)}
+        .field input,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
+        .field input:focus,.field textarea:focus{border-color:var(--accent)}
         .field textarea{min-height:70px;resize:none}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s}
         .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
         .tag-input-row{display:flex;gap:6px}
-        .tag-input{flex:1;padding:8px 11px;border-radius:10px;border:0.5px solid #E2D9FF;font-size:12px;font-family:inherit;color:#1A1035;background:#FAFAFF;outline:none}
-        .tag-input:focus{border-color:#8B5CF6}
-        .tag-add-btn{padding:8px 12px;border-radius:10px;background:#EDE8FF;color:#7C3AED;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit}
+        .tag-input{flex:1;padding:8px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
+        .tag-input:focus{border-color:var(--accent)}
+        .tag-add-btn{padding:8px 12px;border-radius:10px;background:var(--accent-light);color:var(--accent);border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit}
         .etiquetas-wrap{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
-        .etq{display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:20px;background:#EDE8FF;color:#4C1D95;border:0.5px solid #C4B8E8}
+        .etq{display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:20px;background:var(--accent-light);color:var(--accent);border:0.5px solid var(--border)}
         .etq-x{cursor:pointer;opacity:0.6;font-size:12px;line-height:1}
         .etq-x:hover{opacity:1}
       `}</style>
 
       <div className="pw">
-        {/* IZQUIERDA */}
         <div className="pl">
           <div className="p-header">
             <div>
@@ -414,7 +397,7 @@ export default function PacientesPage() {
 
           <div className="plist">
             {pacientesFiltrados.length === 0 && (
-              <p style={{fontSize:'12px',color:'#A99CC4',textAlign:'center',padding:'20px 0'}}>
+              <p style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>
                 {busqueda ? 'No se encontraron pacientes' : 'Todavía no tenés pacientes cargados'}
               </p>
             )}
@@ -422,8 +405,7 @@ export default function PacientesPage() {
               const sessPac = sesiones[p.id] || []
               const iniciales = `${p.nombre?.[0]||''}${p.apellido?.[0]||''}`.toUpperCase()
               return (
-                <div key={p.id}
-                  className={`pc${pacienteSeleccionado?.id===p.id?' sel':''}`}
+                <div key={p.id} className={`pc${pacienteSeleccionado?.id===p.id?' sel':''}`}
                   onClick={() => setPacienteSeleccionado(p)}>
                   <div className="pc-avatar">{iniciales||'?'}</div>
                   <div className="pc-body">
@@ -436,7 +418,7 @@ export default function PacientesPage() {
                     )}
                   </div>
                   <div className="pc-sessions">
-                    <div style={{fontSize:'16px',fontWeight:'700',color:'#1A1035'}}>{sessPac.length}</div>
+                    <div style={{fontSize:'16px',fontWeight:'700',color:'var(--text-primary)',fontFamily:"'Manrope',sans-serif"}}>{sessPac.length}</div>
                     <div>sesiones</div>
                   </div>
                 </div>
@@ -445,12 +427,10 @@ export default function PacientesPage() {
           </div>
         </div>
 
-        {/* DERECHA */}
         <div className="pr">
           {!pacienteSeleccionado ? (
             <div className="re">Seleccioná un paciente<br/>para ver su perfil</div>
           ) : (<>
-            {/* PERFIL FIJO */}
             <div className="pr-fixed">
               <div className="pr-top">
                 <div className="pr-left">
@@ -492,16 +472,14 @@ export default function PacientesPage() {
 
               {pacienteSeleccionado.etiquetas && pacienteSeleccionado.etiquetas.length > 0 && (
                 <div className="pr-etiquetas">
-                  <Tag size={10} color="#A99CC4"/>
+                  <Tag size={10} color="var(--text-muted)"/>
                   {pacienteSeleccionado.etiquetas.map((t,i) => <span key={i} className="pr-tag">{t}</span>)}
                 </div>
               )}
 
               <div style={{marginTop:'10px'}}>
                 <div className="ctx-label">Contexto general</div>
-                <textarea
-                  key={pacienteSeleccionado.id}
-                  className="ctx-area"
+                <textarea key={pacienteSeleccionado.id} className="ctx-area"
                   value={contextoLocal}
                   onChange={e => setContextoLocal(e.target.value)}
                   onBlur={() => guardarContexto(pacienteSeleccionado.id, contextoLocal)}
@@ -509,7 +487,6 @@ export default function PacientesPage() {
               </div>
             </div>
 
-            {/* PESTAÑAS */}
             <div className="tabs">
               {(['sesiones','archivos','notas'] as const).map(t => (
                 <button key={t} className={`tab${tab===t?' active':''}`} onClick={() => setTab(t)}>
@@ -518,20 +495,13 @@ export default function PacientesPage() {
               ))}
             </div>
 
-            {/* CONTENIDO PESTAÑAS */}
             <div className="tab-content">
-
-              {/* SESIONES */}
               {tab === 'sesiones' && (<>
-                {sesionsPaciente.length === 0 && (
-                  <div className="hist-empty">Este paciente aún no tiene sesiones registradas</div>
-                )}
+                {sesionsPaciente.length === 0 && <div className="hist-empty">Este paciente aún no tiene sesiones registradas</div>}
                 {sesionsPaciente.map((s,i) => (
                   <div key={i} className="hist-item">
                     <div className="hist-top">
-                      <span className="hist-date">
-                        {new Date(s.fecha).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}
-                      </span>
+                      <span className="hist-date">{new Date(s.fecha).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
                       <span className="hist-serv">{s.servicio_nombre}</span>
                     </div>
                     {s.contexto_sesion && <div className="hist-ctx">{s.contexto_sesion}</div>}
@@ -540,7 +510,7 @@ export default function PacientesPage() {
                         {PAGO_CONFIG[s.estado_pago]?.label||s.estado_pago}
                       </span>
                       {s.precio > 0 && (
-                        <span className="hbadge" style={{background:'#F5F3FF',color:'#4C1D95',borderColor:'#C4B8E8'}}>
+                        <span className="hbadge" style={{background:'var(--accent-light)',color:'var(--accent)',borderColor:'var(--border)'}}>
                           ${s.precio.toLocaleString()}
                         </span>
                       )}
@@ -549,13 +519,12 @@ export default function PacientesPage() {
                 ))}
               </>)}
 
-              {/* ARCHIVOS */}
               {tab === 'archivos' && (<>
                 <input ref={fileInputRef} type="file" accept="image/*,audio/*,.pdf,.doc,.docx"
                   style={{display:'none'}} onChange={subirArchivo}/>
                 <div className="upload-area" onClick={() => fileInputRef.current?.click()}>
                   {subiendoArchivo ? (
-                    <div style={{fontSize:'12px',color:'#7C6BAA'}}>Subiendo archivo...</div>
+                    <div style={{fontSize:'12px',color:'var(--text-secondary)'}}>Subiendo archivo...</div>
                   ) : (<>
                     <div className="upload-title">Subir archivo</div>
                     <div className="upload-sub">Hacé click para seleccionar</div>
@@ -567,9 +536,7 @@ export default function PacientesPage() {
                     </div>
                   </>)}
                 </div>
-                {archivosPaciente.length === 0 && (
-                  <div className="hist-empty">No hay archivos subidos para este paciente</div>
-                )}
+                {archivosPaciente.length === 0 && <div className="hist-empty">No hay archivos subidos para este paciente</div>}
                 {archivosPaciente.map(a => (
                   <div key={a.id} className="arch-item">
                     <div className="arch-icon">{iconoArchivo(a.tipo)}</div>
@@ -579,11 +546,9 @@ export default function PacientesPage() {
                     </div>
                     <div className="arch-actions">
                       <a href={a.url} target="_blank" rel="noopener noreferrer">
-                        <div className="arch-btn" title="Ver archivo">
-                          <File size={11}/>
-                        </div>
+                        <div className="arch-btn"><File size={11}/></div>
                       </a>
-                      <div className="arch-btn danger" title="Eliminar" onClick={() => borrarArchivo(a.id, a.url)}>
+                      <div className="arch-btn danger" onClick={() => borrarArchivo(a.id)}>
                         <Trash2 size={11}/>
                       </div>
                     </div>
@@ -591,40 +556,32 @@ export default function PacientesPage() {
                 ))}
               </>)}
 
-              {/* NOTAS */}
               {tab === 'notas' && (<>
                 <div className="nota-input-wrap">
                   <textarea className="nota-input"
                     placeholder="Escribí una nota rápida sobre este paciente..."
-                    value={nuevaNota}
-                    onChange={e => setNuevaNota(e.target.value)}
+                    value={nuevaNota} onChange={e => setNuevaNota(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) agregarNota() }}/>
                   <div className="nota-actions">
                     <button className="nota-save-btn" onClick={agregarNota}>Guardar nota</button>
                   </div>
                 </div>
-                {notasPaciente.length === 0 && (
-                  <div className="hist-empty">No hay notas para este paciente</div>
-                )}
+                {notasPaciente.length === 0 && <div className="hist-empty">No hay notas para este paciente</div>}
                 {notasPaciente.map(n => (
                   <div key={n.id} className="nota-item">
                     <div className="nota-top">
-                      <span className="nota-date">
-                        {new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}
-                      </span>
+                      <span className="nota-date">{new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
                       <button className="nota-del" onClick={() => borrarNota(n.id)}><X size={10}/></button>
                     </div>
                     <div className="nota-text">{n.contenido}</div>
                   </div>
                 ))}
               </>)}
-
             </div>
           </>)}
         </div>
       </div>
 
-      {/* MODAL NUEVO / EDITAR */}
       {modalNuevo && (
         <div className="mo-overlay" onClick={() => setModalNuevo(false)}>
           <div className="mo-box" onClick={e => e.stopPropagation()}>
@@ -635,51 +592,43 @@ export default function PacientesPage() {
             <div className="field-row">
               <div className="field">
                 <label>Nombre</label>
-                <input placeholder="Ej: María" value={form.nombre}
-                  onChange={e => setForm({...form, nombre: e.target.value})}/>
+                <input placeholder="Ej: María" value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}/>
               </div>
               <div className="field">
                 <label>Apellido</label>
-                <input placeholder="Ej: López" value={form.apellido}
-                  onChange={e => setForm({...form, apellido: e.target.value})}/>
+                <input placeholder="Ej: López" value={form.apellido} onChange={e => setForm({...form, apellido: e.target.value})}/>
               </div>
             </div>
             <div className="field-row">
               <div className="field">
                 <label>Celular</label>
-                <input placeholder="Ej: 2236789012" value={form.celular}
-                  onChange={e => setForm({...form, celular: e.target.value})}/>
+                <input placeholder="Ej: 2236789012" value={form.celular} onChange={e => setForm({...form, celular: e.target.value})}/>
               </div>
               <div className="field">
                 <label>Email</label>
-                <input type="email" placeholder="Ej: maria@email.com" value={form.email}
-                  onChange={e => setForm({...form, email: e.target.value})}/>
+                <input type="email" placeholder="Ej: maria@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})}/>
               </div>
             </div>
             <div className="field-row">
               <div className="field">
                 <label>Fecha de nacimiento</label>
-                <input type="date" value={form.fecha_nacimiento}
-                  onChange={e => setForm({...form, fecha_nacimiento: e.target.value})}/>
+                <input type="date" value={form.fecha_nacimiento} onChange={e => setForm({...form, fecha_nacimiento: e.target.value})}/>
               </div>
               <div className="field">
                 <label>Alias</label>
-                <input placeholder="Ej: 7890" value={form.alias}
-                  onChange={e => setForm({...form, alias: e.target.value})}/>
+                <input placeholder="Ej: 7890" value={form.alias} onChange={e => setForm({...form, alias: e.target.value})}/>
               </div>
             </div>
             <div className="field">
               <label>Contexto general</label>
               <textarea placeholder="Información importante sobre este paciente..."
-                value={form.contexto_general}
-                onChange={e => setForm({...form, contexto_general: e.target.value})}/>
+                value={form.contexto_general} onChange={e => setForm({...form, contexto_general: e.target.value})}/>
             </div>
             <div className="field">
               <label>Etiquetas</label>
               <div className="tag-input-row">
                 <input className="tag-input" placeholder="Ej: tarot, coaching, reiki..."
-                  value={nuevaEtiqueta}
-                  onChange={e => setNuevaEtiqueta(e.target.value)}
+                  value={nuevaEtiqueta} onChange={e => setNuevaEtiqueta(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarEtiqueta() }}}/>
                 <button className="tag-add-btn" onClick={agregarEtiqueta}>+ Agregar</button>
               </div>
