@@ -14,7 +14,7 @@ type Perfil = {
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
 const MONEDAS = ['ARS','USD','EUR','CLP','PEN','COP','MXN','UYU']
-type Tab = 'perfil' | 'seguridad' | 'datos' | 'preferencias'
+type Tab = 'perfil' | 'pagina' | 'seguridad' | 'datos' | 'preferencias'
 
 export default function AjustesPage() {
   const router = useRouter()
@@ -276,6 +276,7 @@ export default function AjustesPage() {
           <div className="s-nav-title">Ajustes</div>
           {([
             { id: 'perfil', icon: User, label: 'Perfil profesional' },
+            { id: 'pagina', icon: Settings, label: 'Página pública' },
             { id: 'seguridad', icon: Shield, label: 'Seguridad' },
             { id: 'datos', icon: Database, label: 'Datos y respaldo' },
             { id: 'preferencias', icon: Settings, label: 'Preferencias' },
