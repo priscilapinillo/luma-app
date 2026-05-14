@@ -10,6 +10,8 @@ type Perfil = {
   nombre_profesional: string; nombre_completo: string
   especialidad: string; bio: string; whatsapp: string
   zona_horaria: string; moneda: string; formato_fecha: string; avatar_url: string
+  pagina_activa: boolean; mensaje_bienvenida: string
+  tipo_pago: string; slug: string
 }
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
@@ -33,6 +35,7 @@ export default function AjustesPage() {
     nombre_profesional: '', nombre_completo: '', especialidad: '',
     bio: '', whatsapp: '', zona_horaria: 'America/Argentina/Buenos_Aires',
     moneda: 'ARS', formato_fecha: 'dd/mm/yyyy', avatar_url: '',
+    pagina_activa: false, mensaje_bienvenida: '', tipo_pago: 'libre', slug: '',
   })
 
   const [passForm, setPassForm] = useState({
@@ -65,6 +68,10 @@ export default function AjustesPage() {
         moneda: prof.moneda || 'ARS',
         formato_fecha: prof.formato_fecha || 'dd/mm/yyyy',
         avatar_url: prof.avatar_url || '',
+        pagina_activa: prof.pagina_activa || false,
+        mensaje_bienvenida: prof.mensaje_bienvenida || '',
+        tipo_pago: prof.tipo_pago || 'libre',
+        slug: prof.slug || prof.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
       })
       if (subs) setSuscripcion(subs)
     } catch (err) {
@@ -88,6 +95,10 @@ export default function AjustesPage() {
         bio: perfil.bio, whatsapp: perfil.whatsapp,
         zona_horaria: perfil.zona_horaria, moneda: perfil.moneda,
         formato_fecha: perfil.formato_fecha, avatar_url: perfil.avatar_url,
+        pagina_activa: perfil.pagina_activa,
+        mensaje_bienvenida: perfil.mensaje_bienvenida,
+        tipo_pago: perfil.tipo_pago,
+        slug: perfil.slug || perfil.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
         updated_at: new Date().toISOString(),
       }
       if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
@@ -362,6 +373,112 @@ export default function AjustesPage() {
               </>)}
             </div>
           </>)}
+
+          {tab === 'pagina' && (<>
+  <div className="s-section-title">Página pública</div>
+  <div className="s-section-sub">Tu página de reservas para compartir con tus consultantes</div>
+
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>URL de tu página</div>
+    <div className="field">
+      <label>Slug (parte de la URL)</label>
+      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+        <span style={{fontSize:'12px',color:'var(--text-muted)',whiteSpace:'nowrap',padding:'9px 11px',background:'var(--bg-input)',borderRadius:'10px',border:'0.5px solid var(--border)'}}>
+          /p/
+        </span>
+        <input
+          style={{flex:1,padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
+          placeholder="tu-nombre"
+          value={perfil.slug}
+          onChange={e => setPerfil({...perfil, slug: e.target.value.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')})}/>
+      </div>
+      <div className="field-hint">Solo letras minúsculas, números y guiones. Ej: priscila-tarot</div>
+    </div>
+
+    <div className="field" style={{marginTop:'4px'}}>
+      <label>Mensaje de bienvenida</label>
+      <textarea
+        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',minHeight:'70px',resize:'none',width:'100%'}}
+        placeholder="Ej: Hola! Reservá tu sesión de forma fácil y rápida..."
+        value={perfil.mensaje_bienvenida}
+        onChange={e => setPerfil({...perfil, mensaje_bienvenida: e.target.value})}/>
+    </div>
+  </div>
+
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Configuración de reservas</div>
+
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Página activa</div>
+        <div className="pref-sub">Tus consultantes pueden ver y reservar</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.pagina_activa}
+          onChange={e => setPerfil({...perfil, pagina_activa: e.target.checked})}/>
+        <span style={{
+          position:'absolute',inset:0,
+          background: perfil.pagina_activa ? '#8B5CF6' : 'var(--border)',
+          borderRadius:'22px',transition:'all 0.2s'
+        }}>
+          <span style={{
+            position:'absolute',
+            width:'16px',height:'16px',
+            left: perfil.pagina_activa ? '21px' : '3px',
+            top:'3px',background:'white',borderRadius:'50%',
+            transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'
+          }}/>
+        </span>
+      </label>
+    </div>
+
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Tipo de pago</div>
+        <div className="pref-sub">Qué se le pide al consultante al reservar</div>
+      </div>
+      <select className="pref-select"
+        value={perfil.tipo_pago}
+        onChange={e => setPerfil({...perfil, tipo_pago: e.target.value})}>
+        <option value="libre">Sin pago — reserva directa</option>
+        <option value="sena">Requiere seña</option>
+        <option value="completo">Pago completo</option>
+      </select>
+    </div>
+
+    <div style={{marginTop:'16px',display:'flex',alignItems:'center',gap:'8px'}}>
+      <button className="save-btn" onClick={guardarPerfil} disabled={guardando}>
+        {guardando ? 'Guardando...' : 'Guardar configuración'}
+      </button>
+      {msgExito && <span className="msg-exito">✓ {msgExito}</span>}
+    </div>
+  </div>
+
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Tu link de reservas</div>
+    <div style={{background:'var(--bg-input)',borderRadius:'10px',padding:'12px 14px',border:'0.5px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'}}>
+      <span style={{fontSize:'13px',color:'var(--text-secondary)',wordBreak:'break-all'}}>
+        {typeof window !== 'undefined' ? window.location.origin : ''}/p/{perfil.slug || 'tu-slug'}
+      </span>
+      <button style={{padding:'6px 14px',borderRadius:'8px',background:'var(--accent-light)',color:'var(--accent)',border:'none',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}
+        onClick={() => {
+          const url = `${window.location.origin}/p/${perfil.slug || ''}`
+          navigator.clipboard.writeText(url)
+          setMsgExito('Link copiado!')
+          setTimeout(() => setMsgExito(''), 2000)
+        }}>
+        Copiar link
+      </button>
+    </div>
+    {perfil.pagina_activa && perfil.slug && (
+      <a href={`/p/${perfil.slug}`} target="_blank" rel="noopener noreferrer"
+        style={{display:'block',marginTop:'10px',fontSize:'12px',color:'var(--accent)',textDecoration:'none',textAlign:'center'}}>
+        Ver mi página pública →
+      </a>
+    )}
+  </div>
+</>)}
 
           {tab === 'seguridad' && (<>
             <div className="s-section-title">Seguridad</div>

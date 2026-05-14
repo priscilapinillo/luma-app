@@ -14,6 +14,7 @@ type Turno = {
   fecha: string; hora: string; duracion: number
   servicio_nombre: string; precio: number
   estado_pago: string; estado_sesion: string
+  color?: string
 }
 type Bloqueo = {
   id: string; titulo: string
@@ -91,7 +92,7 @@ export default function AgendaPage() {
       if (!user) return
 
       const [{ data: sess }, { data: pacs }, { data: blocks }, { data: avail }] = await Promise.all([
-        supabase.from('sessions').select('*').eq('user_id', user.id),
+        supabase.from('sessions').select('*, services(color)').eq('user_id', user.id),
         supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
         supabase.from('calendar_blocks').select('*').eq('user_id', user.id),
         supabase.from('availability').select('*').eq('user_id', user.id),
@@ -101,7 +102,7 @@ export default function AgendaPage() {
         const map: Record<string, string> = {}
         pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
         setTurnos(sess.map(s => ({
-          id: s.id, patient_id: s.patient_id,
+          id: s.id, patient_id: s.patient_id, color: s.color || '#8B5CF6',
           paciente_nombre: map[s.patient_id] || 'Paciente',
           fecha: s.fecha?.split('T')[0] || '',
           hora: s.hora || '09:00',
@@ -530,7 +531,8 @@ export default function AgendaPage() {
                             )
                           })}
                           {turnosHora.map((t, ti) => {
-                            const cs = COLORES_SERVICIO[t.servicio_nombre] || {bg:'#EDE8FF',text:'#4C1D95'}
+                            const colorBase = t.color || '#8B5CF6'
+                            const cs = { bg: colorBase + '22', text: colorBase }
                             const h = Math.max(((t.duracion||60)/60)*56-4, 22)
                             const minutos = parseInt(t.hora.split(':')[1] || '0')
                             const offsetTop = (minutos / 60) * 56
@@ -576,7 +578,8 @@ export default function AgendaPage() {
                   <div key={i} className={`mes-celda${esHoy?' hoy-c':''}${esFuera?' fuera-rango':''}`}>
                     <div className={`mes-num${esHoy?' hoy':''}`}>{dia.getDate()}</div>
                     {ts.slice(0,3).map((t,ti) => {
-                      const cs = COLORES_SERVICIO[t.servicio_nombre] || {bg:'#EDE8FF',text:'#4C1D95'}
+                      const colorBase = t.color || '#8B5CF6'
+                      const cs = { bg: colorBase + '22', text: colorBase }
                       return (
                         <div key={ti} className="mes-chip" style={{background:cs.bg,color:cs.text}}
                           onClick={() => setTurnoSeleccionado(t)}>
