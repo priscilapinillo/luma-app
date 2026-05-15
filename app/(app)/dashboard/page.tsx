@@ -219,15 +219,21 @@ export default function DashboardPage() {
   }
 
   const turnosFiltrados = useMemo(() => {
+    if (!busqueda) {
+      return turnos.filter(t => t.fecha === fechaSeleccionada)
+    }
     const q = sinTildes(busqueda)
-    return turnos.filter(t => {
-      const matchFecha = t.fecha === fechaSeleccionada
-      if (!busqueda) return matchFecha
-      return matchFecha && (
-        sinTildes(t.pacienteNombre).includes(q) ||
-        t.pacienteId.includes(busqueda) ||
-        sinTildes(t.servicio).includes(q)
-      )
+    const resultados = turnos.filter(t =>
+      sinTildes(t.pacienteNombre).includes(q) ||
+      t.pacienteId.includes(busqueda) ||
+      sinTildes(t.servicio).includes(q) ||
+      (t.contexto && sinTildes(t.contexto).includes(q))
+    )
+    const hoyMs = new Date().getTime()
+    return resultados.sort((a, b) => {
+      const diffA = Math.abs(new Date(a.fecha+'T12:00:00').getTime() - hoyMs)
+      const diffB = Math.abs(new Date(b.fecha+'T12:00:00').getTime() - hoyMs)
+      return diffA - diffB
     })
   }, [turnos, fechaSeleccionada, busqueda])
 
@@ -735,7 +741,10 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
                 <div className="tdot"/>
                 <div className="tb">
                   <div className="tn">{turno.pacienteNombre}</div>
-                  <div className="ts2">{turno.hora} · {turno.duracion} min</div>
+                  <div className="ts2">
+                  {busqueda && <span style={{color:'var(--accent)',marginRight:'4px'}}>{new Date(turno.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'})} ·</span>}
+                 {turno.hora} · {turno.duracion} min
+                  </div>
                   <div className="ttags">
                     <span className="tg tg-s">{turno.servicio}</span>
                     <span className={`tg ${PAGO_CONFIG[turno.pago].cls}`}>{PAGO_CONFIG[turno.pago].label}</span>
