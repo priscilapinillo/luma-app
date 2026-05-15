@@ -134,13 +134,20 @@ export default function DashboardPage() {
           const convertidos: Turno[] = sesiones.map((s: any) => {
             const pac = pacs.find((p: any) => p.id === s.patient_id)
             const historial = sesiones
-            .filter((prev: any) => prev.patient_id === s.patient_id && prev.id !== s.id && new Date(prev.fecha+'T12:00:00') < new Date(s.fecha+'T12:00:00'))
-            .sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+            .filter((prev: any) => {
+              if (prev.patient_id !== s.patient_id || prev.id === s.id) return false
+              const fechaPrev = new Date(prev.fecha?.split('T')[0]+'T12:00:00')
+              const fechaSesion = new Date(s.fecha?.split('T')[0]+'T12:00:00')
+              return fechaPrev < fechaSesion
+            })
+            .sort((a: any, b: any) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
             .map((prev: any) => ({
               fecha: new Date(prev.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
               servicio: prev.servicio_nombre || '',
               contexto: prev.contexto_sesion || '',
             }))
+            
+
             return {
               id: s.id,
               pacienteId: pac?.alias || pac?.celular?.slice(-4) || '',
@@ -292,7 +299,25 @@ export default function DashboardPage() {
   function updateContexto(id: string, contexto: string) {
     const supabase = createClient()
     supabase.from('sessions').update({ contexto_sesion: contexto }).eq('id', id)
-    setTurnos(prev => prev.map(t => t.id === id ? {...t, contexto} : t))
+    setTurnos(prev => {
+      const actualizado = prev.map(t => t.id === id ? {...t, contexto} : t)
+      return actualizado.map(t => ({
+        ...t,
+        historial: actualizado
+          .filter(prev => {
+            if (prev.pacienteDbId !== t.pacienteDbId || prev.id === t.id) return false
+            const fechaPrev = new Date(prev.fecha?.split('T')[0]+'T12:00:00')
+            const fechaT = new Date(t.fecha?.split('T')[0]+'T12:00:00')
+            return fechaPrev < fechaT
+          })
+          .sort((a, b) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
+          .map(prev => ({
+            fecha: new Date(prev.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+            servicio: prev.servicio,
+            contexto: prev.contexto,
+          }))
+      }))
+    })
     setTurnoSeleccionado(prev => prev?.id === id ? {...prev, contexto} : prev)
   }
 
@@ -393,7 +418,19 @@ export default function DashboardPage() {
       servicio: nuevoTurno.servicio, precio: nuevoTurno.precio,
       contexto: nuevoTurno.contexto, pago: nuevoTurno.pago,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
-      realizado: false, historial: [],
+      realizado: false, historial: turnos
+      .filter(t => {
+        if (t.pacienteDbId !== pacienteDbId || t.id === nuevaSesion.id) return false
+        const fechaT = new Date(t.fecha?.split('T')[0]+'T12:00:00')
+        const fechaN = new Date(nuevoTurno.fecha+'T12:00:00')
+        return fechaT < fechaN
+      })
+      .sort((a, b) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
+      .map(t => ({
+        fecha: new Date(t.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+        servicio: t.servicio,
+        contexto: t.contexto,
+      })),
     }
     setTurnos(prev => [...prev, nuevo])
     setTurnoSeleccionado(nuevo)
@@ -462,9 +499,9 @@ html.dark .widget-espacio .widget-label{color:#6EE7B7 !important}
 html.dark .widget-espacio .widget-title{color:#A7F3D0 !important}
 html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .widget-blob{position:absolute;border-radius:50%;pointer-events:none;opacity:0.3}
-        .widget-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:5px}
+        .widget-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:5px}
         .widget-title{font-size:20px;font-weight:800;font-family:'Manrope',sans-serif;line-height:1.1;margin-bottom:3px}
-        .widget-sub{font-size:11px;line-height:1.5}
+        .widget-sub{font-size:17px;line-height:1.5}
         .widget-pill{display:inline-block;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;margin-top:8px;cursor:pointer;border:none;font-family:inherit}
         .widget-bar-wrap{height:4px;border-radius:4px;margin-top:10px;overflow:hidden;opacity:0.3}
         .widget-bar{height:100%;border-radius:4px}
@@ -610,35 +647,33 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
             <div className="st"><div className="st-l">Pasado</div><div className="st-n">{turnosPasado}</div></div>
           </div>
 
-          {/* WIDGET INGRESOS */}
-          <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
-            <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
-            <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
-            <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
-            <div className="widget-sub" style={{color:'#B45309'}}>
-              cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pendientes</span>
-            </div>
-            <div className="widget-bar-wrap" style={{background:'#FDE68A'}}>
-              <div className="widget-bar" style={{
-                width: ingresosMes+pendientesMes > 0 ? `${Math.round((ingresosMes/(ingresosMes+pendientesMes))*100)}%` : '0%',
-                background:'linear-gradient(90deg,#F59E0B,#FCD34D)'
-              }}/>
-            </div>
-            <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}}>Ver finanzas →</button>
-          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',flexShrink:0}}>
+  {/* WIDGET INGRESOS */}
+  <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
+    <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
+    <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
+    <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
+    <div className="widget-sub" style={{color:'#B45309'}}>
+      cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pend.</span>
+    </div>
+    <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}} onClick={() => window.location.href='/finances'}>Ver finanzas →</button>
+  </div>
 
-          {/* WIDGET ESPACIO LIBRE */}
-         <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
-            <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
-            <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
-            {proximoEspacioLibre ? (<>
-              <div className="widget-title" style={{color:'#166534',fontSize:'15px'}}>¡Tenés lugar hoy!</div>
-              <div className="widget-sub" style={{color:'#059669'}}>Próximo espacio libre: <strong>{proximoEspacioLibre} hs</strong></div>
-            </>) : (<>
-              <div className="widget-title" style={{color:'#166534',fontSize:'15px'}}>Agenda completa 🎉</div>
-              <div className="widget-sub" style={{color:'#059669'}}>No quedan espacios para hoy</div>
-            </>)}
-          </div>
+  {/* WIDGET ESPACIO LIBRE */}
+  <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
+    <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
+    <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
+    {proximoEspacioLibre ? (<>
+      <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>¡Tenés lugar!</div>
+      <div className="widget-sub" style={{color:'#059669'}}>Próximo: <strong>{proximoEspacioLibre} hs</strong></div>
+    </>) : (<>
+      <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>Agenda completa 🎉</div>
+      <div className="widget-sub" style={{color:'#059669'}}>Sin espacios hoy</div>
+    </>)}
+  </div>
+</div>
+
+          
 
           <div className="cal-r">
             <button className="ca" onClick={() => setMesOffset(o => Math.max(0,o-1))}><ChevronLeft size={11}/></button>
@@ -678,7 +713,10 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
             {turnosFiltrados.map(turno => (
               <div key={turno.id}
                 className={`tc${turnoSeleccionado?.id===turno.id?' sel':''}${turno.realizado?' done':''}`}
-                onClick={() => setTurnoSeleccionado(turno)}>
+                onClick={() => {
+                  const turnoConHistorial = turnos.find(t => t.id === turno.id)
+                  setTurnoSeleccionado(turnoConHistorial || turno)
+                }}>
                 <div className="tdot"/>
                 <div className="tb">
                   <div className="tn">{turno.pacienteNombre}</div>

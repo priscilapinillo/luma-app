@@ -8,7 +8,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        <title>Luma — Tu práctica, en orden</title>
+        <title>Luma — Tu trabajo, en orden</title>
         <meta name="description" content="Agenda, historial, cobros y finanzas para terapeutas y profesionales del bienestar"/>
         <script dangerouslySetInnerHTML={{__html: `
           try {
