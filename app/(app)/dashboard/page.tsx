@@ -322,6 +322,21 @@ export default function DashboardPage() {
   }
 
   async function editarFechaHora(id: string, fecha: string, hora: string) {
+    const turnoActual = turnos.find(t => t.id === id)
+    if (!turnoActual) return
+    const duracion = turnoActual.duracion || 60
+    const horaInicioNuevo = horaAMin(hora)
+    const horaFinNuevo = horaInicioNuevo + duracion
+    const hayConflicto = turnos.some(t => {
+      if (t.id === id || t.fecha !== fecha) return false
+      const horaIni = horaAMin(t.hora)
+      const horaFin = horaIni + t.duracion
+      return horaInicioNuevo < horaFin && horaFinNuevo > horaIni
+    })
+    if (hayConflicto) {
+      alert('⚠️ Ya tenés un turno en ese horario.')
+      return
+    }
     const supabase = createClient()
     await supabase.from('sessions').update({ fecha: fecha+'T'+hora+':00', hora }).eq('id', id)
     setTurnos(prev => prev.map(t => t.id === id ? {...t, fecha, hora} : t))
