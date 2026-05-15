@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, Expand, Check, Search, X,
-  Bold, Underline, Highlighter, Mic, FileText, Pencil, Trash2, Plus
+  Mic, Pencil, Trash2, Plus
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
@@ -23,6 +23,7 @@ type Paciente = { id: string; nombre: string; apellido: string; celular: string;
 type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number }
 type Task = { id: string; texto: string; completada: boolean }
 type Disponibilidad = { dia_semana: number; activo: boolean; hora_inicio: string; hora_fin: string }
+type Archivo = { id: string; nombre_archivo: string; tipo: string; url: string }
 
 function sinTildes(str: string) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -72,6 +73,12 @@ export default function DashboardPage() {
   const [ingresosMes, setIngresosMes] = useState(0)
   const [pendientesMes, setPendientesMes] = useState(0)
   const sugerenciasRef = useRef<HTMLDivElement>(null)
+const recognitionRef = useRef<any>(null)
+const [archivos, setArchivos] = useState<Archivo[]>([])
+const [subiendoArchivo, setSubiendoArchivo] = useState(false)
+const archivoInputRef = useRef<HTMLInputElement>(null)
+  const [grabando, setGrabando] = useState(false)
+  
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
   const diasDelMes = new Date(hoy.getFullYear(), mesIdx+1, 0).getDate()
@@ -142,7 +149,7 @@ export default function DashboardPage() {
             })
             .sort((a: any, b: any) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
             .map((prev: any) => ({
-              fecha: new Date(prev.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+              fecha: new Date(prev.fecha?.split('T')[0]+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
               servicio: prev.servicio_nombre || '',
               contexto: prev.contexto_sesion || '',
             }))
@@ -325,6 +332,81 @@ export default function DashboardPage() {
       }))
     })
     setTurnoSeleccionado(prev => prev?.id === id ? {...prev, contexto} : prev)
+  }
+
+  function toggleGrabacion() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Tu navegador no soporta reconocimiento de voz. Usá Chrome.')
+      return
+    }
+    if (grabando) {
+      recognitionRef.current?.stop()
+      setGrabando(false)
+      return
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'es-AR'
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((r: any) => r[0].transcript)
+        .join(' ')
+      if (turnoSeleccionado) {
+        const contextoActual = turnoSeleccionado.contexto || ''
+        const nuevoContexto = contextoActual ? contextoActual + ' ' + transcript : transcript
+        updateContexto(turnoSeleccionado.id, nuevoContexto)
+      }
+    }
+    recognition.onerror = () => { setGrabando(false) }
+    recognition.onend = () => { setGrabando(false) }
+    recognitionRef.current = recognition
+    recognition.start()
+    setGrabando(true)
+  }
+
+  async function cargarArchivos(pacienteId: string) {
+    const supabase = createClient()
+    const { data } = await supabase.from('files').select('*').eq('patient_id', pacienteId).order('created_at', { ascending: false })
+    if (data) setArchivos(data)
+  }
+
+  async function subirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !turnoSeleccionado?.pacienteDbId) return
+    setSubiendoArchivo(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const ext = file.name.split('.').pop()
+      const path = `${user.id}/${turnoSeleccionado.pacienteDbId}/${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage.from('patient-files').upload(path, file)
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(path)
+        const tipo = file.type.startsWith('image') ? 'imagen' : file.type.includes('pdf') ? 'pdf' : file.type.startsWith('audio') ? 'audio' : 'archivo'
+        const { data, error: insertError } = await supabase.from('files').insert({
+          user_id: user.id,
+          patient_id: turnoSeleccionado.pacienteDbId,
+          session_id: turnoSeleccionado.id,
+          nombre_archivo: file.name,
+          tipo,
+          url: urlData.publicUrl,
+        }).select().single()
+        console.log('Insert result:', data, insertError)
+        if (data) setArchivos(prev => [data, ...prev])
+      }
+    } catch(err) { console.error(err) } finally {
+      setSubiendoArchivo(false)
+      if (archivoInputRef.current) archivoInputRef.current.value = ''
+    }
+  }
+
+  async function borrarArchivo(id: string) {
+    const supabase = createClient()
+    await supabase.from('files').delete().eq('id', id)
+    setArchivos(prev => prev.filter(a => a.id !== id))
   }
 
   async function editarFechaHora(id: string, fecha: string, hora: string) {
@@ -736,7 +818,9 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
                 className={`tc${turnoSeleccionado?.id===turno.id?' sel':''}${turno.realizado?' done':''}`}
                 onClick={() => {
                   const turnoConHistorial = turnos.find(t => t.id === turno.id)
-                  setTurnoSeleccionado(turnoConHistorial || turno)
+                  const t2 = turnoConHistorial || turno
+                  setTurnoSeleccionado(t2)
+                  if (t2.pacienteDbId) cargarArchivos(t2.pacienteDbId)
                 }}>
                 <div className="tdot"/>
                 <div className="tb">
@@ -836,14 +920,23 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
 
             <div className="ctxl">Contexto de esta sesión</div>
             <div className="editor">
-              <div className="etb">
-                <button className="eb"><Bold size={11}/></button>
-                <button className="eb"><Underline size={11}/></button>
-                <button className="eb" style={{background:'#FEF08A',borderColor:'#FDE047',color:'#713F12'}}><Highlighter size={11}/></button>
-                <div className="esep"/>
-                <button className="ebico"><Mic size={11}/></button>
-                <button className="ebico"><FileText size={11}/></button>
-              </div>
+            <div className="etb">
+  <button className="ebico" onClick={toggleGrabacion} style={{
+    background: grabando ? '#FEF2F2' : 'var(--bg-card)',
+    borderColor: grabando ? '#FECACA' : 'var(--border)',
+    color: grabando ? '#EF4444' : 'var(--text-secondary)',
+    display:'flex',alignItems:'center',gap:'4px',width:'auto',padding:'0 8px',fontSize:'11px'
+  }}>
+    <Mic size={11}/>
+    {grabando ? 'Detener' : 'Transcribir voz'}
+  </button>
+  {grabando && (
+    <span style={{fontSize:'10px',color:'#EF4444',display:'flex',alignItems:'center',gap:'4px'}}>
+      <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#EF4444',animation:'pulse 1s infinite',display:'inline-block'}}/>
+      Escuchando...
+    </span>
+  )}
+</div>
               <textarea
                 key={turnoSeleccionado.id}
                 className="ea"
@@ -852,6 +945,39 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
                 placeholder="Escribí el contexto de esta sesión..."/>
             </div>
 
+        
+
+
+            {/* ARCHIVOS */}
+            <hr className="rdiv"/>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+              <div className="hl">Archivos del paciente</div>
+              <button onClick={() => archivoInputRef.current?.click()}
+                style={{fontSize:'10px',padding:'4px 10px',borderRadius:'8px',background:'var(--accent-light)',color:'var(--accent)',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                {subiendoArchivo ? 'Subiendo...' : '+ Subir'}
+              </button>
+            </div>
+            <input ref={archivoInputRef} type="file" accept="image/*,.pdf,audio/*,.doc,.docx" style={{display:'none'}} onChange={subirArchivo}/>
+            {archivos.length === 0 ? (
+              <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'8px 0'}}>Sin archivos para este paciente</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:'6px',flexShrink:0}}>
+                {archivos.map(a => (
+                  <div key={a.id} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--bg-input)',borderRadius:'10px',padding:'8px 10px',border:'0.5px solid var(--border-light)'}}>
+                    <span style={{fontSize:'16px'}}>{a.tipo==='imagen'?'🖼️':a.tipo==='pdf'?'📄':a.tipo==='audio'?'🎵':'📎'}</span>
+                    <span style={{flex:1,fontSize:'11px',color:'var(--text-primary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nombre_archivo}</span>
+                    <a href={a.url} target="_blank" rel="noopener noreferrer"
+                      style={{fontSize:'10px',color:'var(--accent)',textDecoration:'none',fontWeight:'600',flexShrink:0}}>Ver</a>
+                    <button onClick={() => borrarArchivo(a.id)}
+                      style={{width:'18px',height:'18px',border:'none',background:'transparent',cursor:'pointer',color:'var(--text-muted)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <X size={10}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* HISTORIAL */}
             {turnoSeleccionado.historial && turnoSeleccionado.historial.length > 0 && (<>
               <hr className="rdiv"/>
               <div className="hl">Sesiones anteriores</div>
