@@ -9,10 +9,7 @@ type Terapeuta = {
   bio: string; avatar_url: string; mensaje_bienvenida: string
   tipo_pago: string; pagina_activa: boolean
 }
-type Servicio = {
-  id: string; nombre: string; descripcion: string
-  duracion_estimada: number; precio_base: number; color: string
-}
+type Servicio = { id: string; nombre: string; descripcion: string; duracion_estimada: number; precio_base: number; color: string; tipo_servicio?: string; plazo_horas?: number }
 type Disponibilidad = {
   dia_semana: number; hora_inicio: string; hora_fin: string; activo: boolean
 }
@@ -739,18 +736,35 @@ const slugDecoded = decodeURIComponent(slug).replace(/-/g, ' ')
             {servicios.map(s => (
               <div key={s.id}
                 className={`serv-card${servicioSel?.id===s.id?' sel':''}`}
-                onClick={() => { setServicioSel(s); setPaso(1); setFechaSel(''); setHoraSel('') }}>
+                onClick={() => {
+                  setServicioSel(s)
+                  setFechaSel('')
+                  setHoraSel('')
+                  if (s.tipo_servicio === 'entrega') {
+                    setFechaSel(new Date().toISOString().split('T')[0])
+                    setHoraSel('00:00')
+                    setPaso(3)
+                  } else {
+                    setPaso(2)
+                  }
+                }}>
                 <div className="serv-tipo">
-                  {s.duracion_estimada > 120 ? '⏳ Entrega en plazo' : '🔴 Sesión en vivo'}
+                  {s.tipo_servicio === 'entrega' ? `⏳ Entrega en ${s.plazo_horas}hs` : '🔴 Sesión en vivo'}
                 </div>
                 <div className="serv-nombre">{s.nombre}</div>
                 <div className="serv-desc">{s.descripcion}</div>
                 <div className="serv-footer">
                   <div>
                     <div className="serv-precio">${s.precio_base.toLocaleString()}</div>
-                    <div className="serv-meta"><Clock size={10}/>{s.duracion_estimada} min</div>
+                    {s.tipo_servicio === 'entrega' ? (
+                      <div className="serv-meta">📦 Recibís en {s.plazo_horas}hs</div>
+                    ) : (
+                      <div className="serv-meta"><Clock size={10}/>{s.duracion_estimada} min</div>
+                    )}
                   </div>
-                  <button className="serv-btn">Reservar</button>
+                  <button className="serv-btn">
+                    {s.tipo_servicio === 'entrega' ? 'Solicitar' : 'Reservar'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -758,7 +772,7 @@ const slugDecoded = decodeURIComponent(slug).replace(/-/g, ' ')
         )}
 
         {/* DISPONIBILIDAD */}
-        {paso >= 1 && servicioSel && !enviado && (
+        {paso >= 1 && paso < 3 && servicioSel && servicioSel.tipo_servicio !== 'entrega' && !enviado && (
           <div style={{marginTop:'32px'}}>
             <div className="section-label" style={{marginBottom:'16px'}}>Próximos turnos disponibles</div>
 
@@ -823,7 +837,7 @@ const slugDecoded = decodeURIComponent(slug).replace(/-/g, ' ')
         )}
 
         {/* FORMULARIO */}
-        {paso >= 2 && fechaSel && horaSel && !enviado && (
+        {paso >= 3 && fechaSel && horaSel && !enviado && (
           <div className="form-wrap">
             <div style={{height:'1px',background:'var(--border)',margin:'28px 0'}}/>
             <div className="section-label" style={{marginBottom:'20px'}}>Tus datos</div>
@@ -848,8 +862,11 @@ const slugDecoded = decodeURIComponent(slug).replace(/-/g, ' ')
               <>
                 <div className="resumen">
                   <div className="resumen-row"><span className="resumen-lbl">Servicio</span><span className="resumen-val">{servicioSel?.nombre}</span></div>
-                  <div className="resumen-row"><span className="resumen-lbl">Fecha</span><span className="resumen-val">{new Date(fechaSel+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</span></div>
-                  <div className="resumen-row"><span className="resumen-lbl">Hora</span><span className="resumen-val">{horaSel} hs</span></div>
+                  {servicioSel?.tipo_servicio !== 'entrega' && <>
+                <div className="resumen-row"><span className="resumen-lbl">Fecha</span><span className="resumen-val">{new Date(fechaSel+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}</span></div>
+                <div className="resumen-row"><span className="resumen-lbl">Hora</span><span className="resumen-val">{horaSel} hs</span></div>
+                </>}
+{servicioSel?.tipo_servicio === 'entrega' && <div className="resumen-row"><span className="resumen-lbl">Entrega estimada</span><span className="resumen-val">En {servicioSel.plazo_horas}hs</span></div>}
                   <div className="resumen-row"><span className="resumen-lbl">Total</span><span className="resumen-total">${servicioSel?.precio_base.toLocaleString()}</span></div>
                 </div>
                 <button className="confirmar-btn" onClick={confirmarReserva} disabled={enviando}>

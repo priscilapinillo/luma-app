@@ -12,6 +12,11 @@ type Perfil = {
   zona_horaria: string; moneda: string; formato_fecha: string; avatar_url: string
   pagina_activa: boolean; mensaje_bienvenida: string
   tipo_pago: string; slug: string
+  template: string
+  secciones: { sobre_mi: boolean; testimonios: boolean; faq: boolean; disponibilidad: boolean }
+  faq: { pregunta: string; respuesta: string }[]
+  mp_access_token: string
+  mp_activo: boolean
 }
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
@@ -36,6 +41,11 @@ export default function AjustesPage() {
     bio: '', whatsapp: '', zona_horaria: 'America/Argentina/Buenos_Aires',
     moneda: 'ARS', formato_fecha: 'dd/mm/yyyy', avatar_url: '',
     pagina_activa: false, mensaje_bienvenida: '', tipo_pago: 'libre', slug: '',
+    template: 'luna',
+    secciones: { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
+    faq: [],
+    mp_access_token: '',
+    mp_activo: false,
   })
 
   const [passForm, setPassForm] = useState({
@@ -72,6 +82,11 @@ export default function AjustesPage() {
         mensaje_bienvenida: prof.mensaje_bienvenida || '',
         tipo_pago: prof.tipo_pago || 'libre',
         slug: prof.slug || prof.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        template: prof.template || 'luna',
+        secciones: prof.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
+        faq: prof.faq || [],
+        mp_access_token: prof.mp_access_token || '',
+        mp_activo: prof.mp_activo || false,
       })
       if (subs) setSuscripcion(subs)
     } catch (err) {
@@ -99,6 +114,11 @@ export default function AjustesPage() {
         mensaje_bienvenida: perfil.mensaje_bienvenida,
         tipo_pago: perfil.tipo_pago,
         slug: perfil.slug || perfil.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        template: perfil.template,
+        secciones: perfil.secciones,
+        faq: perfil.faq,
+        mp_access_token: perfil.mp_access_token,
+        mp_activo: perfil.mp_activo,
         updated_at: new Date().toISOString(),
       }
       if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
@@ -376,12 +396,38 @@ export default function AjustesPage() {
 
           {tab === 'pagina' && (<>
   <div className="s-section-title">Página pública</div>
-  <div className="s-section-sub">Tu página de reservas para compartir con tus consultantes</div>
+  <div className="s-section-sub">Tu espacio de reservas personalizado</div>
 
+  {/* TEMPLATE */}
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Estilo visual</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'4px'}}>
+      {[
+        { id:'luna', nombre:'Luna', desc:'Oscuro · Místico · Tarot', emoji:'🌙', bg:'#0D0B14', color:'#C9A84C' },
+        { id:'aura', nombre:'Aura', desc:'Claro · Limpio · Wellness', emoji:'✨', bg:'#F8F4FF', color:'#8B5CF6' },
+        { id:'tierra', nombre:'Tierra', desc:'Orgánico · Beige · Natural', emoji:'🌿', bg:'#FAF7F0', color:'#92400E' },
+      ].map(t => (
+        <div key={t.id}
+          onClick={() => setPerfil({...perfil, template: t.id})}
+          style={{
+            background: t.bg, borderRadius:'14px', padding:'16px 12px',
+            border: perfil.template === t.id ? `2px solid ${t.color}` : '1.5px solid var(--border)',
+            cursor:'pointer', textAlign:'center', transition:'all 0.2s',
+            boxShadow: perfil.template === t.id ? `0 0 16px ${t.color}44` : 'none'
+          }}>
+          <div style={{fontSize:'24px',marginBottom:'6px'}}>{t.emoji}</div>
+          <div style={{fontSize:'13px',fontWeight:700,color:t.color,marginBottom:'3px'}}>{t.nombre}</div>
+          <div style={{fontSize:'10px',color:'#888',lineHeight:1.4}}>{t.desc}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {/* URL */}
   <div className="s-card">
     <div className="s-card-title"><Settings size={14}/>URL de tu página</div>
     <div className="field">
-      <label>Slug (parte de la URL)</label>
+      <label>Slug</label>
       <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
         <span style={{fontSize:'12px',color:'var(--text-muted)',whiteSpace:'nowrap',padding:'9px 11px',background:'var(--bg-input)',borderRadius:'10px',border:'0.5px solid var(--border)'}}>
           /p/
@@ -392,10 +438,9 @@ export default function AjustesPage() {
           value={perfil.slug}
           onChange={e => setPerfil({...perfil, slug: e.target.value.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')})}/>
       </div>
-      <div className="field-hint">Solo letras minúsculas, números y guiones. Ej: priscila-tarot</div>
+      <div className="field-hint">Solo letras minúsculas, números y guiones</div>
     </div>
-
-    <div className="field" style={{marginTop:'4px'}}>
+    <div className="field">
       <label>Mensaje de bienvenida</label>
       <textarea
         style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',minHeight:'70px',resize:'none',width:'100%'}}
@@ -403,60 +448,6 @@ export default function AjustesPage() {
         value={perfil.mensaje_bienvenida}
         onChange={e => setPerfil({...perfil, mensaje_bienvenida: e.target.value})}/>
     </div>
-  </div>
-
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Configuración de reservas</div>
-
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Página activa</div>
-        <div className="pref-sub">Tus consultantes pueden ver y reservar</div>
-      </div>
-      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
-        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-          checked={perfil.pagina_activa}
-          onChange={e => setPerfil({...perfil, pagina_activa: e.target.checked})}/>
-        <span style={{
-          position:'absolute',inset:0,
-          background: perfil.pagina_activa ? '#8B5CF6' : 'var(--border)',
-          borderRadius:'22px',transition:'all 0.2s'
-        }}>
-          <span style={{
-            position:'absolute',
-            width:'16px',height:'16px',
-            left: perfil.pagina_activa ? '21px' : '3px',
-            top:'3px',background:'white',borderRadius:'50%',
-            transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'
-          }}/>
-        </span>
-      </label>
-    </div>
-
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Tipo de pago</div>
-        <div className="pref-sub">Qué se le pide al consultante al reservar</div>
-      </div>
-      <select className="pref-select"
-        value={perfil.tipo_pago}
-        onChange={e => setPerfil({...perfil, tipo_pago: e.target.value})}>
-        <option value="libre">Sin pago — reserva directa</option>
-        <option value="sena">Requiere seña</option>
-        <option value="completo">Pago completo</option>
-      </select>
-    </div>
-
-    <div style={{marginTop:'16px',display:'flex',alignItems:'center',gap:'8px'}}>
-      <button className="save-btn" onClick={guardarPerfil} disabled={guardando}>
-        {guardando ? 'Guardando...' : 'Guardar configuración'}
-      </button>
-      {msgExito && <span className="msg-exito">✓ {msgExito}</span>}
-    </div>
-  </div>
-
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Tu link de reservas</div>
     <div style={{background:'var(--bg-input)',borderRadius:'10px',padding:'12px 14px',border:'0.5px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'}}>
       <span style={{fontSize:'13px',color:'var(--text-secondary)',wordBreak:'break-all'}}>
         {typeof window !== 'undefined' ? window.location.origin : ''}/p/{perfil.slug || 'tu-slug'}
@@ -474,9 +465,155 @@ export default function AjustesPage() {
     {perfil.pagina_activa && perfil.slug && (
       <a href={`/p/${perfil.slug}`} target="_blank" rel="noopener noreferrer"
         style={{display:'block',marginTop:'10px',fontSize:'12px',color:'var(--accent)',textDecoration:'none',textAlign:'center'}}>
-        Ver mi página pública →
+        Ver mi página →
       </a>
     )}
+  </div>
+
+  {/* SECCIONES */}
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Secciones visibles</div>
+    {[
+      { key:'sobre_mi', label:'Sobre mí', desc:'Tu historia y valores' },
+      { key:'disponibilidad', label:'Disponibilidad', desc:'Calendario con horarios libres' },
+      { key:'testimonios', label:'Testimonios', desc:'Opiniones de tus consultantes' },
+      { key:'faq', label:'Preguntas frecuentes', desc:'Respondé dudas antes de que pregunten' },
+    ].map(s => (
+      <div key={s.key} className="pref-row">
+        <div>
+          <div className="pref-label">{s.label}</div>
+          <div className="pref-sub">{s.desc}</div>
+        </div>
+        <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+          <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+            checked={perfil.secciones[s.key as keyof typeof perfil.secciones]}
+            onChange={e => setPerfil({...perfil, secciones: {...perfil.secciones, [s.key]: e.target.checked}})}/>
+          <span style={{
+            position:'absolute',inset:0,
+            background: perfil.secciones[s.key as keyof typeof perfil.secciones] ? '#8B5CF6' : 'var(--border)',
+            borderRadius:'22px',transition:'all 0.2s'
+          }}>
+            <span style={{
+              position:'absolute',width:'16px',height:'16px',
+              left: perfil.secciones[s.key as keyof typeof perfil.secciones] ? '21px' : '3px',
+              top:'3px',background:'white',borderRadius:'50%',
+              transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'
+            }}/>
+          </span>
+        </label>
+      </div>
+    ))}
+  </div>
+
+  {/* FAQ */}
+  {perfil.secciones.faq && (
+    <div className="s-card">
+      <div className="s-card-title"><Settings size={14}/>Preguntas frecuentes</div>
+      {perfil.faq.map((item, i) => (
+        <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px',marginBottom:'8px'}}>
+            <input
+              style={{flex:1,padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none'}}
+              placeholder="Pregunta..."
+              value={item.pregunta}
+              onChange={e => {
+                const nuevo = [...perfil.faq]
+                nuevo[i] = {...nuevo[i], pregunta: e.target.value}
+                setPerfil({...perfil, faq: nuevo})
+              }}/>
+            <button onClick={() => setPerfil({...perfil, faq: perfil.faq.filter((_,j) => j !== i)})}
+              style={{width:'28px',height:'28px',border:'none',background:'#FEF2F2',color:'#EF4444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              ✕
+            </button>
+          </div>
+          <textarea
+            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',resize:'none',minHeight:'60px'}}
+            placeholder="Respuesta..."
+            value={item.respuesta}
+            onChange={e => {
+              const nuevo = [...perfil.faq]
+              nuevo[i] = {...nuevo[i], respuesta: e.target.value}
+              setPerfil({...perfil, faq: nuevo})
+            }}/>
+        </div>
+      ))}
+      <button
+        onClick={() => setPerfil({...perfil, faq: [...perfil.faq, {pregunta:'',respuesta:''}]})}
+        style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
+        + Agregar pregunta
+      </button>
+    </div>
+  )}
+
+  {/* RESERVAS */}
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Configuración de reservas</div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Página activa</div>
+        <div className="pref-sub">Tus consultantes pueden ver y reservar</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.pagina_activa}
+          onChange={e => setPerfil({...perfil, pagina_activa: e.target.checked})}/>
+        <span style={{position:'absolute',inset:0,background:perfil.pagina_activa?'#8B5CF6':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.pagina_activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+        </span>
+      </label>
+    </div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Tipo de pago</div>
+        <div className="pref-sub">Qué se le pide al consultante al reservar</div>
+      </div>
+      <select className="pref-select" value={perfil.tipo_pago} onChange={e => setPerfil({...perfil, tipo_pago: e.target.value})}>
+        <option value="libre">Sin pago — reserva directa</option>
+        <option value="sena">Requiere seña</option>
+        <option value="completo">Pago completo</option>
+      </select>
+    </div>
+  </div>
+
+  {/* MERCADO PAGO */}
+  <div className="s-card">
+    <div className="s-card-title">💳 Mercado Pago</div>
+    <div style={{background:'#EFF6FF',borderRadius:'12px',padding:'12px 14px',border:'0.5px solid #BFDBFE',marginBottom:'14px',fontSize:'12px',color:'#1D4ED8',lineHeight:1.6}}>
+      Para integrar Mercado Pago necesitás tu <strong>Access Token</strong>. Lo encontrás en <strong>mercadopago.com/developers</strong> → Tu aplicación → Credenciales → Access Token de producción.
+    </div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Activar cobros con MP</div>
+        <div className="pref-sub">Tus consultantes podrán pagar al reservar</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.mp_activo}
+          onChange={e => setPerfil({...perfil, mp_activo: e.target.checked})}/>
+        <span style={{position:'absolute',inset:0,background:perfil.mp_activo?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.mp_activo?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+        </span>
+      </label>
+    </div>
+    {perfil.mp_activo && (
+      <div className="field" style={{marginTop:'12px'}}>
+        <label>Access Token</label>
+        <input
+          type="password"
+          placeholder="APP_USR-..."
+          value={perfil.mp_access_token}
+          onChange={e => setPerfil({...perfil, mp_access_token: e.target.value})}
+          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}/>
+        <div className="field-hint">Se guarda cifrado. Nunca lo compartás con nadie.</div>
+      </div>
+    )}
+  </div>
+
+  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'24px'}}>
+    <button className="save-btn" onClick={guardarPerfil} disabled={guardando}>
+      {guardando ? 'Guardando...' : 'Guardar todo'}
+    </button>
+    {msgExito && <span className="msg-exito">✓ {msgExito}</span>}
   </div>
 </>)}
 

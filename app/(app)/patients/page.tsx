@@ -448,10 +448,19 @@ export default function PacientesPage() {
               </div>
 
               <div className="pr-info-grid">
-                <div className="pr-info-item">
-                  <div className="pr-info-label"><Phone size={9}/>Teléfono</div>
-                  <div className="pr-info-value">{pacienteSeleccionado.celular||'—'}</div>
-                </div>
+              <div className="pr-info-item">
+  <div className="pr-info-label"><Phone size={9}/>Teléfono</div>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'6px'}}>
+    <div className="pr-info-value">{pacienteSeleccionado.celular||'—'}</div>
+    {pacienteSeleccionado.celular && (
+      <a href={`https://wa.me/549${pacienteSeleccionado.celular.replace(/\D/g,'')}`}
+        target="_blank" rel="noopener noreferrer"
+        style={{display:'flex',alignItems:'center',gap:'4px',padding:'4px 9px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'10px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0',whiteSpace:'nowrap',flexShrink:0}}>
+        💬 WA
+      </a>
+    )}
+  </div>
+</div>
                 <div className="pr-info-item">
                   <div className="pr-info-label"><Mail size={9}/>Email</div>
                   <div className="pr-info-value" style={{fontSize:'11px',wordBreak:'break-all'}}>{pacienteSeleccionado.email||'—'}</div>

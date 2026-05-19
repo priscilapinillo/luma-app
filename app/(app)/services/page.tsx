@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, X, Edit2, Trash2, TrendingUp, BarChart2, DollarSign, Award } from 'lucide-react'
+import { Plus, X, Edit2, Trash2, TrendingUp, BarChart2, DollarSign, Award, Clock, Package } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 type Servicio = {
   id: string; nombre: string; descripcion: string
   duracion_estimada: number; precio_base: number
   color: string; activo: boolean
+  tipo_servicio: 'vivo' | 'entrega'
+  plazo_horas: number
 }
 type EstadServicio = {
   id: string; nombre: string; color: string
@@ -46,6 +48,8 @@ export default function ServiciosPage() {
   const [form, setForm] = useState({
     nombre: '', descripcion: '', duracion_estimada: 60,
     precio_base: 0, color: '#8B5CF6', activo: true,
+    tipo_servicio: 'vivo' as 'vivo' | 'entrega',
+    plazo_horas: 24,
   })
 
   useEffect(() => {
@@ -86,13 +90,20 @@ export default function ServiciosPage() {
   }
 
   function abrirNuevo() {
-    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: '#8B5CF6', activo: true })
+    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: '#8B5CF6', activo: true, tipo_servicio: 'vivo', plazo_horas: 24 })
     setEditando(null)
     setModalOpen(true)
   }
 
   function abrirEditar(s: Servicio) {
-    setForm({ nombre: s.nombre, descripcion: s.descripcion || '', duracion_estimada: s.duracion_estimada || 60, precio_base: s.precio_base || 0, color: s.color || '#8B5CF6', activo: s.activo })
+    setForm({
+      nombre: s.nombre, descripcion: s.descripcion || '',
+      duracion_estimada: s.duracion_estimada || 60,
+      precio_base: s.precio_base || 0, color: s.color || '#8B5CF6',
+      activo: s.activo,
+      tipo_servicio: s.tipo_servicio || 'vivo',
+      plazo_horas: s.plazo_horas || 24,
+    })
     setEditando(s)
     setModalOpen(true)
   }
@@ -104,11 +115,18 @@ export default function ServiciosPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setGuardando(false); return }
+      const datos = {
+        nombre: form.nombre, descripcion: form.descripcion,
+        duracion_estimada: form.tipo_servicio === 'vivo' ? form.duracion_estimada : null,
+        precio_base: form.precio_base, color: form.color, activo: form.activo,
+        tipo_servicio: form.tipo_servicio,
+        plazo_horas: form.tipo_servicio === 'entrega' ? form.plazo_horas : null,
+      }
       if (editando) {
-        const { data } = await supabase.from('services').update({ nombre: form.nombre, descripcion: form.descripcion, duracion_estimada: form.duracion_estimada, precio_base: form.precio_base, color: form.color, activo: form.activo }).eq('id', editando.id).select().single()
+        const { data } = await supabase.from('services').update(datos).eq('id', editando.id).select().single()
         if (data) setServicios(prev => prev.map(s => s.id === data.id ? data : s))
       } else {
-        const { data } = await supabase.from('services').insert({ user_id: user.id, nombre: form.nombre, descripcion: form.descripcion, duracion_estimada: form.duracion_estimada, precio_base: form.precio_base, color: form.color, activo: form.activo }).select().single()
+        const { data } = await supabase.from('services').insert({ user_id: user.id, ...datos }).select().single()
         if (data) setServicios(prev => [...prev, data])
       }
       setModalOpen(false)
@@ -144,6 +162,13 @@ export default function ServiciosPage() {
     return isDark ? FONDOS_CARDS_DARK[idx % FONDOS_CARDS_DARK.length] : FONDOS_CARDS[idx % FONDOS_CARDS.length]
   }
 
+  function badgeServicio(s: Servicio) {
+    if (s.tipo_servicio === 'entrega') {
+      return `⏳ Entrega en ${s.plazo_horas}hs`
+    }
+    return `🔴 En vivo · ${s.duracion_estimada || 60} min`
+  }
+
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
@@ -169,6 +194,8 @@ export default function ServiciosPage() {
         .sc-inner{padding:20px}
         .sc-top-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
         .sc-badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:var(--text-primary);border:0.5px solid rgba(139,92,246,0.2);backdrop-filter:blur(4px)}
+        .sc-badge.entrega{background:rgba(251,191,36,0.15);color:#B45309;border-color:rgba(251,191,36,0.3)}
+        html.dark .sc-badge.entrega{color:#FCD34D}
         .sc-actions-top{display:flex;gap:5px}
         .sc-btn{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);border:0.5px solid rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);transition:all 0.15s;backdrop-filter:blur(4px)}
         .sc-btn:hover{background:var(--bg-card);color:var(--accent);border-color:var(--accent)}
@@ -184,9 +211,7 @@ export default function ServiciosPage() {
         .sc-toggle.on{background:rgba(220,252,231,0.8);color:#166534;border-color:#BBF7D0}
         .sc-toggle.off{background:rgba(243,244,246,0.5);color:var(--text-muted);border-color:var(--border)}
         html.dark .sc-toggle.on{background:rgba(5,32,21,0.8);color:#6EE7B7;border-color:#065F46}
-
         .s-empty{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px;background:var(--bg-card);border-radius:16px;border:1.5px dashed var(--border);margin-bottom:28px}
-
         .stats-section{background:var(--bg-card);border-radius:20px;padding:22px 24px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
         .stats-title{font-size:16px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;margin-bottom:4px;display:flex;align-items:center;gap:8px;font-family:'Manrope',sans-serif}
         .stats-sub{font-size:12px;color:var(--text-muted);margin-bottom:20px}
@@ -214,7 +239,6 @@ export default function ServiciosPage() {
         .ranking-bar{height:100%;border-radius:20px;transition:width 0.6s ease}
         .ranking-count{font-size:12px;font-weight:600;color:var(--text-primary);min-width:50px;text-align:right}
         .ranking-ingresos{font-size:11px;color:var(--text-muted);min-width:70px;text-align:right}
-
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
         .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
@@ -222,8 +246,8 @@ export default function ServiciosPage() {
         .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
         .field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
         .field label{font-size:12px;font-weight:600;color:var(--text-primary)}
-        .field input,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
-        .field input:focus,.field textarea:focus{border-color:var(--accent)}
+        .field input,.field textarea,.field select{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
+        .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent)}
         .field textarea{min-height:70px;resize:none}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .color-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
@@ -241,6 +265,16 @@ export default function ServiciosPage() {
         .activo-slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:white;border-radius:50%;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
         .activo-switch input:checked + .activo-slider{background:var(--accent)}
         .activo-switch input:checked + .activo-slider:before{transform:translateX(18px)}
+        .tipo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+        .tipo-btn{padding:14px;border-radius:12px;border:0.5px solid var(--border);background:var(--bg-input);cursor:pointer;text-align:center;transition:all 0.15s;font-family:inherit}
+        .tipo-btn.sel{border-color:var(--accent);background:var(--accent-light)}
+        .tipo-btn-icon{font-size:24px;margin-bottom:6px}
+        .tipo-btn-name{font-size:12px;font-weight:700;color:var(--text-primary)}
+        .tipo-btn.sel .tipo-btn-name{color:var(--accent)}
+        .tipo-btn-desc{font-size:10px;color:var(--text-muted);margin-top:2px;line-height:1.4}
+        .plazo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+        .plazo-btn{padding:10px 6px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg-input);cursor:pointer;text-align:center;font-size:12px;font-weight:600;color:var(--text-secondary);transition:all 0.15s;font-family:inherit}
+        .plazo-btn.sel{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
       `}</style>
 
       <div className="sw">
@@ -261,7 +295,9 @@ export default function ServiciosPage() {
               <div key={s.id} className="sc" style={{background: fondoCard(s, idx)}}>
                 <div className="sc-inner">
                   <div className="sc-top-row">
-                    <span className="sc-badge">{s.duracion_estimada || 60} min</span>
+                    <span className={`sc-badge${s.tipo_servicio==='entrega'?' entrega':''}`}>
+                      {badgeServicio(s)}
+                    </span>
                     <div className="sc-actions-top">
                       <div className="sc-btn" onClick={() => abrirEditar(s)}><Edit2 size={11}/></div>
                       <div className="sc-btn danger" onClick={() => setConfirmBorrar(s)}><Trash2 size={11}/></div>
@@ -271,7 +307,11 @@ export default function ServiciosPage() {
                   <div className="sc-desc">{s.descripcion || 'Sin descripción'}</div>
                   <div className="sc-tags">
                     <span className="sc-tag" style={{color: s.color, borderColor: s.color+'44'}}>● Activo</span>
-                    <span className="sc-tag">{s.duracion_estimada || 60} min por sesión</span>
+                    {s.tipo_servicio === 'entrega' ? (
+                      <span className="sc-tag">📦 Con plazo de entrega</span>
+                    ) : (
+                      <span className="sc-tag">⏱ {s.duracion_estimada || 60} min</span>
+                    )}
                   </div>
                   <div className="sc-footer">
                     <div>
@@ -293,7 +333,7 @@ export default function ServiciosPage() {
               <div key={s.id} className="sc inactivo" style={{background: fondoCard(s, idx)}}>
                 <div className="sc-inner">
                   <div className="sc-top-row">
-                    <span className="sc-badge">{s.duracion_estimada || 60} min</span>
+                    <span className="sc-badge">{badgeServicio(s)}</span>
                     <div className="sc-actions-top">
                       <div className="sc-btn" onClick={() => abrirEditar(s)}><Edit2 size={11}/></div>
                       <div className="sc-btn danger" onClick={() => setConfirmBorrar(s)}><Trash2 size={11}/></div>
@@ -303,7 +343,7 @@ export default function ServiciosPage() {
                   <div className="sc-desc">{s.descripcion || 'Sin descripción'}</div>
                   <div className="sc-tags">
                     <span className="sc-tag">Inactivo</span>
-                    <span className="sc-tag">{s.duracion_estimada || 60} min</span>
+                    <span className="sc-tag">{s.tipo_servicio === 'entrega' ? `📦 ${s.plazo_horas}hs` : `${s.duracion_estimada || 60} min`}</span>
                   </div>
                   <div className="sc-footer">
                     <div>
@@ -333,24 +373,15 @@ export default function ServiciosPage() {
             <div className="stats-summary">
               <div className="stat-card purple">
                 <div className="stat-icon purple"><TrendingUp size={16}/></div>
-                <div>
-                  <div className="stat-num">{totalSesiones}</div>
-                  <div className="stat-lbl">Sesiones totales</div>
-                </div>
+                <div><div className="stat-num">{totalSesiones}</div><div className="stat-lbl">Sesiones totales</div></div>
               </div>
               <div className="stat-card green">
                 <div className="stat-icon green"><DollarSign size={16}/></div>
-                <div>
-                  <div className="stat-num">${totalIngresos.toLocaleString()}</div>
-                  <div className="stat-lbl">Ingresos cobrados</div>
-                </div>
+                <div><div className="stat-num">${totalIngresos.toLocaleString()}</div><div className="stat-lbl">Ingresos cobrados</div></div>
               </div>
               <div className="stat-card yellow">
                 <div className="stat-icon yellow"><Award size={16}/></div>
-                <div>
-                  <div className="stat-num">{servicioTop?.nombre?.split(' ')[0] || '—'}</div>
-                  <div className="stat-lbl">Servicio más pedido</div>
-                </div>
+                <div><div className="stat-num">{servicioTop?.nombre?.split(' ')[0] || '—'}</div><div className="stat-lbl">Servicio más pedido</div></div>
               </div>
             </div>
             <div className="ranking-label">Ranking por sesiones</div>
@@ -378,28 +409,71 @@ export default function ServiciosPage() {
               <span className="mo-title">{editando ? 'Editar servicio' : 'Nuevo servicio'}</span>
               <button className="mo-close" onClick={() => setModalOpen(false)}><X size={12}/></button>
             </div>
+
             <div className="field">
               <label>Nombre del servicio</label>
-              <input placeholder="Ej: Lectura general" value={form.nombre}
+              <input placeholder="Ej: Lectura de Tarot" value={form.nombre}
                 onChange={e => setForm({...form, nombre: e.target.value})}/>
             </div>
+
+            <div className="field">
+              <label>Tipo de servicio</label>
+              <div className="tipo-grid">
+                <button className={`tipo-btn${form.tipo_servicio==='vivo'?' sel':''}`}
+                  onClick={() => setForm({...form, tipo_servicio: 'vivo'})}>
+                  <div className="tipo-btn-icon">🔴</div>
+                  <div className="tipo-btn-name">En vivo</div>
+                  <div className="tipo-btn-desc">Sesión con fecha y hora específica</div>
+                </button>
+                <button className={`tipo-btn${form.tipo_servicio==='entrega'?' sel':''}`}
+                  onClick={() => setForm({...form, tipo_servicio: 'entrega'})}>
+                  <div className="tipo-btn-icon">📦</div>
+                  <div className="tipo-btn-name">Con entrega</div>
+                  <div className="tipo-btn-desc">Tarot escrito, carta astral, etc.</div>
+                </button>
+              </div>
+            </div>
+
+            {form.tipo_servicio === 'vivo' ? (
+              <div className="field-row">
+                <div className="field">
+                  <label>Duración (minutos)</label>
+                  <input type="number" min="15" step="15" value={form.duracion_estimada}
+                    onChange={e => setForm({...form, duracion_estimada: Number(e.target.value)})}/>
+                </div>
+                <div className="field">
+                  <label>Precio base ($)</label>
+                  <input type="number" min="0" value={form.precio_base || ''}
+                    onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="field">
+                  <label>Plazo de entrega</label>
+                  <div className="plazo-grid">
+                    {[24, 48, 72, 96].map(h => (
+                      <button key={h} className={`plazo-btn${form.plazo_horas===h?' sel':''}`}
+                        onClick={() => setForm({...form, plazo_horas: h})}>
+                        {h}hs
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Precio base ($)</label>
+                  <input type="number" min="0" value={form.precio_base || ''}
+                    onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
+                </div>
+              </>
+            )}
+
             <div className="field">
               <label>Descripción</label>
               <textarea placeholder="Descripción breve del servicio..."
                 value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})}/>
             </div>
-            <div className="field-row">
-              <div className="field">
-                <label>Duración (minutos)</label>
-                <input type="number" min="15" step="15" value={form.duracion_estimada}
-                  onChange={e => setForm({...form, duracion_estimada: Number(e.target.value)})}/>
-              </div>
-              <div className="field">
-                <label>Precio base ($)</label>
-                <input type="number" min="0" value={form.precio_base || ''}
-                  onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
-              </div>
-            </div>
+
             <div className="field">
               <label>Color</label>
               <div className="color-grid">
@@ -409,6 +483,7 @@ export default function ServiciosPage() {
                 ))}
               </div>
             </div>
+
             <div className="activo-row">
               <div>
                 <div className="activo-label">Servicio activo</div>
@@ -420,6 +495,7 @@ export default function ServiciosPage() {
                 <span className="activo-slider"/>
               </label>
             </div>
+
             <button className="save-btn" onClick={guardar} disabled={guardando}>
               {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Crear servicio'}
             </button>
@@ -435,7 +511,7 @@ export default function ServiciosPage() {
               <button className="mo-close" onClick={() => setConfirmBorrar(null)}><X size={12}/></button>
             </div>
             <p style={{fontSize:'13px',color:'var(--text-secondary)',marginBottom:'20px',lineHeight:'1.6'}}>
-              Se eliminará <strong>{confirmBorrar.nombre}</strong> permanentemente. Los turnos ya agendados no se verán afectados.
+              Se eliminará <strong>{confirmBorrar.nombre}</strong> permanentemente.
             </p>
             <div style={{display:'flex',gap:'8px'}}>
               <button onClick={() => setConfirmBorrar(null)}

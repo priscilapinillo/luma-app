@@ -18,6 +18,7 @@ type Turno = {
   servicio: string; precio: number; contexto: string
   pago: Pago; sena: number; realizado: boolean
   historial?: SesionHistorial[]
+  created_at?: string
 }
 type Paciente = { id: string; nombre: string; apellido: string; celular: string; alias: string }
 type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number }
@@ -78,6 +79,7 @@ const [archivos, setArchivos] = useState<Archivo[]>([])
 const [subiendoArchivo, setSubiendoArchivo] = useState(false)
 const archivoInputRef = useRef<HTMLInputElement>(null)
   const [grabando, setGrabando] = useState(false)
+  const [contextoLocal, setContextoLocal] = useState('')
   
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
@@ -94,6 +96,11 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setNuevoTurno(prev => ({ ...prev, fecha: fechaSeleccionada }))
   }, [fechaSeleccionada])
+  useEffect(() => {
+    if (turnoSeleccionado) {
+      setContextoLocal(turnoSeleccionado.contexto || '')
+    }
+  }, [turnoSeleccionado?.id])
 
   useEffect(() => {
     async function cargarDatos() {
@@ -170,6 +177,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
               sena: s.sena || 0,
               realizado: s.realizado || false,
               historial,
+              created_at: s.created_at || '',
             }
           })
           setTurnos(convertidos)
@@ -309,9 +317,10 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     }
   }
 
-  function updateContexto(id: string, contexto: string) {
+  async function updateContexto(id: string, contexto: string) {
     const supabase = createClient()
-    supabase.from('sessions').update({ contexto_sesion: contexto }).eq('id', id)
+    const { error } = await supabase.from('sessions').update({ contexto_sesion: contexto }).eq('id', id)
+    if (error) console.error('Error guardando contexto:', error)
     setTurnos(prev => {
       const actualizado = prev.map(t => t.id === id ? {...t, contexto} : t)
       return actualizado.map(t => ({
@@ -434,7 +443,12 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
 
   async function borrarTurno(id: string) {
     const supabase = createClient()
-    await supabase.from('sessions').delete().eq('id', id)
+    const { error } = await supabase.from('sessions').delete().eq('id', id)
+    if (error) {
+      console.error('Error borrando turno:', error)
+      alert('No se pudo eliminar el turno. Intentá de nuevo.')
+      return
+    }
     setTurnos(prev => prev.filter(t => t.id !== id))
     setTurnoSeleccionado(null)
     setBorrarConfirm(false)
@@ -564,7 +578,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     </div>
   )
 
-  return (
+  return (  
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
@@ -751,6 +765,47 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
           </div>
 
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',flexShrink:0}}>
+
+            {/* WIDGET ENTREGAS PENDIENTES */}
+{(() => {
+  const entregasPendientes = turnos.filter(t => {
+    const s = servicios.find(sv => sv.nombre === t.servicio) as any
+    return s?.tipo_servicio === 'entrega'
+  })
+  if (entregasPendientes.length === 0) return null
+
+  return (
+    <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden',flexShrink:0}}>
+      <div style={{position:'absolute',borderRadius:'50%',background:'#3B82F6',opacity:0.2,width:'60px',height:'60px',top:'-12px',right:'-12px',pointerEvents:'none'}}/>
+      <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px'}}>📦 Entregas pendientes</div>
+      {entregasPendientes.slice(0,3).map((t,i) => {
+        const s = servicios.find(sv => sv.nombre === t.servicio) as any
+        const plazoHoras = s?.plazo_horas || 48
+        const creadoEn = new Date(t.created_at || t.fecha+'T'+t.hora+':00')
+        const venceEn = new Date(creadoEn.getTime() + plazoHoras * 60 * 60 * 1000)
+        const ahoraMs = new Date().getTime()
+        const restanMs = venceEn.getTime() - ahoraMs
+        const restanHoras = Math.floor(restanMs / (1000 * 60 * 60))
+        const restanMin = Math.floor((restanMs % (1000 * 60 * 60)) / (1000 * 60))
+        const vencido = restanMs < 0
+        const urgente = restanHoras < 6 && !vencido
+
+        return (
+          <div key={i} style={{background:'rgba(255,255,255,0.6)',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${vencido?'#FECACA':urgente?'#FDE68A':'#BFDBFE'}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'2px'}}>
+              <span style={{fontSize:'12px',fontWeight:600,color:'#1E40AF'}}>{t.pacienteNombre}</span>
+              <span style={{fontSize:'10px',fontWeight:700,color:vencido?'#EF4444':urgente?'#D97706':'#2563EB'}}>
+                {vencido ? '⚠️ Vencido' : urgente ? `⚡ ${restanHoras}h ${restanMin}m` : `${restanHoras}h restantes`}
+              </span>
+            </div>
+            <div style={{fontSize:'10px',color:'#60A5FA'}}>{t.servicio}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+})()}
+
   {/* WIDGET INGRESOS */}
   <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
     <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
@@ -891,7 +946,21 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
               </div>
             </div>
 
-            <div className="rname">{turnoSeleccionado.pacienteNombre}</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+  <div className="rname">{turnoSeleccionado.pacienteNombre}</div>
+  {(() => {
+    const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
+    if (!pac?.celular) return null
+    const numero = pac.celular.replace(/\D/g,'')
+    const prefijo = numero.startsWith('54') ? '' : '549'
+    return (
+      <a href={`https://wa.me/${prefijo}${numero}`} target="_blank" rel="noopener noreferrer"
+        style={{display:'flex',alignItems:'center',gap:'5px',padding:'6px 12px',background:'#DCFCE7',color:'#166534',borderRadius:'10px',fontSize:'11px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0',flexShrink:0}}>
+        💬 WhatsApp
+      </a>
+    )
+  })()}
+</div>
 
             <div className="rbadges">
               <span className="rb rb-s">{turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}</span>
@@ -937,16 +1006,19 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
     </span>
   )}
 </div>
-              <textarea
+
+<textarea
                 key={turnoSeleccionado.id}
                 className="ea"
-                value={turnoSeleccionado.contexto}
-                onChange={e => updateContexto(turnoSeleccionado.id, e.target.value)}
-                placeholder="Escribí el contexto de esta sesión..."/>
+                value={contextoLocal}
+                onChange={e => setContextoLocal(e.target.value)}
+                onBlur={() => updateContexto(turnoSeleccionado.id, contextoLocal)}
+                placeholder="Escribí el contexto de esta sesión..."
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}/>
             </div>
-
-        
-
 
             {/* ARCHIVOS */}
             <hr className="rdiv"/>
