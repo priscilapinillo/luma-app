@@ -16,6 +16,11 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 function formatPesos(n: number) {
   return '$' + Math.round(n).toLocaleString('es-AR')
 }
+function formatPesosCorto(n: number) {
+  if (n >= 1000000) return '$' + (n/1000000).toFixed(1).replace('.0','') + 'M'
+  if (n >= 1000) return '$' + (n/1000).toFixed(0) + 'k'
+  return '$' + Math.round(n)
+}
 
 function pct(actual: number, anterior: number) {
   if (anterior === 0) return actual > 0 ? 100 : 0
@@ -198,23 +203,51 @@ export default function FinanzasPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
-        .fw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px}
+        .fw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px;overflow-x:hidden}
 @media(max-width:768px){
-  .fw{height:auto;min-height:100vh;padding:14px 12px 80px}
+  .fw{height:auto;min-height:100vh;padding:14px 12px 80px;overflow-x:hidden;width:100%;box-sizing:border-box}
   .f-header{flex-direction:column;gap:10px;align-items:flex-start}
   .f-periodo{width:100%}
-  .f-per-btn{flex:1;text-align:center}
-  .resumen-grid{grid-template-columns:1fr;gap:10px}
-  .resumen-grid-2{grid-template-columns:repeat(2,1fr)}
-  .evol-bars{gap:2px}
-  .evol-label{font-size:8px}
-  .fw > div[style]{grid-template-columns:1fr !important;display:flex !important;flex-direction:column !important}.serv-name{min-width:100px;font-size:11px}
-  .serv-money{min-width:60px;font-size:10px}
+  .f-per-btn{flex:1;text-align:center;padding:6px 8px;font-size:11px}
+  .resumen-grid{grid-template-columns:1fr;gap:8px}
+  .resumen-grid-2{grid-template-columns:repeat(2,1fr);gap:8px}
+  .r2-card{padding:9px 12px;min-width:0;overflow:hidden}
+  .r2-val{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.5px}
+  .r2-lbl{font-size:9px}
+  .r2-card{padding:10px 12px}
+  .r2-val{font-size:10px}
+  .r2-icon{width:26px;height:26px;margin-bottom:6px}
+  .evol-section{padding:12px;overflow:hidden}
+  .evol-section{padding:12px;overflow:hidden}
+  .evol-bars{gap:1px;height:70px;overflow-x:auto;scrollbar-width:none}
+  .evol-bars::-webkit-scrollbar{display:none}
+  .evol-bar-wrap{min-width:16px;flex-shrink:0}
+  .evol-label{font-size:6px;overflow:hidden;text-overflow:ellipsis;max-width:16px}
+  .serv-section{padding:12px}
+  .serv-item{gap:4px}
+  .serv-name{min-width:unset;width:100%;font-size:11px;margin-bottom:2px}
+  .serv-bar-wrap{min-width:40px}
+  .serv-count{min-width:30px;font-size:10px}
+  .serv-money{font-size:10px;min-width:unset}
+  .cli-section{padding:12px}
   .cli-grid{grid-template-columns:1fr 1fr !important}
-  .agenda-grid{grid-template-columns:repeat(4,1fr)}
+  .cli-card{padding:10px}
+  .cli-name{font-size:11px}
+  .cli-stat-val{font-size:12px}
+  .agenda-section{padding:12px}
+  .agenda-grid{display:flex;overflow-x:auto;gap:6px;padding-bottom:6px;scrollbar-width:none}
+  .agenda-grid::-webkit-scrollbar{display:none}
+  .agenda-dia{min-width:70px;flex-shrink:0;padding:8px 6px}
+  .agenda-dia-label{font-size:10px}
+  .agenda-dia-fecha{font-size:8px}
+  .agenda-dia-monto{font-size:11px}
+  .agenda-dia-scount{font-size:9px}
+  .meta-section{padding:12px}
   .meta-amounts{flex-wrap:wrap;gap:4px}
-  .meta-actual{font-size:22px}
+  .meta-actual{font-size:18px}
   .meta-info{grid-template-columns:1fr 1fr}
+  .meta-info-val{font-size:12px}
+  .z-label{font-size:10px}
 }
         .f-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
         .f-title{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
@@ -356,27 +389,27 @@ export default function FinanzasPage() {
         </div>
 
         <div className="resumen-grid-2">
-          <div className="r2-card">
-            <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><TrendingUp size={14} color="#7C3AED"/></div>
-            <div className="r2-val">{formatPesos(facturado)}</div>
-            <div className="r2-lbl">Total facturado</div>
-          </div>
-          <div className="r2-card">
-            <div className="r2-icon r2-icon-green" style={{background:'#DCFCE7'}}><DollarSign size={14} color="#059669"/></div>
-            <div className="r2-val">{formatPesos(ticketPromedio)}</div>
-            <div className="r2-lbl">Ticket promedio</div>
-          </div>
-          <div className="r2-card">
-            <div className="r2-icon r2-icon-yellow" style={{background:'#FEF9C3'}}><Clock size={14} color="#D97706"/></div>
-            <div className="r2-val">{Math.round(horasTrabajadas)}h</div>
-            <div className="r2-lbl">Horas trabajadas</div>
-          </div>
-          <div className="r2-card">
-            <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><Award size={14} color="#7C3AED"/></div>
-            <div className="r2-val">{formatPesos(ingresoPorHora)}</div>
-            <div className="r2-lbl">Ingreso por hora</div>
-          </div>
-        </div>
+  <div className="r2-card">
+    <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><TrendingUp size={14} color="#7C3AED"/></div>
+    <div className="r2-val">{formatPesosCorto(facturado)}</div>
+    <div className="r2-lbl">Total facturado</div>
+  </div>
+  <div className="r2-card">
+    <div className="r2-icon r2-icon-green" style={{background:'#DCFCE7'}}><DollarSign size={14} color="#059669"/></div>
+    <div className="r2-val">{formatPesosCorto(ticketPromedio)}</div>
+    <div className="r2-lbl">Ticket promedio</div>
+  </div>
+  <div className="r2-card">
+    <div className="r2-icon r2-icon-yellow" style={{background:'#FEF9C3'}}><Clock size={14} color="#D97706"/></div>
+    <div className="r2-val">{Math.round(horasTrabajadas)}h</div>
+    <div className="r2-lbl">Horas trabajadas</div>
+  </div>
+  <div className="r2-card">
+    <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><Award size={14} color="#7C3AED"/></div>
+    <div className="r2-val">{formatPesosCorto(ingresoPorHora)}</div>
+    <div className="r2-lbl">Ingreso por hora</div>
+  </div>
+</div>
 
         <div className="evol-section">
           <div className="z-label" style={{margin:0}}><TrendingUp size={12}/>Evolución de ingresos</div>
@@ -393,8 +426,8 @@ export default function FinanzasPage() {
           </div>
         </div>
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',marginBottom:'0'}}>
-          <div className="serv-section" style={{marginBottom:'24px'}}>
+        
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',marginBottom:'0'}}>  <div className="serv-section" style={{marginBottom:'24px'}}>
             <div className="z-label" style={{margin:0}}><Award size={12}/>Por servicio</div>
             {porServicio.length === 0 ? (
               <div style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Sin sesiones en este período</div>

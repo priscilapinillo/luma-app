@@ -180,7 +180,24 @@ export default function ServiciosPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
-        .sw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px}
+        .sw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px;overflow-x:hidden}
+@media(max-width:768px){
+  .sw{height:auto;min-height:100vh;padding:14px 12px 80px;overflow-x:hidden}
+  .s-header{flex-direction:column;gap:10px;align-items:flex-start}
+  .s-new-btn{width:100%;justify-content:center}
+  .s-grid{grid-template-columns:1fr;gap:10px}
+  .sc-name{font-size:14px}
+  .sc-precio{font-size:18px}
+  .stats-section{padding:14px}
+  .stats-summary{grid-template-columns:1fr;gap:8px}
+  .stat-card{padding:10px 12px}
+  .stat-num{font-size:16px}
+  .ranking-item{flex-wrap:wrap;gap:4px}
+  .ranking-name{min-width:unset;width:100%;font-size:12px}
+  .ranking-bar-wrap{width:100%;flex:unset}
+  .ranking-count{min-width:unset;font-size:11px}
+  .ranking-ingresos{min-width:unset;font-size:10px}
+}
         .s-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
         .s-title{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .s-sub{font-size:12px;color:var(--text-muted);margin-top:3px}
@@ -216,6 +233,8 @@ export default function ServiciosPage() {
         .stats-title{font-size:16px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;margin-bottom:4px;display:flex;align-items:center;gap:8px;font-family:'Manrope',sans-serif}
         .stats-sub{font-size:12px;color:var(--text-muted);margin-bottom:20px}
         .stats-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+        .stats-summary .stat-card{min-width:0;width:100%}
+  .stat-card .stat-num{font-size:14px;letter-spacing:-0.3px}
         .stat-card{border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px}
         .stat-card.purple{background:var(--accent-light);border:0.5px solid var(--border)}
         .stat-card.green{background:#DCFCE7;border:0.5px solid #BBF7D0}
@@ -370,7 +389,7 @@ export default function ServiciosPage() {
           <div className="stats-section">
             <div className="stats-title"><BarChart2 size={16} color="#8B5CF6"/>Estadísticas de servicios</div>
             <div className="stats-sub">Basado en todas las sesiones registradas hasta hoy</div>
-            <div className="stats-summary">
+            <div className="stats-summary" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'15px',marginBottom:'20px'}}>
               <div className="stat-card purple">
                 <div className="stat-icon purple"><TrendingUp size={16}/></div>
                 <div><div className="stat-num">{totalSesiones}</div><div className="stat-lbl">Sesiones totales</div></div>
