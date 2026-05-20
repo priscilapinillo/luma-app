@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
   try {
     const { servicioNombre, precio, monto, therapistId, successUrl, failureUrl } = await req.json()
 
-    console.log('therapistId recibido:', therapistId)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
-    const supabase = createClient({ global: { headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! } } })
-    const { data: perfil, error } = await supabase
+    const { data: perfil } = await supabase
       .from('therapist_profiles')
       .select('mp_access_token, mp_activo')
       .eq('user_id', therapistId)
       .single()
-
-    console.log('perfil:', perfil, 'error:', error)
 
     if (!perfil?.mp_activo || !perfil?.mp_access_token) {
       return NextResponse.json({ error: 'MP no configurado' }, { status: 400 })
