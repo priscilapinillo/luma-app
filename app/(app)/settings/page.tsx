@@ -17,6 +17,8 @@ type Perfil = {
   faq: { pregunta: string; respuesta: string }[]
   mp_access_token: string
   mp_activo: boolean
+  valores: { icon: string; name: string; desc: string }[]
+  testimonios: { texto: string; nombre: string }[]
 }
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
@@ -46,6 +48,12 @@ export default function AjustesPage() {
     faq: [],
     mp_access_token: '',
     mp_activo: false,
+    valores: [
+      {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
+      {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
+      {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
+    ],
+    testimonios: [],
   })
 
   const [passForm, setPassForm] = useState({
@@ -87,6 +95,12 @@ export default function AjustesPage() {
         faq: prof.faq || [],
         mp_access_token: prof.mp_access_token || '',
         mp_activo: prof.mp_activo || false,
+        valores: prof.valores || [
+          {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
+          {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
+          {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
+        ],
+        testimonios: prof.testimonios || [],
       })
       if (subs) setSuscripcion(subs)
     } catch (err) {
@@ -119,6 +133,8 @@ export default function AjustesPage() {
         faq: perfil.faq,
         mp_access_token: perfil.mp_access_token,
         mp_activo: perfil.mp_activo,
+        valores: perfil.valores,
+        testimonios: perfil.testimonios,
         updated_at: new Date().toISOString(),
       }
       if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
@@ -401,11 +417,14 @@ export default function AjustesPage() {
   {/* TEMPLATE */}
   <div className="s-card">
     <div className="s-card-title"><Settings size={14}/>Estilo visual</div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'4px'}}>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'4px',gridTemplateRows:'auto auto'}}>
       {[
         { id:'luna', nombre:'Luna', desc:'Oscuro · Místico · Tarot', emoji:'🌙', bg:'#0D0B14', color:'#C9A84C' },
         { id:'aura', nombre:'Aura', desc:'Claro · Limpio · Wellness', emoji:'✨', bg:'#F8F4FF', color:'#8B5CF6' },
         { id:'tierra', nombre:'Tierra', desc:'Orgánico · Beige · Natural', emoji:'🌿', bg:'#FAF7F0', color:'#92400E' },
+        { id:'rosa', nombre:'Rosa', desc:'Romántico · Suave · Femenino', emoji:'🌸', bg:'#FFF0F6', color:'#BE185D' },
+        { id:'violeta', nombre:'Violeta', desc:'Profundo · Mágico · Intenso', emoji:'💜', bg:'#1E0A3C', color:'#C084FC' },
+        { id:'verde', nombre:'Verde', desc:'Natural · Sanador · Fresco', emoji:'🍃', bg:'#F0FDF4', color:'#065F46' },
       ].map(t => (
         <div key={t.id}
           onClick={() => setPerfil({...perfil, template: t.id})}
@@ -573,6 +592,88 @@ export default function AjustesPage() {
         <option value="completo">Pago completo</option>
       </select>
     </div>
+  </div>
+
+{/* SOBRE MÍ */}
+<div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Sección "Sobre mí"</div>
+    <div className="field" style={{marginBottom:'16px'}}>
+      <label>Bio</label>
+      <textarea
+        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',minHeight:'80px',resize:'none',width:'100%'}}
+        placeholder="Contá quién sos y cómo acompañás..."
+        value={perfil.bio}
+        onChange={e => setPerfil({...perfil, bio: e.target.value})}/>
+    </div>
+    <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'10px'}}>Tus valores</div>
+    {perfil.valores.map((v, i) => (
+      <div key={i} style={{display:'grid',gridTemplateColumns:'48px 1fr 1fr',gap:'8px',marginBottom:'8px',alignItems:'center'}}>
+        <input
+          style={{padding:'9px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'18px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',textAlign:'center'}}
+          value={v.icon}
+          onChange={e => {
+            const nuevo = [...perfil.valores]
+            nuevo[i] = {...nuevo[i], icon: e.target.value}
+            setPerfil({...perfil, valores: nuevo})
+          }}/>
+        <input
+          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
+          placeholder="Nombre"
+          value={v.name}
+          onChange={e => {
+            const nuevo = [...perfil.valores]
+            nuevo[i] = {...nuevo[i], name: e.target.value}
+            setPerfil({...perfil, valores: nuevo})
+          }}/>
+        <input
+          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
+          placeholder="Descripción"
+          value={v.desc}
+          onChange={e => {
+            const nuevo = [...perfil.valores]
+            nuevo[i] = {...nuevo[i], desc: e.target.value}
+            setPerfil({...perfil, valores: nuevo})
+          }}/>
+      </div>
+    ))}
+  </div>
+
+  {/* TESTIMONIOS */}
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Testimonios</div>
+    {perfil.testimonios.map((testi, i) => (
+      <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px',marginBottom:'8px'}}>
+          <input
+            style={{flex:1,padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none'}}
+            placeholder="Nombre de la consultante..."
+            value={testi.nombre}
+            onChange={e => {
+              const nuevo = [...perfil.testimonios]
+              nuevo[i] = {...nuevo[i], nombre: e.target.value}
+              setPerfil({...perfil, testimonios: nuevo})
+            }}/>
+          <button onClick={() => setPerfil({...perfil, testimonios: perfil.testimonios.filter((_,j) => j !== i)})}
+            style={{width:'28px',height:'28px',border:'none',background:'#FEF2F2',color:'#EF4444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            ✕
+          </button>
+        </div>
+        <textarea
+          style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',resize:'none',minHeight:'70px'}}
+          placeholder="Testimonio..."
+          value={testi.texto}
+          onChange={e => {
+            const nuevo = [...perfil.testimonios]
+            nuevo[i] = {...nuevo[i], texto: e.target.value}
+            setPerfil({...perfil, testimonios: nuevo})
+          }}/>
+      </div>
+    ))}
+    <button
+      onClick={() => setPerfil({...perfil, testimonios: [...perfil.testimonios, {texto:'',nombre:''}]})}
+      style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
+      + Agregar testimonio
+    </button>
   </div>
 
   {/* MERCADO PAGO */}

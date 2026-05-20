@@ -77,6 +77,7 @@ export default function AgendaPage() {
   const [guardandoDisp, setGuardandoDisp] = useState(false)
   const [dispLocal, setDispLocal] = useState<Disponibilidad[]>(DISPONIBILIDAD_DEFAULT)
   const [arrastrando, setArrastrando] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
 
   const [formBloqueo, setFormBloqueo] = useState({
     titulo: '', fecha_inicio: '', hora_inicio: '09:00',
@@ -84,6 +85,13 @@ export default function AgendaPage() {
   })
 
   useEffect(() => { cargarDatos() }, [])
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   async function cargarDatos() {
     try {
@@ -331,8 +339,22 @@ export default function AgendaPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
-        .aw{height:100vh;display:flex;flex-direction:column;font-family:'Inter',sans-serif;background:var(--bg);padding:14px;gap:10px;overflow:hidden}
-        .a-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+       .aw{height:100vh;display:flex;flex-direction:column;font-family:'Inter',sans-serif;background:var(--bg);padding:14px;gap:10px;overflow:hidden}
+@media(max-width:768px){
+  .aw{height:auto;min-height:100vh;overflow:visible;padding:10px 10px 80px}
+  .semana-outer{flex:none;min-height:unset;overflow:visible}
+  .semana-scroll{overflow:visible;flex:none}
+  .semana-grid{grid-template-columns:44px repeat(7,minmax(80px,1fr));overflow-x:auto;display:flex;flex-direction:column}
+  .semana-headers{grid-template-columns:44px repeat(7,minmax(80px,1fr));overflow-x:auto}
+  .a-header{flex-wrap:wrap;gap:6px}
+  .a-right{flex-wrap:wrap;gap:4px}
+  .a-tabs{overflow-x:auto}
+  .mo-box{width:95vw !important}
+  .disp-box{width:95vw !important}
+  .det-panel{width:95vw !important}
+  .carga-grid{grid-template-columns:repeat(4,1fr)}
+}
+    .a-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
         .a-title{font-size:17px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .a-periodo{font-size:11px;color:var(--text-secondary);margin-top:1px}
         .a-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -474,7 +496,9 @@ export default function AgendaPage() {
               <button className={`a-tab${vistaTab==='carga'?' active':''}`} onClick={() => setVistaTab('carga')}><BarChart2 size={10}/>Carga</button>
               <button className={`a-tab${vistaTab==='cancelados'?' active':''}`} onClick={() => setVistaTab('cancelados')}><XCircle size={10}/>Cancelados</button>
             </div>
-            {vistaTab === 'calendario' && (
+
+            {
+            vistaTab === 'calendario' && (
               <div className="a-vista">
                 <button className={`a-vista-btn${vista==='semana'?' active':''}`} onClick={() => setVista('semana')}>Semana</button>
                 <button className={`a-vista-btn${vista==='mes'?' active':''}`} onClick={() => setVista('mes')}>Mes</button>
@@ -490,7 +514,7 @@ export default function AgendaPage() {
           </div>
         </div>
 
-        {vistaTab === 'calendario' && vista === 'semana' && (
+        {vistaTab === 'calendario' && vista === 'semana' && !isMobile && (
           <div className="semana-outer">
             <div className="semana-headers">
               <div className="semana-corner"/>
@@ -559,7 +583,40 @@ export default function AgendaPage() {
             </div>
           </div>
         )}
-
+        {vistaTab === 'calendario' && isMobile && (
+          <div style={{display:'flex',flexDirection:'column',gap:'8px',flex:1,overflowY:'auto'}}>
+            {diasSemana.map((dia, di) => {
+              const turnosDia = turnosDelDia(dia)
+              const esHoy = formatDate(dia) === formatDate(hoy)
+              return (
+                <div key={di} style={{background:'var(--bg-card)',borderRadius:'16px',padding:'12px 14px',border:`0.5px solid ${esHoy?'var(--accent)':'var(--border-light)'}`,boxShadow:'0 2px 10px var(--shadow)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:turnosDia.length>0?'10px':'0'}}>
+                    <div style={{width:'32px',height:'32px',borderRadius:'50%',background:esHoy?'linear-gradient(135deg,#8B5CF6,#A78BFA)':'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:700,color:esHoy?'white':'var(--text-primary)',fontFamily:"'Manrope',sans-serif",flexShrink:0}}>{dia.getDate()}</div>
+                    <div>
+                      <div style={{fontSize:'12px',fontWeight:700,color:esHoy?'var(--accent)':'var(--text-primary)'}}>{DIAS_COMPLETO[dia.getDay()]}</div>
+                      <div style={{fontSize:'10px',color:'var(--text-muted)'}}>{turnosDia.length === 0 ? 'Sin turnos' : `${turnosDia.length} turno${turnosDia.length>1?'s':''}`}</div>
+                    </div>
+                  </div>
+                  {turnosDia.map((t, ti) => {
+                    const colorBase = t.color || '#8B5CF6'
+                    return (
+                      <div key={ti} style={{display:'flex',alignItems:'center',gap:'10px',background:colorBase+'15',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${colorBase}33`,cursor:'pointer'}} onClick={() => setTurnoSeleccionado(t)}>
+                        <div style={{width:'3px',height:'36px',borderRadius:'2px',background:colorBase,flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:'12px',fontWeight:600,color:'var(--text-primary)',fontFamily:"'Manrope',sans-serif"}}>{t.paciente_nombre}</div>
+                          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{t.hora} · {t.duracion}min · {t.servicio_nombre}</div>
+                        </div>
+                        <div style={{fontSize:'10px',fontWeight:600,color:t.estado_pago==='pagado'?'#166534':t.estado_pago==='señado'?'#1E40AF':'#854D0E',padding:'3px 7px',borderRadius:'20px',background:t.estado_pago==='pagado'?'#DCFCE7':t.estado_pago==='señado'?'#DBEAFE':'#FEF9C3',flexShrink:0}}>
+                          {t.estado_pago==='pagado'?'✓':t.estado_pago==='señado'?'💛':'⚡'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        )}
         {vistaTab === 'calendario' && vista === 'mes' && (
           <div className="mes-outer">
             <div className="mes-hdr-row">
@@ -669,7 +726,7 @@ export default function AgendaPage() {
                 </span>
               </div>
             </div>
-            <div className="det-move-hint"><Move size={10}/>Arrastrá el chip en el calendario para mover el turno</div>
+            <div className="det-move-hint"><Move size={10}/>edita la fecha desde el inicio para mover el turno</div>
             <button className="det-btn danger" onClick={() => cancelarTurno(turnoSeleccionado.id)}><XCircle size={12}/>Cancelar turno</button>
             <button className="det-btn sec" onClick={() => setTurnoSeleccionado(null)}>Cerrar</button>
           </div>

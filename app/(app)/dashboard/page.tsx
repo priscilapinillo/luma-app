@@ -74,13 +74,12 @@ export default function DashboardPage() {
   const [ingresosMes, setIngresosMes] = useState(0)
   const [pendientesMes, setPendientesMes] = useState(0)
   const sugerenciasRef = useRef<HTMLDivElement>(null)
-const recognitionRef = useRef<any>(null)
-const [archivos, setArchivos] = useState<Archivo[]>([])
-const [subiendoArchivo, setSubiendoArchivo] = useState(false)
-const archivoInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<any>(null)
+  const [archivos, setArchivos] = useState<Archivo[]>([])
+  const [subiendoArchivo, setSubiendoArchivo] = useState(false)
+  const archivoInputRef = useRef<HTMLInputElement>(null)
   const [grabando, setGrabando] = useState(false)
   const [contextoLocal, setContextoLocal] = useState('')
-  
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
   const diasDelMes = new Date(hoy.getFullYear(), mesIdx+1, 0).getDate()
@@ -96,6 +95,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setNuevoTurno(prev => ({ ...prev, fecha: fechaSeleccionada }))
   }, [fechaSeleccionada])
+
   useEffect(() => {
     if (turnoSeleccionado) {
       setContextoLocal(turnoSeleccionado.contexto || '')
@@ -148,19 +148,18 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
           const convertidos: Turno[] = sesiones.map((s: any) => {
             const pac = pacs.find((p: any) => p.id === s.patient_id)
             const historial = sesiones
-            .filter((prev: any) => {
-              if (prev.patient_id !== s.patient_id || prev.id === s.id) return false
-              const fechaPrev = new Date(prev.fecha?.split('T')[0]+'T12:00:00')
-              const fechaSesion = new Date(s.fecha?.split('T')[0]+'T12:00:00')
-              return fechaPrev < fechaSesion
-            })
-            .sort((a: any, b: any) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
-            .map((prev: any) => ({
-              fecha: new Date(prev.fecha?.split('T')[0]+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
-              servicio: prev.servicio_nombre || '',
-              contexto: prev.contexto_sesion || '',
-            }))
-            
+              .filter((prev: any) => {
+                if (prev.patient_id !== s.patient_id || prev.id === s.id) return false
+                const fechaPrev = new Date(prev.fecha?.split('T')[0]+'T12:00:00')
+                const fechaSesion = new Date(s.fecha?.split('T')[0]+'T12:00:00')
+                return fechaPrev < fechaSesion
+              })
+              .sort((a: any, b: any) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
+              .map((prev: any) => ({
+                fecha: new Date(prev.fecha?.split('T')[0]+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
+                servicio: prev.servicio_nombre || '',
+                contexto: prev.contexto_sesion || '',
+              }))
 
             return {
               id: s.id,
@@ -195,17 +194,10 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     const diaSemana = hoy.getDay()
     const dispHoy = disponibilidad.find(d => d.dia_semana === diaSemana)
     if (!dispHoy || !dispHoy.activo) return null
-
-    const turnosHoyList = turnos
-      .filter(t => t.fecha === formatDate(hoy))
-      .sort((a, b) => horaAMin(a.hora) - horaAMin(b.hora))
-
+    const turnosHoyList = turnos.filter(t => t.fecha === formatDate(hoy)).sort((a, b) => horaAMin(a.hora) - horaAMin(b.hora))
     const inicioDisp = horaAMin(dispHoy.hora_inicio)
     const finDisp = horaAMin(dispHoy.hora_fin)
-    const durMin = servicios.length > 0
-      ? Math.round(servicios.reduce((a, s) => a + (s.duracion_estimada || 60), 0) / servicios.length)
-      : 60
-
+    const durMin = servicios.length > 0 ? Math.round(servicios.reduce((a, s) => a + (s.duracion_estimada || 60), 0) / servicios.length) : 60
     let cursor = inicioDisp
     for (const turno of turnosHoyList) {
       const ini = horaAMin(turno.hora)
@@ -213,7 +205,6 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
       if (cursor + durMin <= ini) break
       cursor = Math.max(cursor, fin)
     }
-
     if (cursor + durMin <= finDisp) {
       const h = Math.floor(cursor / 60)
       const m = cursor % 60
@@ -234,9 +225,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
   }
 
   const turnosFiltrados = useMemo(() => {
-    if (!busqueda) {
-      return turnos.filter(t => t.fecha === fechaSeleccionada)
-    }
+    if (!busqueda) return turnos.filter(t => t.fecha === fechaSeleccionada)
     const q = sinTildes(busqueda)
     const resultados = turnos.filter(t =>
       sinTildes(t.pacienteNombre).includes(q) ||
@@ -359,13 +348,10 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     recognition.continuous = true
     recognition.interimResults = false
     recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((r: any) => r[0].transcript)
-        .join(' ')
+      const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join(' ')
       if (turnoSeleccionado) {
         const contextoActual = turnoSeleccionado.contexto || ''
-        const nuevoContexto = contextoActual ? contextoActual + ' ' + transcript : transcript
-        updateContexto(turnoSeleccionado.id, nuevoContexto)
+        updateContexto(turnoSeleccionado.id, contextoActual ? contextoActual + ' ' + transcript : transcript)
       }
     }
     recognition.onerror = () => { setGrabando(false) }
@@ -395,7 +381,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
       if (!uploadError) {
         const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(path)
         const tipo = file.type.startsWith('image') ? 'imagen' : file.type.includes('pdf') ? 'pdf' : file.type.startsWith('audio') ? 'audio' : 'archivo'
-        const { data, error: insertError } = await supabase.from('files').insert({
+        const { data } = await supabase.from('files').insert({
           user_id: user.id,
           patient_id: turnoSeleccionado.pacienteDbId,
           session_id: turnoSeleccionado.id,
@@ -403,7 +389,6 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
           tipo,
           url: urlData.publicUrl,
         }).select().single()
-        console.log('Insert result:', data, insertError)
         if (data) setArchivos(prev => [data, ...prev])
       }
     } catch(err) { console.error(err) } finally {
@@ -430,10 +415,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
       const horaFin = horaIni + t.duracion
       return horaInicioNuevo < horaFin && horaFinNuevo > horaIni
     })
-    if (hayConflicto) {
-      alert('⚠️ Ya tenés un turno en ese horario.')
-      return
-    }
+    if (hayConflicto) { alert('⚠️ Ya tenés un turno en ese horario.'); return }
     const supabase = createClient()
     await supabase.from('sessions').update({ fecha: fecha+'T'+hora+':00', hora }).eq('id', id)
     setTurnos(prev => prev.map(t => t.id === id ? {...t, fecha, hora} : t))
@@ -444,11 +426,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
   async function borrarTurno(id: string) {
     const supabase = createClient()
     const { error } = await supabase.from('sessions').delete().eq('id', id)
-    if (error) {
-      console.error('Error borrando turno:', error)
-      alert('No se pudo eliminar el turno. Intentá de nuevo.')
-      return
-    }
+    if (error) { console.error('Error borrando turno:', error); alert('No se pudo eliminar el turno.'); return }
     setTurnos(prev => prev.filter(t => t.id !== id))
     setTurnoSeleccionado(null)
     setBorrarConfirm(false)
@@ -459,9 +437,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { data } = await supabase.from('tasks').insert({
-      user_id: user.id, texto: nuevaTask.trim(), completada: false
-    }).select().single()
+    const { data } = await supabase.from('tasks').insert({ user_id: user.id, texto: nuevaTask.trim(), completada: false }).select().single()
     if (data) setTasks(prev => [...prev, { id: data.id, texto: data.texto, completada: data.completada }])
     setNuevaTask('')
   }
@@ -490,10 +466,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
       const horaFinExistente = horaInicioExistente + t.duracion
       return horaInicioNuevo < horaFinExistente && horaFinNuevo > horaInicioExistente
     })
-    if (hayConflicto) {
-      alert('⚠️ Ya tenés un turno en ese horario.')
-      return
-    }
+    if (hayConflicto) { alert('⚠️ Ya tenés un turno en ese horario.'); return }
     setGuardando(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -535,19 +508,12 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
       servicio: nuevoTurno.servicio, precio: nuevoTurno.precio,
       contexto: nuevoTurno.contexto, pago: nuevoTurno.pago,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
-      realizado: false, historial: turnos
-      .filter(t => {
+      realizado: false,
+      historial: turnos.filter(t => {
         if (t.pacienteDbId !== pacienteDbId || t.id === nuevaSesion.id) return false
-        const fechaT = new Date(t.fecha?.split('T')[0]+'T12:00:00')
-        const fechaN = new Date(nuevoTurno.fecha+'T12:00:00')
-        return fechaT < fechaN
-      })
-      .sort((a, b) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
-      .map(t => ({
-        fecha: new Date(t.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }),
-        servicio: t.servicio,
-        contexto: t.contexto,
-      })),
+        return new Date(t.fecha?.split('T')[0]+'T12:00:00') < new Date(nuevoTurno.fecha+'T12:00:00')
+      }).sort((a, b) => new Date(b.fecha?.split('T')[0]+'T12:00:00').getTime() - new Date(a.fecha?.split('T')[0]+'T12:00:00').getTime())
+      .map(t => ({ fecha: new Date(t.fecha+'T12:00:00').toLocaleDateString('es-AR', { day:'numeric', month:'long' }), servicio: t.servicio, contexto: t.contexto })),
     }
     setTurnos(prev => [...prev, nuevo])
     setTurnoSeleccionado(nuevo)
@@ -562,6 +528,7 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
   }
 
   const resta = turnoSeleccionado ? turnoSeleccionado.precio - turnoSeleccionado.sena : 0
+  const mesNombre = MESES[hoy.getMonth()]
 
   function saludoHora() {
     const hora = new Date().getHours()
@@ -570,15 +537,42 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
     return 'Buenas noches'
   }
 
-  const mesNombre = MESES[hoy.getMonth()]
-
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
     </div>
   )
 
-  return (  
+  const entregasPendientes = turnos.filter(t => {
+    const s = servicios.find(sv => sv.nombre === t.servicio) as any
+    return s?.tipo_servicio === 'entrega' && !t.realizado
+  })
+
+  const widgetFinanzas = (
+    <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
+      <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
+      <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
+      <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
+      <div className="widget-sub" style={{color:'#B45309'}}>cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pend.</span></div>
+      <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}} onClick={() => window.location.href='/finances'}>Ver finanzas →</button>
+    </div>
+  )
+
+  const widgetDisponibilidad = (
+    <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
+      <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
+      <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
+      {proximoEspacioLibre ? (<>
+        <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>¡Tenés lugar!</div>
+        <div className="widget-sub" style={{color:'#059669'}}>Próximo: <strong>{proximoEspacioLibre} hs</strong></div>
+      </>) : (<>
+        <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>Agenda completa 🎉</div>
+        <div className="widget-sub" style={{color:'#059669'}}>Sin espacios hoy</div>
+      </>)}
+    </div>
+  )
+
+  return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
@@ -586,17 +580,22 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
         .dw{display:grid;grid-template-columns:55% 43%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);padding:14px 16px 14px 14px;gap:14px}
         .dl{display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;background:var(--bg-card);border-radius:22px;padding:18px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
         .dr{display:flex;flex-direction:column;gap:10px;background:var(--bg-card);overflow-y:auto;border-radius:22px;padding:18px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light)}
-
+        @media(max-width:768px){
+          .dw{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible;padding:10px 10px 80px;gap:10px}
+          .dl{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+          .dr{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+          .tlist{overflow:visible;min-height:unset;flex:unset;max-height:unset}
+          .mo-box{width:95vw !important;max-width:440px}
+          .hist-box{width:95vw !important}
+        }
         .wc{background:var(--accent-light);border-radius:16px;padding:13px 16px;border:0.5px solid var(--border);flex-shrink:0;position:relative;overflow:hidden}
         .wc-blob{position:absolute;border-radius:50%;background:var(--accent);opacity:0.12;width:80px;height:80px;top:-20px;right:-20px;pointer-events:none}
         .wc-h{font-size:16px;font-weight:800;color:var(--accent);font-family:'Manrope',sans-serif}
         .wc-s{font-size:12px;color:var(--text-secondary);margin-top:3px}
-
         .sr{position:relative;flex-shrink:0}
         .si{width:100%;padding:9px 32px 9px 12px;border-radius:11px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
         .si:focus{border-color:var(--accent)}
         .sico{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none}
-
         .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0}
         .st{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:0.5px solid var(--border-light);text-align:center;box-shadow:0 2px 10px var(--shadow)}
         .st.ac{background:var(--accent-light);border-color:var(--border)}
@@ -604,25 +603,21 @@ const archivoInputRef = useRef<HTMLInputElement>(null)
         .st.ac .st-l{color:var(--text-secondary)}
         .st-n{font-size:22px;font-weight:800;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .st.ac .st-n{color:var(--accent)}
-
-       .widget-card{border-radius:20px;padding:14px 16px;border:0.5px solid;position:relative;overflow:hidden;flex-shrink:0}
-html.dark .widget-ingresos{background:#1A1200 !important;border-color:#3D2E00 !important}
-html.dark .widget-ingresos .widget-label{color:#FCD34D !important}
-html.dark .widget-ingresos .widget-title{color:#FDE68A !important}
-html.dark .widget-ingresos .widget-sub{color:#FCA5A5 !important}
-html.dark .widget-ingresos .widget-pill{background:#2D1F00 !important;color:#FCD34D !important}
-html.dark .widget-espacio{background:#052015 !important;border-color:#065f46 !important}
-html.dark .widget-espacio .widget-label{color:#6EE7B7 !important}
-html.dark .widget-espacio .widget-title{color:#A7F3D0 !important}
-html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
+        .widget-card{border-radius:20px;padding:14px 16px;border:0.5px solid;position:relative;overflow:hidden;flex-shrink:0}
+        html.dark .widget-ingresos{background:#1A1200 !important;border-color:#3D2E00 !important}
+        html.dark .widget-ingresos .widget-label{color:#FCD34D !important}
+        html.dark .widget-ingresos .widget-title{color:#FDE68A !important}
+        html.dark .widget-ingresos .widget-sub{color:#FCA5A5 !important}
+        html.dark .widget-ingresos .widget-pill{background:#2D1F00 !important;color:#FCD34D !important}
+        html.dark .widget-espacio{background:#052015 !important;border-color:#065f46 !important}
+        html.dark .widget-espacio .widget-label{color:#6EE7B7 !important}
+        html.dark .widget-espacio .widget-title{color:#A7F3D0 !important}
+        html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .widget-blob{position:absolute;border-radius:50%;pointer-events:none;opacity:0.3}
         .widget-label{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:5px}
-        .widget-title{font-size:20px;font-weight:800;font-family:'Manrope',sans-serif;line-height:1.1;margin-bottom:3px}
-        .widget-sub{font-size:17px;line-height:1.5}
+        .widget-title{font-size:18px;font-weight:800;font-family:'Manrope',sans-serif;line-height:1.1;margin-bottom:3px}
+        .widget-sub{font-size:11px;line-height:1.5}
         .widget-pill{display:inline-block;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;margin-top:8px;cursor:pointer;border:none;font-family:inherit}
-        .widget-bar-wrap{height:4px;border-radius:4px;margin-top:10px;overflow:hidden;opacity:0.3}
-        .widget-bar{height:100%;border-radius:4px}
-
         .cal-r{display:flex;align-items:center;gap:5px;flex-shrink:0}
         .ca{width:22px;height:22px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
         .mons{display:flex;flex:1;justify-content:space-around}
@@ -639,7 +634,6 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .day.ht .dn{color:var(--accent)}
         .dd{font-size:9px;color:var(--text-muted)}
         .day.ac .dd{color:rgba(255,255,255,0.75)}
-
         .tlist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:7px;min-height:0;padding:2px 4px;margin:0 -4px}
         .tc{background:var(--bg-card);border-radius:14px;padding:10px 12px;border:none;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px var(--shadow)}
         .tc:hover{transform:translateY(-1px)}
@@ -659,7 +653,6 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .chk.ok{background:#DCFCE7;border-color:#BBF7D0;color:#166534}
         .ab{background:var(--bg-card);border:1.5px dashed var(--border);border-radius:14px;padding:10px;text-align:center;font-size:12px;color:var(--text-muted);cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:all 0.15s;margin-top:2px}
         .ab:hover{border-color:var(--accent);color:var(--accent)}
-
         .tasks-card{background:#FFFBEB;border-radius:20px;padding:14px 16px;border:0.5px solid #FDE68A;position:relative;overflow:hidden;flex-shrink:0}
         html.dark .tasks-card{background:#1A1200;border-color:#3D2E00}
         .tasks-blob{position:absolute;border-radius:50%;background:#F59E0B;opacity:0.2;pointer-events:none}
@@ -677,7 +670,6 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .task-input{flex:1;padding:6px 10px;border-radius:8px;border:0.5px solid #FDE68A;font-size:12px;background:rgba(255,255,255,0.7);color:#92400E;outline:none;font-family:inherit}
         html.dark .task-input{background:rgba(255,255,255,0.05);color:#FCD34D;border-color:#3D2E00}
         .task-add-btn{padding:6px 10px;border-radius:8px;border:none;background:#F59E0B;color:white;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600}
-
         .re{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;text-align:center;line-height:2}
         .rt{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
         .rid{font-size:24px;font-weight:800;color:var(--text-primary);letter-spacing:-1px;line-height:1;font-family:'Manrope',sans-serif}
@@ -701,10 +693,8 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .ctxl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
         .editor{border:0.5px solid var(--border);border-radius:14px;overflow:hidden;flex-shrink:0}
         .etb{display:flex;gap:3px;padding:6px 7px;border-bottom:0.5px solid var(--border-light);background:var(--bg-input);flex-wrap:wrap}
-        .eb{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center}
-        .eb:hover,.ebico:hover{background:var(--accent-hover);color:var(--accent)}
         .ebico{width:24px;height:24px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary)}
-        .esep{width:0.5px;background:var(--border);margin:2px 4px;align-self:stretch}
+        .ebico:hover{background:var(--accent-hover);color:var(--accent)}
         .ea{width:100%;padding:8px 11px;font-size:12px;color:var(--text-primary);resize:none;height:75px;font-family:inherit;background:transparent;outline:none;line-height:1.6;border:none}
         .rdiv{border:none;border-top:0.5px solid var(--border-light);flex-shrink:0}
         .hl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0}
@@ -713,7 +703,6 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
         .htxt{font-size:12px;color:var(--text-secondary);line-height:1.5}
         .ver-mas{text-align:center;font-size:11px;color:var(--accent);cursor:pointer;padding:4px;flex-shrink:0}
         .ver-mas:hover{text-decoration:underline}
-
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
         .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:440px;max-height:88vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
@@ -764,74 +753,46 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
             <div className="st"><div className="st-l">Pasado</div><div className="st-n">{turnosPasado}</div></div>
           </div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',flexShrink:0}}>
-
-            {/* WIDGET ENTREGAS PENDIENTES */}
-{(() => {
-  const entregasPendientes = turnos.filter(t => {
-    const s = servicios.find(sv => sv.nombre === t.servicio) as any
-    return s?.tipo_servicio === 'entrega'
-  })
-  if (entregasPendientes.length === 0) return null
-
-  return (
-    <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden',flexShrink:0}}>
-      <div style={{position:'absolute',borderRadius:'50%',background:'#3B82F6',opacity:0.2,width:'60px',height:'60px',top:'-12px',right:'-12px',pointerEvents:'none'}}/>
-      <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px'}}>📦 Entregas pendientes</div>
-      {entregasPendientes.slice(0,3).map((t,i) => {
-        const s = servicios.find(sv => sv.nombre === t.servicio) as any
-        const plazoHoras = s?.plazo_horas || 48
-        const creadoEn = new Date(t.created_at || t.fecha+'T'+t.hora+':00')
-        const venceEn = new Date(creadoEn.getTime() + plazoHoras * 60 * 60 * 1000)
-        const ahoraMs = new Date().getTime()
-        const restanMs = venceEn.getTime() - ahoraMs
-        const restanHoras = Math.floor(restanMs / (1000 * 60 * 60))
-        const restanMin = Math.floor((restanMs % (1000 * 60 * 60)) / (1000 * 60))
-        const vencido = restanMs < 0
-        const urgente = restanHoras < 6 && !vencido
-
-        return (
-          <div key={i} style={{background:'rgba(255,255,255,0.6)',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${vencido?'#FECACA':urgente?'#FDE68A':'#BFDBFE'}`}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'2px'}}>
-              <span style={{fontSize:'12px',fontWeight:600,color:'#1E40AF'}}>{t.pacienteNombre}</span>
-              <span style={{fontSize:'10px',fontWeight:700,color:vencido?'#EF4444':urgente?'#D97706':'#2563EB'}}>
-                {vencido ? '⚠️ Vencido' : urgente ? `⚡ ${restanHoras}h ${restanMin}m` : `${restanHoras}h restantes`}
-              </span>
+          {/* WIDGETS */}
+          {entregasPendientes.length === 0 ? (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',flexShrink:0}}>
+              {widgetFinanzas}
+              {widgetDisponibilidad}
             </div>
-            <div style={{fontSize:'10px',color:'#60A5FA'}}>{t.servicio}</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-})()}
-
-  {/* WIDGET INGRESOS */}
-  <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
-    <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
-    <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
-    <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
-    <div className="widget-sub" style={{color:'#B45309'}}>
-      cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pend.</span>
-    </div>
-    <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}} onClick={() => window.location.href='/finances'}>Ver finanzas →</button>
-  </div>
-
-  {/* WIDGET ESPACIO LIBRE */}
-  <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
-    <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
-    <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
-    {proximoEspacioLibre ? (<>
-      <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>¡Tenés lugar!</div>
-      <div className="widget-sub" style={{color:'#059669'}}>Próximo: <strong>{proximoEspacioLibre} hs</strong></div>
-    </>) : (<>
-      <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>Agenda completa 🎉</div>
-      <div className="widget-sub" style={{color:'#059669'}}>Sin espacios hoy</div>
-    </>)}
-  </div>
-</div>
-
-          
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:'10px',flexShrink:0}}>
+              <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden'}}>
+                <div style={{position:'absolute',borderRadius:'50%',background:'#3B82F6',opacity:0.2,width:'60px',height:'60px',top:'-12px',right:'-12px',pointerEvents:'none'}}/>
+                <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px'}}>📦 Entregas pendientes</div>
+                {entregasPendientes.slice(0,3).map((t,i) => {
+                  const s = servicios.find(sv => sv.nombre === t.servicio) as any
+                  const plazoHoras = s?.plazo_horas || 48
+                  const creadoEn = new Date(t.created_at || t.fecha+'T'+t.hora+':00')
+                  const venceEn = new Date(creadoEn.getTime() + plazoHoras * 60 * 60 * 1000)
+                  const restanMs = venceEn.getTime() - new Date().getTime()
+                  const restanHoras = Math.floor(restanMs / (1000 * 60 * 60))
+                  const restanMin = Math.floor((restanMs % (1000 * 60 * 60)) / (1000 * 60))
+                  const vencido = restanMs < 0
+                  const urgente = restanHoras < 6 && !vencido
+                  return (
+                    <div key={i} style={{background:'rgba(255,255,255,0.6)',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${vencido?'#FECACA':urgente?'#FDE68A':'#BFDBFE'}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'2px'}}>
+                        <span style={{fontSize:'12px',fontWeight:600,color:'#1E40AF'}}>{t.pacienteNombre}</span>
+                        <span style={{fontSize:'10px',fontWeight:700,color:vencido?'#EF4444':urgente?'#D97706':'#2563EB'}}>
+                          {vencido ? '⚠️ Vencido' : urgente ? `⚡ ${restanHoras}h ${restanMin}m` : `${restanHoras}h restantes`}
+                        </span>
+                      </div>
+                      <div style={{fontSize:'10px',color:'#60A5FA'}}>{t.servicio}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                {widgetFinanzas}
+                {widgetDisponibilidad}
+              </div>
+            </div>
+          )}
 
           <div className="cal-r">
             <button className="ca" onClick={() => setMesOffset(o => Math.max(0,o-1))}><ChevronLeft size={11}/></button>
@@ -881,8 +842,8 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
                 <div className="tb">
                   <div className="tn">{turno.pacienteNombre}</div>
                   <div className="ts2">
-                  {busqueda && <span style={{color:'var(--accent)',marginRight:'4px'}}>{new Date(turno.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'})} ·</span>}
-                 {turno.hora} · {turno.duracion} min
+                    {busqueda && <span style={{color:'var(--accent)',marginRight:'4px'}}>{new Date(turno.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'})} ·</span>}
+                    {turno.hora} · {turno.duracion} min
                   </div>
                   <div className="ttags">
                     <span className="tg tg-s">{turno.servicio}</span>
@@ -947,20 +908,20 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
             </div>
 
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-  <div className="rname">{turnoSeleccionado.pacienteNombre}</div>
-  {(() => {
-    const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
-    if (!pac?.celular) return null
-    const numero = pac.celular.replace(/\D/g,'')
-    const prefijo = numero.startsWith('54') ? '' : '549'
-    return (
-      <a href={`https://wa.me/${prefijo}${numero}`} target="_blank" rel="noopener noreferrer"
-        style={{display:'flex',alignItems:'center',gap:'5px',padding:'6px 12px',background:'#DCFCE7',color:'#166534',borderRadius:'10px',fontSize:'11px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0',flexShrink:0}}>
-        💬 WhatsApp
-      </a>
-    )
-  })()}
-</div>
+              <div className="rname">{turnoSeleccionado.pacienteNombre}</div>
+              {(() => {
+                const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
+                if (!pac?.celular) return null
+                const numero = pac.celular.replace(/\D/g,'')
+                const prefijo = numero.startsWith('54') ? '' : '549'
+                return (
+                  <a href={`https://wa.me/${prefijo}${numero}`} target="_blank" rel="noopener noreferrer"
+                    style={{display:'flex',alignItems:'center',gap:'5px',padding:'6px 12px',background:'#DCFCE7',color:'#166534',borderRadius:'10px',fontSize:'11px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0',flexShrink:0}}>
+                    💬 WhatsApp
+                  </a>
+                )
+              })()}
+            </div>
 
             <div className="rbadges">
               <span className="rb rb-s">{turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}</span>
@@ -989,25 +950,24 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
 
             <div className="ctxl">Contexto de esta sesión</div>
             <div className="editor">
-            <div className="etb">
-  <button className="ebico" onClick={toggleGrabacion} style={{
-    background: grabando ? '#FEF2F2' : 'var(--bg-card)',
-    borderColor: grabando ? '#FECACA' : 'var(--border)',
-    color: grabando ? '#EF4444' : 'var(--text-secondary)',
-    display:'flex',alignItems:'center',gap:'4px',width:'auto',padding:'0 8px',fontSize:'11px'
-  }}>
-    <Mic size={11}/>
-    {grabando ? 'Detener' : 'Transcribir voz'}
-  </button>
-  {grabando && (
-    <span style={{fontSize:'10px',color:'#EF4444',display:'flex',alignItems:'center',gap:'4px'}}>
-      <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#EF4444',animation:'pulse 1s infinite',display:'inline-block'}}/>
-      Escuchando...
-    </span>
-  )}
-</div>
-
-<textarea
+              <div className="etb">
+                <button className="ebico" onClick={toggleGrabacion} style={{
+                  background: grabando ? '#FEF2F2' : 'var(--bg-card)',
+                  borderColor: grabando ? '#FECACA' : 'var(--border)',
+                  color: grabando ? '#EF4444' : 'var(--text-secondary)',
+                  display:'flex',alignItems:'center',gap:'4px',width:'auto',padding:'0 8px',fontSize:'11px'
+                }}>
+                  <Mic size={11}/>
+                  {grabando ? 'Detener' : 'Transcribir voz'}
+                </button>
+                {grabando && (
+                  <span style={{fontSize:'10px',color:'#EF4444',display:'flex',alignItems:'center',gap:'4px'}}>
+                    <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#EF4444',display:'inline-block'}}/>
+                    Escuchando...
+                  </span>
+                )}
+              </div>
+              <textarea
                 key={turnoSeleccionado.id}
                 className="ea"
                 value={contextoLocal}
@@ -1195,7 +1155,7 @@ html.dark .widget-espacio .widget-sub{color:#6EE7B7 !important}
             </p>
             <div style={{display:'flex',gap:'8px'}}>
               <button onClick={() => setBorrarConfirm(false)}
-                style={{flex:1,padding:'11px',borderRadius:'10px',border:'0.5px solid var(--border)',background:' var(--bg-card)',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',color:'var(--text-secondary)'}}>
+                style={{flex:1,padding:'11px',borderRadius:'10px',border:'0.5px solid var(--border)',background:'var(--bg-card)',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',color:'var(--text-secondary)'}}>
                 Cancelar
               </button>
               <button onClick={() => borrarTurno(turnoSeleccionado.id)}

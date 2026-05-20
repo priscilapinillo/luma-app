@@ -260,7 +260,15 @@ export default function PacientesPage() {
         .pw{display:grid;grid-template-columns:55% 45%;height:100vh;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);padding:14px 16px 14px 14px;gap:14px}
         .pl{display:flex;flex-direction:column;gap:10px;overflow:hidden;background:var(--bg-card);border-radius:22px;padding:18px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
         .pr{display:flex;flex-direction:column;gap:0;background:var(--bg-card);border-radius:22px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light);overflow:hidden}
-
+      @media(max-width:768px){
+  .pw{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible;padding:10px 10px 80px;gap:10px}
+  .pl{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+  .pr{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+  .plist{overflow:visible;min-height:unset;flex:unset;max-height:unset}
+  .plist.compacto{max-height:180px;overflow-y:auto}
+  .tab-content{overflow:visible;min-height:unset;flex:unset}
+  .mo-box{width:95vw !important;max-width:480px}
+}
         .p-header{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
         .p-title{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .p-count{font-size:12px;color:var(--text-muted);margin-top:2px}
@@ -395,7 +403,7 @@ export default function PacientesPage() {
             <span className="sico"><Search size={13}/></span>
           </div>
 
-          <div className="plist">
+          <div className={`plist${pacienteSeleccionado ? ' compacto' : ''}`}>
             {pacientesFiltrados.length === 0 && (
               <p style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>
                 {busqueda ? 'No se encontraron pacientes' : 'Todavía no tenés pacientes cargados'}
