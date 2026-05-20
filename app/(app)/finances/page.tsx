@@ -199,7 +199,23 @@ export default function FinanzasPage() {
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box}
         .fw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px}
-
+@media(max-width:768px){
+  .fw{height:auto;min-height:100vh;padding:14px 12px 80px}
+  .f-header{flex-direction:column;gap:10px;align-items:flex-start}
+  .f-periodo{width:100%}
+  .f-per-btn{flex:1;text-align:center}
+  .resumen-grid{grid-template-columns:1fr;gap:10px}
+  .resumen-grid-2{grid-template-columns:repeat(2,1fr)}
+  .evol-bars{gap:2px}
+  .evol-label{font-size:8px}
+  .fw > div[style]{grid-template-columns:1fr !important;display:flex !important;flex-direction:column !important}.serv-name{min-width:100px;font-size:11px}
+  .serv-money{min-width:60px;font-size:10px}
+  .cli-grid{grid-template-columns:1fr 1fr !important}
+  .agenda-grid{grid-template-columns:repeat(4,1fr)}
+  .meta-amounts{flex-wrap:wrap;gap:4px}
+  .meta-actual{font-size:22px}
+  .meta-info{grid-template-columns:1fr 1fr}
+}
         .f-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
         .f-title{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .f-sub{font-size:12px;color:var(--text-muted);margin-top:3px}
