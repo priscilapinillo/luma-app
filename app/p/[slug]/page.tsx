@@ -9,11 +9,12 @@ type Terapeuta = {
   bio: string; avatar_url: string; mensaje_bienvenida: string
   tipo_pago: string; pagina_activa: boolean
   template?: string
+  slug?: string
   secciones?: { sobre_mi: boolean; testimonios: boolean; faq: boolean; disponibilidad: boolean }
   faq?: { pregunta: string; respuesta: string }[]
-  whatsapp?: string
   valores?: { icon: string; name: string; desc: string }[]
   testimonios?: { texto: string; nombre: string }[]
+  whatsapp?: string
 }
 type Servicio = { id: string; nombre: string; descripcion: string; duracion_estimada: number; precio_base: number; color: string; tipo_servicio?: string; plazo_horas?: number }
 type Disponibilidad = { dia_semana: number; hora_inicio: string; hora_fin: string; activo: boolean }
@@ -152,6 +153,18 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status')
+    const sessionId = params.get('session_id')
+    if (status === 'approved' && sessionId) {
+      const supabase = createClient()
+      supabase.from('sessions').update({ estado_pago: 'pagado' }).eq('id', sessionId)
+      supabase.from('public_bookings').update({ estado: 'confirmada' }).eq('session_id', sessionId)
+      setEnviado(true)
+    }
+  }, [])
+
+  useEffect(() => {
     const proximos: Date[] = []
     const hoy = new Date()
     let d = new Date(hoy)
@@ -244,6 +257,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         }).select().single()
         if (np) pacienteId = np.id
       }
+  
       const { data: sesion } = await supabase.from('sessions').insert({
         user_id: terapeuta.user_id, patient_id: pacienteId,
         service_id: servicioSel.id,
@@ -252,14 +266,47 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         servicio_nombre: servicioSel.nombre, precio: servicioSel.precio_base,
         estado_pago: 'pendiente', realizado: false, contexto_sesion: form.mensaje,
       }).select().single()
+  
       if (sesion) {
         await supabase.from('public_bookings').insert({
           therapist_id: terapeuta.user_id, patient_name: form.nombre,
           patient_whatsapp: form.whatsapp, patient_message: form.mensaje,
           service_id: servicioSel.id, service_name: servicioSel.nombre,
           fecha: fechaSel, hora: horaSel, duracion: servicioSel.duracion_estimada,
-          precio: servicioSel.precio_base, estado: 'confirmada', session_id: sesion.id,
+          precio: servicioSel.precio_base, estado: 'pendiente_pago', session_id: sesion.id,
         })
+  
+        // Si requiere pago → redirigir a MP
+        console.log('tipo_pago:', terapeuta.tipo_pago)
+        if (terapeuta.tipo_pago === 'sena' || terapeuta.tipo_pago === 'completo') {
+          const monto = terapeuta.tipo_pago === 'completo'
+            ? servicioSel.precio_base
+            : Math.round(servicioSel.precio_base * 0.3) // 30% de seña por defecto
+  
+          const origin = window.location.origin
+          const successUrl = `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`
+          const failureUrl = `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`
+  
+          const res = await fetch('/api/mp/create-preference', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              servicioNombre: servicioSel.nombre,
+              precio: servicioSel.precio_base,
+              monto,
+              therapistId: terapeuta.user_id,
+              successUrl,
+              failureUrl,
+            }),
+          })
+  
+          const data = await res.json()
+          if (data.init_point) {
+            window.location.href = data.init_point
+            return
+          }
+        }
+  
         setEnviado(true)
       }
     } catch(e) { console.error(e) } finally { setEnviando(false) }
@@ -569,7 +616,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                     ? <div style={{gridColumn:'1/-1',textAlign:'center',color:'var(--text-dim)',fontSize:'13px',padding:'16px',fontStyle:'italic'}}>No hay horarios disponibles este día</div>
                     : horariosDisponibles(fechaSel).map(h => (
                       <button key={h} className={`hora-btn${horaSel===h?' sel':''}`}
-                        onClick={() => { setHoraSel(h); setPaso(2) }}>{h}</button>
+                      onClick={() => { setHoraSel(h); setPaso(3) }}>{h}</button>
                     ))}
                 </div>
               )}
