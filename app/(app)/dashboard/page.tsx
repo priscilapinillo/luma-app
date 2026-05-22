@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from '@/components/ToastProvider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, Expand, Check, Search, X,
@@ -66,6 +67,12 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [nuevaTask, setNuevaTask] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+const [onboardingChecks, setOnboardingChecks] = useState({
+  servicio: false,
+  disponibilidad: false,
+  pagina: false,
+})
   const [nombreTerapeuta, setNombreTerapeuta] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [sugerencias, setSugerencias] = useState<Paciente[]>([])
@@ -116,18 +123,27 @@ export default function DashboardPage() {
           supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
           supabase.from('patients').select('*').eq('user_id', user.id),
           supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
-          supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
+          supabase.from('therapist_profiles').select('nombre_profesional, pagina_activa').eq('user_id', user.id).maybeSingle(),
           supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
           supabase.from('availability').select('*').eq('user_id', user.id),
         ])
 
         if (pacs) setPacientes(pacs)
-        if (servs) {
-          setServicios(servs)
-          if (servs.length > 0) {
-            setNuevoTurno(prev => ({ ...prev, servicio: servs[0].nombre, servicioId: servs[0].id, precio: servs[0].precio_base }))
+          if (servs) {
+            setServicios(servs)
+            if (servs.length > 0) {
+              setNuevoTurno(prev => ({ ...prev, servicio: servs[0].nombre, servicioId: servs[0].id, precio: servs[0].precio_base }))
+            }
           }
-        }
+          const yaVioOnboarding = localStorage.getItem('luma-onboarding-done')
+          if (!yaVioOnboarding) {
+            setOnboardingChecks({
+              servicio: (servs?.length || 0) > 0,
+              disponibilidad: (avail?.length || 0) > 0,
+              pagina: prof?.pagina_activa || false,
+            })
+            setShowOnboarding(true)
+          }
         if (tsks) setTasks(tsks.map((t: any) => ({ id: t.id, texto: t.texto, completada: t.completada })))
         if (avail) setDisponibilidad(avail)
         if (prof?.nombre_profesional) setNombreTerapeuta(prof.nombre_profesional)
@@ -334,7 +350,7 @@ export default function DashboardPage() {
 
   function toggleGrabacion() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Tu navegador no soporta reconocimiento de voz. Usá Chrome.')
+      toast('Tu navegador no soporta reconocimiento de voz. Usá Chrome.')
       return
     }
     if (grabando) {
@@ -415,7 +431,7 @@ export default function DashboardPage() {
       const horaFin = horaIni + t.duracion
       return horaInicioNuevo < horaFin && horaFinNuevo > horaIni
     })
-    if (hayConflicto) { alert('⚠️ Ya tenés un turno en ese horario.'); return }
+    if (hayConflicto) { toast('⚠️ Ya tenés un turno en ese horario.'); return }
     const supabase = createClient()
     await supabase.from('sessions').update({ fecha: fecha+'T'+hora+':00', hora }).eq('id', id)
     setTurnos(prev => prev.map(t => t.id === id ? {...t, fecha, hora} : t))
@@ -426,7 +442,7 @@ export default function DashboardPage() {
   async function borrarTurno(id: string) {
     const supabase = createClient()
     const { error } = await supabase.from('sessions').delete().eq('id', id)
-    if (error) { console.error('Error borrando turno:', error); alert('No se pudo eliminar el turno.'); return }
+    if (error) { console.error('Error borrando turno:', error); toast('No se pudo eliminar el turno.'); return }
     setTurnos(prev => prev.filter(t => t.id !== id))
     setTurnoSeleccionado(null)
     setBorrarConfirm(false)
@@ -457,7 +473,7 @@ export default function DashboardPage() {
   }
 
   async function guardarTurno() {
-    if (!nuevoTurno.pacienteNombre || !nuevoTurno.hora) { alert('Completá nombre y hora'); return }
+    if (!nuevoTurno.pacienteNombre || !nuevoTurno.hora) { toast('Completá nombre y hora'); return }
     const horaInicioNuevo = horaAMin(nuevoTurno.hora)
     const horaFinNuevo = horaInicioNuevo + nuevoTurno.duracion
     const hayConflicto = turnos.some(t => {
@@ -466,7 +482,7 @@ export default function DashboardPage() {
       const horaFinExistente = horaInicioExistente + t.duracion
       return horaInicioNuevo < horaFinExistente && horaFinNuevo > horaInicioExistente
     })
-    if (hayConflicto) { alert('⚠️ Ya tenés un turno en ese horario.'); return }
+    if (hayConflicto) { toast('⚠️ Ya tenés un turno en ese horario.'); return }
     setGuardando(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -1199,6 +1215,51 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+
+
+      {/* MODAL ONBOARDING */}
+{showOnboarding && (
+  <div className="mo-overlay" onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}>
+    <div className="mo-box" style={{width:'420px'}} onClick={e => e.stopPropagation()}>
+      <div className="mo-hdr">
+        <span className="mo-title">✦ Bienvenida a Luma</span>
+        <button className="mo-close" onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}><X size={12}/></button>
+      </div>
+      <p style={{fontSize:'13px',color:'var(--text-secondary)',marginBottom:'20px',lineHeight:'1.7'}}>
+        Seguí estos pasos para empezar a usar Luma al 100%.
+      </p>
+      {[
+        { key:'servicio', label:'Creá tu primer servicio', desc:'Andá a Servicios y creá al menos uno', href:'/services', emoji:'✨' },
+        { key:'disponibilidad', label:'Configurá tu disponibilidad', desc:'En Ajustes → tu horario de atención', href:'/settings', emoji:'📅' },
+        { key:'pagina', label:'Activá tu página pública', desc:'En Ajustes → Página pública', href:'/settings', emoji:'🌐' },
+        { key:'link', label:'Compartí tu link', desc:'Envialo a tus consultantes', href:null, emoji:'🔗' },
+      ].map((paso, i) => {
+        const done = onboardingChecks[paso.key as keyof typeof onboardingChecks]
+        return (
+          <div key={i} style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',borderRadius:'12px',background:done?'var(--accent-light)':'var(--bg-input)',border:`0.5px solid ${done?'var(--border)':'var(--border-light)'}`,marginBottom:'8px'}}>
+            <div style={{width:'28px',height:'28px',borderRadius:'50%',background:done?'var(--accent)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',flexShrink:0,color:done?'white':'var(--text-muted)'}}>
+              {done ? '✓' : paso.emoji}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)',textDecoration:done?'line-through':'none',opacity:done?0.6:1}}>{paso.label}</div>
+              <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>{paso.desc}</div>
+            </div>
+            {!done && paso.href && (
+              <a href={paso.href} onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}
+                style={{fontSize:'11px',color:'var(--accent)',fontWeight:600,textDecoration:'none',flexShrink:0}}>
+                Ir →
+              </a>
+            )}
+          </div>
+        )
+      })}
+      <button className="save-btn" style={{marginTop:'8px'}} onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}>
+        Entendido, empezar
+      </button>
+    </div>
+  </div>
+)}
     </>
   )
 }

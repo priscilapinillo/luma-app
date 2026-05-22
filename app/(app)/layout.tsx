@@ -1,5 +1,6 @@
 import Sidebar from "@/components/Sidebar";
 import { AppProvider } from "@/lib/context";
+import ToastProvider from "@/components/ToastProvider";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <ToastProvider />
     </AppProvider>
   )
 }

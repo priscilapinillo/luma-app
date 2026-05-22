@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function RegisterPage() {
@@ -12,7 +11,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [enviado, setEnviado] = useState(false)
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
@@ -39,8 +38,33 @@ export default function RegisterPage() {
       })
     }
 
-    router.push('/dashboard')
+    setEnviado(true)
+    setLoading(false)
   }
+
+  if (enviado) return (
+    <>
+      <style>{`
+        .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F4F2FF; font-family: 'Inter', sans-serif; padding: 24px; }
+      `}</style>
+      <div className="auth-wrap">
+        <div style={{background:'white',borderRadius:'24px',padding:'48px 40px',maxWidth:'440px',width:'100%',textAlign:'center',boxShadow:'0 24px 80px rgba(100,60,200,0.15)'}}>
+          <div style={{fontSize:'48px',marginBottom:'16px'}}>📬</div>
+          <h2 style={{fontSize:'24px',fontWeight:700,color:'#1A1035',marginBottom:'12px',letterSpacing:'-0.5px'}}>Revisá tu email</h2>
+          <p style={{fontSize:'14px',color:'#9B8EC4',lineHeight:1.7,marginBottom:'24px'}}>
+            Te enviamos un link de confirmación a <strong style={{color:'#7C3AED'}}>{email}</strong>.<br/>
+            Hacé click en el link para activar tu cuenta y empezar.
+          </p>
+          <div style={{background:'#F4F2FF',borderRadius:'12px',padding:'14px 16px',fontSize:'13px',color:'#6B5B8A',marginBottom:'24px',lineHeight:1.6}}>
+            ¿No lo encontrás? Revisá la carpeta de <strong>spam o no deseados</strong>.
+          </div>
+          <Link href="/auth/login" style={{display:'block',padding:'13px',background:'linear-gradient(135deg,#7C3AED,#A78BFA)',color:'white',borderRadius:'10px',fontSize:'14px',fontWeight:600,textDecoration:'none'}}>
+            Ya confirmé, ir al login →
+          </Link>
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <>
@@ -76,11 +100,15 @@ export default function RegisterPage() {
         .auth-trial-text strong { color: #7C3AED; }
         .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: #9B8EC4; }
         .auth-footer a { color: #7C3AED; font-weight: 500; text-decoration: none; }
+        @media(max-width:640px){
+          .auth-card{grid-template-columns:1fr}
+          .auth-left{display:none}
+          .auth-right{padding:36px 28px;border-radius:24px}
+        }
       `}</style>
 
       <div className="auth-wrap">
         <div className="auth-card">
-
           <div className="auth-left">
             <span className="auth-left-logo">Luma</span>
             <div className="auth-left-bottom">
@@ -102,52 +130,26 @@ export default function RegisterPage() {
             <form onSubmit={handleRegister}>
               <div className="auth-field">
                 <label className="auth-label">Tu nombre</label>
-                <input
-                  className="auth-input"
-                  type="text"
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                  required
-                  placeholder="Ej: Priscila"
-                />
+                <input className="auth-input" type="text" value={nombre}
+                  onChange={e => setNombre(e.target.value)} required placeholder="Ej: Priscila"/>
               </div>
-
               <div className="auth-field">
                 <label className="auth-label">Email</label>
-                <input
-                  className="auth-input"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  placeholder="tu@email.com"
-                />
+                <input className="auth-input" type="email" value={email}
+                  onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com"/>
               </div>
-
               <div className="auth-field">
                 <label className="auth-label">Contraseña</label>
                 <div className="auth-input-wrap">
-                  <input
-                    className="auth-input"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                  />
-                  <button
-                    type="button"
-                    className="auth-eye"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
+                  <input className="auth-input" type={showPassword ? 'text' : 'password'}
+                    value={password} onChange={e => setPassword(e.target.value)}
+                    required minLength={6} placeholder="Mínimo 6 caracteres"/>
+                  <button type="button" className="auth-eye" onClick={() => setShowPassword(!showPassword)}>
                     {showPassword ? '🙈' : '👁️'}
                   </button>
                 </div>
               </div>
-
               {error && <p className="auth-error">{error}</p>}
-
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? 'Creando cuenta...' : 'Crear cuenta gratis →'}
               </button>
@@ -158,7 +160,6 @@ export default function RegisterPage() {
               <Link href="/auth/login">Iniciá sesión</Link>
             </p>
           </div>
-
         </div>
       </div>
     </>

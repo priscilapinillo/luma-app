@@ -75,3 +75,52 @@ html.dark {
 *, *::before, *::after {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
+
+/* Página pública nunca en dark mode */
+html[data-page="public"] {
+  --bg: initial;
+  --bg-card: initial;
+  --bg-input: initial;
+  --border: initial;
+  --border-light: initial;
+  --text-primary: initial;
+  --text-secondary: initial;
+  --text-muted: initial;
+  --accent: initial;
+  --accent-light: initial;
+  --accent-hover: initial;
+  --shadow: initial;
+}
+/* Neutralizar dark mode en página pública */
+html.dark body:has([data-public-page]) {
+  background: initial;
+  color: initial;
+}
+
+html.dark [data-public-page] * {
+  color: revert;
+  background-color: revert;
+  border-color: revert;
+}
+/* Página pública — forzar colores independiente del tema */
+html[data-page="public"],
+html[data-page="public"].dark {
+  --bg: unset !important;
+  --bg-card: unset !important;
+  --bg-input: unset !important;
+  --border: unset !important;
+  --border-light: unset !important;
+  --text-primary: unset !important;
+  --text-secondary: unset !important;
+  --text-muted: unset !important;
+  --accent: unset !important;
+  --accent-light: unset !important;
+  --shadow: unset !important;
+}
+
+html[data-page="public"].dark body,
+html[data-page="public"].dark body * {
+  color: revert !important;
+  background-color: revert !important;
+  border-color: revert !important;
+}

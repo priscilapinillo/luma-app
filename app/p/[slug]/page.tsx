@@ -153,6 +153,17 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
+    // Guardar estado actual
+    const teniaDark = document.documentElement.classList.contains('dark')
+    document.documentElement.classList.remove('dark')
+    
+    // Restaurar al salir de la página
+    return () => {
+      if (teniaDark) document.documentElement.classList.add('dark')
+    }
+  }, [])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const status = params.get('status')
     const sessionId = params.get('session_id')
@@ -333,7 +344,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   )
 
   return (
-    <>
+    <div data-public-page="true" style={{colorScheme:'normal'}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=${t.googleFonts}&display=swap');
         :root {
@@ -357,8 +368,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           --btn-color: ${t.btnColor};
         }
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:var(--bg);color:var(--text);font-family:var(--font-body);overflow-x:hidden}
-        .nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${isLuna?'linear-gradient(to bottom,rgba(13,11,20,0.95),transparent)':'rgba(255,255,255,0.9)'};backdrop-filter:blur(8px);${!isLuna?'border-bottom:0.5px solid var(--border);':''}}
+        html{background:${t.bg} !important}
+        body{background:${t.bg} !important;color:${t.text} !important;font-family:var(--font-body);overflow-x:hidden}
+        html.dark body{background:${t.bg} !important;color:${t.text} !important}
+        html.dark *{--bg:${t.bg};--bg-card:${t.cardBg};--text-primary:${t.cream};--border:${t.border}}.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${isLuna?'linear-gradient(to bottom,rgba(13,11,20,0.95),transparent)':'rgba(255,255,255,0.9)'};backdrop-filter:blur(8px);${!isLuna?'border-bottom:0.5px solid var(--border);':''}}
         .nav-logo{font-family:var(--font-title);font-size:20px;font-weight:600;color:var(--primary);letter-spacing:3px}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
         .hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
@@ -761,6 +774,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     <footer className="footer">
       © 2025 {terapeuta.nombre_profesional} · Powered by <span>Luma</span>
     </footer>
-    </>
+    </div>
   )
 }
