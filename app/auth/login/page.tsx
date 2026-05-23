@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function AuthPage() {
   const [flipped, setFlipped] = useState(false)
@@ -47,482 +48,380 @@ export default function AuthPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{height:100%;font-family:'Geist',sans-serif}
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        html, body, #__next {
-          height: 100%;
-          width: 100%;
-          overflow: hidden;
-        }
-
-        .scene {
-          position: fixed;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: radial-gradient(ellipse at 40% 30%, #2a1f5e 0%, #13111f 50%, #0a0812 100%);
-          font-family: 'Cormorant Garamond', Georgia, serif;
-          overflow: hidden;
+        .auth-wrap{
+          min-height:100vh;width:100%;
+          display:grid;
+          grid-template-columns:1fr 1fr;
         }
 
-        /* FONDO */
-        .starfield { position: absolute; inset: 0; pointer-events: none; }
-        .star {
-          position: absolute; border-radius: 50%;
-          background: #fff;
-          width: var(--sz); height: var(--sz);
-          opacity: var(--op);
-          animation: twinkle var(--d) var(--dl) ease-in-out infinite alternate;
+        /* LADO IZQUIERDO — decorativo */
+        .auth-left{
+          background:#0A0A0A;
+          position:relative;overflow:hidden;
+          display:flex;flex-direction:column;
+          justify-content:space-between;
+          padding:48px;
         }
-        @keyframes twinkle { to { opacity: 0.05; } }
-
-        .nebula {
-          position: absolute; border-radius: 50%;
-          filter: blur(70px); pointer-events: none;
+        .auth-left-glow1{
+          position:absolute;width:500px;height:500px;border-radius:50%;
+          background:radial-gradient(circle,rgba(139,92,246,0.2),transparent 70%);
+          top:-150px;left:-150px;pointer-events:none;
         }
-        .nb1 { width: 600px; height: 600px; top: -150px; left: -150px; background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%); }
-        .nb2 { width: 500px; height: 500px; bottom: -100px; right: -100px; background: radial-gradient(circle, rgba(167,139,250,0.10) 0%, transparent 70%); }
-        .nb3 { width: 350px; height: 350px; top: 40%; left: 45%; transform: translate(-50%,-50%); background: radial-gradient(circle, rgba(201,168,76,0.05) 0%, transparent 70%); }
-
-        /* CARTA */
-        .carta-wrap {
-          width: 370px;
-          height: 630px;
-          perspective: 1400px;
-          position: relative;
-          z-index: 1;
+        .auth-left-glow2{
+          position:absolute;width:400px;height:400px;border-radius:50%;
+          background:radial-gradient(circle,rgba(236,72,153,0.12),transparent 70%);
+          bottom:-100px;right:-100px;pointer-events:none;
         }
-
-        .carta-inner {
-          width: 100%; height: 100%;
-          position: relative;
-          transform-style: preserve-3d;
-          transition: transform 0.85s cubic-bezier(0.4, 0, 0.2, 1);
-          filter: drop-shadow(0 30px 70px rgba(0,0,0,0.8)) drop-shadow(0 0 50px rgba(139,92,246,0.2));
+        .auth-left-top{position:relative;z-index:1}
+        .auth-left-logo{
+          font-size:24px;font-weight:900;color:white;
+          letter-spacing:-1px;text-decoration:none;display:inline-block;
         }
-        .carta-inner.flipped { transform: rotateY(180deg); }
-
-        .carta-face {
-          position: absolute; inset: 0;
-          backface-visibility: hidden;
-          border-radius: 22px;
-          overflow: hidden;
+        .auth-left-logo span{color:#8B5CF6}
+        .auth-left-center{
+          position:relative;z-index:1;
+          flex:1;display:flex;flex-direction:column;
+          justify-content:center;padding:40px 0;
         }
-
-        /* FRENTE — LOGIN — CLARO */
-        .carta-frente {
-          background: linear-gradient(150deg, #f0eeff 0%, #e8e0ff 40%, #ede8ff 70%, #f5f0ff 100%);
+        .auth-left-tag{
+          font-size:11px;font-weight:700;color:#525252;
+          letter-spacing:3px;text-transform:uppercase;
+          margin-bottom:20px;display:block;
         }
-
-        /* DORSO — REGISTER — OSCURO */
-        .carta-dorso {
-          transform: rotateY(180deg);
-          background: linear-gradient(150deg, #1e1b30 0%, #13111f 40%, #1a1728 70%, #0f0d1a 100%);
+        .auth-left-title{
+          font-size:clamp(36px,4vw,52px);font-weight:900;
+          color:white;letter-spacing:-2px;line-height:1.05;
+          margin-bottom:20px;
         }
-
-        /* SVG MARCO */
-        .carta-svg {
-          position: absolute; inset: 0;
-          width: 100%; height: 100%;
-          pointer-events: none; z-index: 0;
+        .auth-left-title .grad{
+          background:linear-gradient(135deg,#8B5CF6,#EC4899,#F59E0B);
+          -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
         }
-
-        /* CONTENIDO */
-        .carta-body {
-          position: absolute;
-          inset: 68px 28px 60px;
-          display: flex; flex-direction: column;
-          z-index: 1;
+        .auth-left-sub{
+          font-size:15px;color:#525252;line-height:1.65;
+          max-width:380px;
+        }
+        .auth-left-features{
+          display:flex;flex-direction:column;gap:12px;margin-top:32px;
+        }
+        .auth-left-feat{
+          display:flex;align-items:center;gap:10px;
+          font-size:14px;color:#737373;
+        }
+        .auth-left-feat-dot{
+          width:6px;height:6px;border-radius:50%;
+          background:linear-gradient(135deg,#8B5CF6,#EC4899);
+          flex-shrink:0;
+        }
+        .auth-left-bottom{
+          position:relative;z-index:1;
+          font-size:13px;color:#404040;
         }
 
-        /* HEADER */
-        .ch { text-align: center; margin-bottom: 10px; }
-        .ch-roman {
-          font-family: 'Cinzel', serif;
-          font-size: 7.5px; letter-spacing: 5px;
-          text-transform: uppercase; display: block; margin-bottom: 7px;
+        /* DASHBOARD PREVIEW */
+        .dash-preview{
+          position:absolute;
+          right:-40px;bottom:80px;
+          width:340px;
+          border-radius:14px;
+          overflow:hidden;
+          border:1px solid #1F1F1F;
+          box-shadow:0 24px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.03);
+          transform:perspective(1000px) rotateY(-8deg) rotateX(4deg);
+          transition:transform 0.3s;
+          z-index:2;
         }
-        .frente .ch-roman { color: rgba(109,40,217,0.45); }
-        .dorso .ch-roman { color: rgba(201,168,76,0.45); }
-
-        .ch-logo {
-          font-family: 'Cinzel Decorative', serif;
-          font-size: 28px; font-weight: 400;
-          letter-spacing: 5px; display: block; line-height: 1;
-        }
-        .frente .ch-logo { color: #5b21b6; }
-        .dorso .ch-logo { color: #ede8ff; }
-
-        .ch-tag {
-          font-family: 'Cinzel', serif;
-          font-size: 7px; letter-spacing: 3px;
-          text-transform: uppercase; display: block; margin-top: 5px;
-        }
-        .frente .ch-tag { color: rgba(109,40,217,0.3); }
-        .dorso .ch-tag { color: rgba(201,168,76,0.3); }
-
-        /* DIVISOR */
-        .cdiv {
-          display: flex; align-items: center; gap: 6px;
-          margin: 8px 0 12px; font-size: 8px;
-        }
-        .cdiv::before, .cdiv::after { content: ''; flex: 1; height: 0.5px; }
-        .frente .cdiv { color: rgba(109,40,217,0.35); }
-        .frente .cdiv::before, .frente .cdiv::after { background: linear-gradient(90deg,transparent,rgba(109,40,217,0.25),transparent); }
-        .dorso .cdiv { color: rgba(201,168,76,0.35); }
-        .dorso .cdiv::before, .dorso .cdiv::after { background: linear-gradient(90deg,transparent,rgba(201,168,76,0.25),transparent); }
-
-        /* FORM */
-        .cf { flex: 1; display: flex; flex-direction: column; }
-        .cf-title {
-          font-family: 'Cinzel', serif;
-          font-size: 15px; font-weight: 500; margin-bottom: 3px;
-        }
-        .frente .cf-title { color: #3b0764; }
-        .dorso .cf-title { color: #ede8ff; }
-
-        .cf-sub {
-          font-size: 13px; font-style: italic;
-          margin-bottom: 12px; line-height: 1.5;
-        }
-        .frente .cf-sub { color: rgba(91,33,182,0.5); }
-        .dorso .cf-sub { color: rgba(237,232,255,0.4); }
-
-        .cf-field { margin-bottom: 9px; }
-        .cf-label {
-          font-family: 'Cinzel', serif;
-          font-size: 7px; letter-spacing: 3px;
-          text-transform: uppercase; display: block; margin-bottom: 5px;
-        }
-        .frente .cf-label { color: rgba(109,40,217,0.55); }
-        .dorso .cf-label { color: rgba(201,168,76,0.5); }
-
-        .cf-input {
-          width: 100%; padding: 9px 12px;
-          border-radius: 9px; font-size: 13px;
-          font-family: 'Cormorant Garamond', serif;
-          outline: none; transition: all 0.25s;
-        }
-        .frente .cf-input {
-          background: rgba(139,92,246,0.07);
-          border: 1px solid rgba(139,92,246,0.2);
-          color: #3b0764;
-        }
-        .frente .cf-input::placeholder { color: rgba(109,40,217,0.25); }
-        .frente .cf-input:focus {
-          background: rgba(139,92,246,0.12);
-          border-color: rgba(139,92,246,0.45);
-          box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
-        }
-        .dorso .cf-input {
-          background: rgba(237,232,255,0.05);
-          border: 1px solid rgba(237,232,255,0.12);
-          color: #ede8ff;
-        }
-        .dorso .cf-input::placeholder { color: rgba(237,232,255,0.2); }
-        .dorso .cf-input:focus {
-          background: rgba(237,232,255,0.09);
-          border-color: rgba(167,139,250,0.4);
-          box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+        .dash-preview:hover{transform:perspective(1000px) rotateY(-4deg) rotateX(2deg)}
+        .dash-preview img{width:100%;display:block;opacity:0.85}
+        .dash-preview-fade{
+          position:absolute;bottom:0;left:0;right:0;height:120px;
+          background:linear-gradient(to bottom,transparent,#0A0A0A);
+          pointer-events:none;
         }
 
-        .cf-input-wrap { position: relative; }
-        .cf-input-wrap .cf-input { padding-right: 38px; }
-        .cf-eye {
-          position: absolute; right: 11px; top: 50%;
-          transform: translateY(-50%);
-          background: none; border: none; cursor: pointer;
-          font-size: 11px; padding: 0; line-height: 1;
+        /* LADO DERECHO — formulario */
+        .auth-right{
+          background:#FAFAFA;
+          display:flex;flex-direction:column;
+          align-items:center;justify-content:center;
+          padding:40px 40px 300px 40px;
+      
+          position:relative;
         }
-        .frente .cf-eye { color: rgba(109,40,217,0.35); }
-        .dorso .cf-eye { color: rgba(237,232,255,0.3); }
+        .auth-right-inner{width:100%;max-width:480px;}
 
-        .cf-error {
-          font-size: 11px; padding: 7px 10px;
-          border-radius: 7px; margin-bottom: 8px;
-          font-family: 'Cinzel', serif; letter-spacing: 0.3px;
+        /* FLIP CONTAINER */
+        .flip-wrap{
+          width:100%;
+          perspective:1200px;
+          
         }
-        .frente .cf-error { color: #7c2d12; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
-        .dorso .cf-error { color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
+        .flip-inner{
+          position:relative;
+          transform-style:preserve-3d;
+          transition:transform 0.7s cubic-bezier(0.4,0,0.2,1);
+        }
+        .flip-inner.flipped{transform:rotateY(180deg)}
+        .flip-face{
+          width:100%;
+          backface-visibility:hidden;
+        }
+        .flip-face.back{
+          position:absolute;top:0;left:0;
+          transform:rotateY(180deg);
+        }
 
-        .cf-btn {
-          width: 100%; padding: 11px;
-          border-radius: 11px; border: none;
-          font-family: 'Cinzel', serif;
-          font-size: 9px; font-weight: 600;
-          letter-spacing: 4px; text-transform: uppercase;
-          cursor: pointer; transition: all 0.25s; margin-top: 6px;
+        /* FORM COMÚN */
+        .form-logo{font-size:20px;font-weight:900;color:#0A0A0A;letter-spacing:-0.5px;margin-bottom:4px}
+        .form-logo span{color:#8B5CF6}
+        .form-title{font-size:28px;font-weight:900;color:#0A0A0A;letter-spacing:-1px;margin-bottom:6px;margin-top:28px}
+        .form-sub{font-size:14px;color:#737373;margin-bottom:28px;line-height:1.5}
+        .form-field{margin-bottom:14px}
+        .form-label{font-size:12px;font-weight:600;color:#404040;display:block;margin-bottom:6px}
+        .form-input{
+          width:100%;padding:12px 14px;
+          border-radius:10px;border:1.5px solid #E5E5E5;
+          font-size:14px;color:#0A0A0A;
+          outline:none;transition:all 0.2s;
+          font-family:'Geist',sans-serif;
+          background:white;
         }
-        .frente .cf-btn {
-          background: linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa);
-          color: #fff;
-          box-shadow: 0 4px 24px rgba(139,92,246,0.4);
-          border: 1px solid rgba(167,139,250,0.3);
+        .form-input::placeholder{color:#A3A3A3}
+        .form-input:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.1)}
+        .form-input-wrap{position:relative}
+        .form-input-wrap .form-input{padding-right:42px}
+        .form-eye{
+          position:absolute;right:12px;top:50%;transform:translateY(-50%);
+          background:none;border:none;cursor:pointer;
+          color:#A3A3A3;font-size:14px;padding:0;
+          transition:color 0.2s;
         }
-        .frente .cf-btn:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 32px rgba(139,92,246,0.55);
+        .form-eye:hover{color:#525252}
+        .form-error{
+          font-size:12px;color:#DC2626;margin-bottom:12px;
+          padding:10px 12px;background:#FEF2F2;
+          border-radius:8px;border:1px solid #FECACA;
         }
-        .dorso .cf-btn {
-          background: linear-gradient(135deg, #5b21b6, #7c3aed, #8b5cf6);
-          color: #ede8ff;
-          box-shadow: 0 4px 24px rgba(139,92,246,0.35);
-          border: 1px solid rgba(201,168,76,0.2);
+        .form-btn{
+          width:100%;padding:13px;
+          background:#0A0A0A;color:white;
+          border:none;border-radius:10px;
+          font-size:14px;font-weight:700;cursor:pointer;
+          font-family:'Geist',sans-serif;letter-spacing:-0.2px;
+          transition:all 0.2s;
+          box-shadow:0 4px 14px rgba(0,0,0,0.15);
+          margin-top:4px;
         }
-        .dorso .cf-btn:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 32px rgba(139,92,246,0.5);
+        .form-btn:hover{background:#262626;transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,0.2)}
+        .form-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+        .form-divider{
+          display:flex;align-items:center;gap:10px;
+          margin:20px 0;color:#E5E5E5;font-size:12px;color:#A3A3A3;
         }
-        .cf-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-        .cf-flip {
-          text-align: center; margin-top: 10px;
-          font-size: 12px; font-style: italic;
+        .form-divider::before,.form-divider::after{content:'';flex:1;height:1px;background:#E5E5E5}
+        .form-switch{
+          text-align:center;margin-top:20px;
+          font-size:13px;color:#737373;
         }
-        .frente .cf-flip { color: rgba(91,33,182,0.5); }
-        .dorso .cf-flip { color: rgba(237,232,255,0.35); }
-        .cf-flip-link {
-          cursor: pointer; font-weight: 500; font-style: normal;
-          text-decoration: underline; text-underline-offset: 2px;
-          transition: color 0.2s;
+        .form-switch-link{
+          color:#8B5CF6;font-weight:600;cursor:pointer;
+          text-decoration:none;transition:color 0.2s;
+          background:none;border:none;font-family:'Geist',sans-serif;
+          font-size:13px;padding:0;
         }
-        .frente .cf-flip-link { color: #7c3aed; }
-        .frente .cf-flip-link:hover { color: #5b21b6; }
-        .dorso .cf-flip-link { color: #c9a84c; }
-        .dorso .cf-flip-link:hover { color: #e8d5a3; }
+        .form-switch-link:hover{color:#7C3AED}
+        .form-trial{
+          display:flex;align-items:center;gap:8px;
+          padding:10px 12px;
+          background:#F4F0FF;border:1px solid #DDD6FE;
+          border-radius:8px;margin-bottom:20px;
+          font-size:13px;color:#6D28D9;
+        }
+        .form-trial-dot{width:6px;height:6px;border-radius:50%;background:#8B5CF6;flex-shrink:0;animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 
         /* ÉXITO */
-        .cf-exito {
-          flex: 1; display: flex; flex-direction: column;
-          align-items: center; justify-content: center;
-          text-align: center; gap: 10px;
+        .exito{text-align:center;padding:20px 0}
+        .exito-icon{font-size:40px;margin-bottom:16px;display:block}
+        .exito-title{font-size:22px;font-weight:800;color:#0A0A0A;letter-spacing:-0.5px;margin-bottom:8px}
+        .exito-sub{font-size:14px;color:#737373;line-height:1.6;margin-bottom:20px}
+        .exito-email{color:#8B5CF6;font-weight:600}
+        .exito-hint{font-size:13px;color:#A3A3A3;padding:10px 14px;background:#F5F5F5;border-radius:8px;margin-bottom:20px;line-height:1.5}
+        .exito-back{
+          font-size:13px;color:#8B5CF6;font-weight:600;cursor:pointer;
+          background:none;border:none;font-family:'Geist',sans-serif;padding:0;
         }
-        .cf-exito-icon { font-size: 38px; }
-        .cf-exito-title { font-family: 'Cinzel', serif; font-size: 17px; font-weight: 500; color: #ede8ff; }
-        .cf-exito-sub { font-size: 13px; font-style: italic; color: rgba(237,232,255,0.5); line-height: 1.6; }
-        .cf-exito-email { color: #c9a84c; font-style: normal; }
-        .cf-exito-hint {
-          font-size: 11px; line-height: 1.6; padding: 9px 12px;
-          border-radius: 8px; color: rgba(201,168,76,0.5);
-          background: rgba(201,168,76,0.05); border: 1px solid rgba(201,168,76,0.12);
-        }
-        .cf-exito-btn {
-          padding: 9px 22px; background: transparent;
-          border: 1px solid rgba(201,168,76,0.3); color: #c9a84c;
-          border-radius: 20px; font-family: 'Cinzel', serif;
-          font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
-          cursor: pointer; transition: all 0.25s;
-        }
-        .cf-exito-btn:hover { background: rgba(201,168,76,0.08); color: #e8d5a3; }
 
-        /* NÚMERO INFERIOR */
-        .cn {
-          position: absolute; bottom: 14px; left: 0; right: 0;
-          text-align: center; font-family: 'Cinzel', serif;
-          font-size: 7px; letter-spacing: 5px; text-transform: uppercase; z-index: 1;
-        }
-        .frente .cn { color: rgba(109,40,217,0.25); }
-        .dorso .cn { color: rgba(201,168,76,0.2); }
-
-        @media (max-width: 420px) {
-          .carta-wrap { width: 330px; height: 590px; }
-          .carta-body { inset: 60px 22px 52px; }
+        @media(max-width:768px){
+          .auth-wrap{grid-template-columns:1fr}
+          .auth-left{display:none}
+          .auth-right{padding:40px 24px;min-height:100vh}
         }
       `}</style>
 
-      {/* FONDO */}
-      <div className="starfield">
-        <div className="nebula nb1" /><div className="nebula nb2" /><div className="nebula nb3" />
-        {Array.from({length: 55}).map((_,i) => (
-          <div key={i} className="star" style={{
-            left:`${Math.random()*100}%`, top:`${Math.random()*100}%`,
-            '--sz':`${Math.random()*1.8+0.4}px`,
-            '--op': Math.random()*0.35+0.08,
-            '--d':`${Math.random()*4+2}s`,
-            '--dl':`${Math.random()*6}s`,
-          } as any}/>
-        ))}
-      </div>
+      <div className="auth-wrap">
 
-      {/* CARTA */}
-      <div className="carta-wrap">
-        <div className={`carta-inner${flipped?' flipped':''}`}>
+        {/* IZQUIERDA */}
+        <div className="auth-left">
+          <div className="auth-left-glow1"/>
+          <div className="auth-left-glow2"/>
 
-          {/* ── FRENTE — LOGIN — CLARO ── */}
-          <div className="carta-face carta-frente frente">
-
-            {/* Marco SVG violeta */}
-            <svg className="carta-svg" viewBox="0 0 370 630" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="2" width="366" height="626" rx="20" fill="none" stroke="rgba(139,92,246,0.3)" strokeWidth="1"/>
-              <rect x="7" y="7" width="356" height="616" rx="16" fill="none" stroke="rgba(139,92,246,0.12)" strokeWidth="0.5"/>
-              {/* Arco superior */}
-              <path d="M 55 78 Q 185 15 315 78" fill="none" stroke="rgba(139,92,246,0.2)" strokeWidth="0.8"/>
-              <path d="M 75 88 Q 185 35 295 88" fill="none" stroke="rgba(139,92,246,0.1)" strokeWidth="0.5"/>
-              {/* Luna */}
-              <path d="M 172 20 Q 185 14 198 20 Q 190 28 180 28 Q 170 28 172 20Z" fill="rgba(139,92,246,0.35)"/>
-              {/* Estrellas */}
-              <text x="32" y="44" fontSize="11" fill="rgba(139,92,246,0.25)" textAnchor="middle">✦</text>
-              <text x="338" y="44" fontSize="11" fill="rgba(139,92,246,0.25)" textAnchor="middle">✦</text>
-              <text x="185" y="46" fontSize="8" fill="rgba(139,92,246,0.2)" textAnchor="middle">· · ·</text>
-              {/* Líneas laterales */}
-              <line x1="16" y1="105" x2="16" y2="525" stroke="rgba(139,92,246,0.1)" strokeWidth="0.5"/>
-              <line x1="354" y1="105" x2="354" y2="525" stroke="rgba(139,92,246,0.1)" strokeWidth="0.5"/>
-              {/* Rombos */}
-              <rect x="12" y="205" width="8" height="8" fill="rgba(139,92,246,0.2)" transform="rotate(45 16 209)"/>
-              <rect x="350" y="205" width="8" height="8" fill="rgba(139,92,246,0.2)" transform="rotate(45 354 209)"/>
-              <rect x="12" y="315" width="8" height="8" fill="rgba(139,92,246,0.2)" transform="rotate(45 16 319)"/>
-              <rect x="350" y="315" width="8" height="8" fill="rgba(139,92,246,0.2)" transform="rotate(45 354 319)"/>
-              {/* Arco inferior */}
-              <path d="M 55 555 Q 185 615 315 555" fill="none" stroke="rgba(139,92,246,0.2)" strokeWidth="0.8"/>
-              <path d="M 75 545 Q 185 595 295 545" fill="none" stroke="rgba(139,92,246,0.1)" strokeWidth="0.5"/>
-              {/* Esquinas */}
-              <path d="M 18 18 L 48 18 M 18 18 L 18 48" stroke="rgba(139,92,246,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 352 18 L 322 18 M 352 18 L 352 48" stroke="rgba(139,92,246,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 18 612 L 48 612 M 18 612 L 18 582" stroke="rgba(139,92,246,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 352 612 L 322 612 M 352 612 L 352 582" stroke="rgba(139,92,246,0.4)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              {/* Banda inferior */}
-              <rect x="2" y="584" width="366" height="44" fill="rgba(139,92,246,0.06)"/>
-              <line x1="2" y1="584" x2="368" y2="584" stroke="rgba(139,92,246,0.2)" strokeWidth="0.5"/>
-              <text x="32" y="612" fontSize="9" fill="rgba(139,92,246,0.2)" textAnchor="middle">✦</text>
-              <text x="338" y="612" fontSize="9" fill="rgba(139,92,246,0.2)" textAnchor="middle">✦</text>
-            </svg>
-
-            <div className="carta-body">
-              <div className="ch">
-                <span className="ch-roman">✦ La Luna · XVIII ✦</span>
-                <span className="ch-logo">Luma</span>
-                <span className="ch-tag">tu práctica, en orden</span>
-              </div>
-              <div className="cdiv">— ✧ —</div>
-              <div className="cf">
-                <div className="cf-title">Iniciá sesión</div>
-                <div className="cf-sub">Accedé a tu espacio y retomá donde lo dejaste.</div>
-                <form onSubmit={handleLogin}>
-                  <div className="cf-field">
-                    <label className="cf-label">Email</label>
-                    <input className="cf-input" type="email" value={email}
-                      onChange={e=>setEmail(e.target.value)} required placeholder="tu@email.com"/>
-                  </div>
-                  <div className="cf-field">
-                    <label className="cf-label">Contraseña</label>
-                    <div className="cf-input-wrap">
-                      <input className="cf-input" type={showPassword?'text':'password'}
-                        value={password} onChange={e=>setPassword(e.target.value)}
-                        required placeholder="••••••••"/>
-                      <button type="button" className="cf-eye"
-                        onClick={()=>setShowPassword(!showPassword)}>
-                        {showPassword?'○':'●'}
-                      </button>
-                    </div>
-                  </div>
-                  {error && <div className="cf-error">{error}</div>}
-                  <button type="submit" className="cf-btn" disabled={loading}>
-                    {loading?'Ingresando...':'✦ Ingresar'}
-                  </button>
-                </form>
-                <div className="cf-flip">
-                  ¿No tenés cuenta?{' '}
-                  <span className="cf-flip-link" onClick={()=>{setFlipped(true);setError('')}}>
-                    Registrate gratis
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="cn">Luma · I</div>
+          <div className="auth-left-top">
+            <Link href="/" className="auth-left-logo">Luma<span>.</span></Link>
           </div>
 
-          {/* ── DORSO — REGISTER — OSCURO ── */}
-          <div className="carta-face carta-dorso dorso">
-
-            {/* Marco SVG dorado */}
-            <svg className="carta-svg" viewBox="0 0 370 630" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="2" width="366" height="626" rx="20" fill="none" stroke="rgba(201,168,76,0.3)" strokeWidth="1"/>
-              <rect x="7" y="7" width="356" height="616" rx="16" fill="none" stroke="rgba(201,168,76,0.12)" strokeWidth="0.5"/>
-              <path d="M 55 78 Q 185 15 315 78" fill="none" stroke="rgba(201,168,76,0.18)" strokeWidth="0.8"/>
-              <path d="M 75 88 Q 185 35 295 88" fill="none" stroke="rgba(201,168,76,0.09)" strokeWidth="0.5"/>
-              <path d="M 172 20 Q 185 14 198 20 Q 190 28 180 28 Q 170 28 172 20Z" fill="rgba(201,168,76,0.3)"/>
-              <text x="32" y="44" fontSize="11" fill="rgba(201,168,76,0.22)" textAnchor="middle">✦</text>
-              <text x="338" y="44" fontSize="11" fill="rgba(201,168,76,0.22)" textAnchor="middle">✦</text>
-              <text x="185" y="46" fontSize="8" fill="rgba(201,168,76,0.18)" textAnchor="middle">· · ·</text>
-              <line x1="16" y1="105" x2="16" y2="525" stroke="rgba(201,168,76,0.08)" strokeWidth="0.5"/>
-              <line x1="354" y1="105" x2="354" y2="525" stroke="rgba(201,168,76,0.08)" strokeWidth="0.5"/>
-              <rect x="12" y="205" width="8" height="8" fill="rgba(201,168,76,0.18)" transform="rotate(45 16 209)"/>
-              <rect x="350" y="205" width="8" height="8" fill="rgba(201,168,76,0.18)" transform="rotate(45 354 209)"/>
-              <rect x="12" y="315" width="8" height="8" fill="rgba(201,168,76,0.18)" transform="rotate(45 16 319)"/>
-              <rect x="350" y="315" width="8" height="8" fill="rgba(201,168,76,0.18)" transform="rotate(45 354 319)"/>
-              <path d="M 55 555 Q 185 615 315 555" fill="none" stroke="rgba(201,168,76,0.18)" strokeWidth="0.8"/>
-              <path d="M 75 545 Q 185 595 295 545" fill="none" stroke="rgba(201,168,76,0.09)" strokeWidth="0.5"/>
-              <path d="M 18 18 L 48 18 M 18 18 L 18 48" stroke="rgba(201,168,76,0.35)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 352 18 L 322 18 M 352 18 L 352 48" stroke="rgba(201,168,76,0.35)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 18 612 L 48 612 M 18 612 L 18 582" stroke="rgba(201,168,76,0.35)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <path d="M 352 612 L 322 612 M 352 612 L 352 582" stroke="rgba(201,168,76,0.35)" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              <rect x="2" y="584" width="366" height="44" fill="rgba(201,168,76,0.04)"/>
-              <line x1="2" y1="584" x2="368" y2="584" stroke="rgba(201,168,76,0.18)" strokeWidth="0.5"/>
-              <text x="32" y="612" fontSize="9" fill="rgba(201,168,76,0.18)" textAnchor="middle">✦</text>
-              <text x="338" y="612" fontSize="9" fill="rgba(201,168,76,0.18)" textAnchor="middle">✦</text>
-            </svg>
-
-            <div className="carta-body">
-              <div className="ch">
-                <span className="ch-roman">✦ La Luna · XVIII ✦</span>
-                <span className="ch-logo">Luma</span>
-                <span className="ch-tag">tu práctica, en orden</span>
-              </div>
-              <div className="cdiv">— ✧ —</div>
-              {enviado ? (
-                <div className="cf-exito">
-                  <div className="cf-exito-icon">📬</div>
-                  <div className="cf-exito-title">Revisá tu email</div>
-                  <div className="cf-exito-sub">
-                    Te enviamos un link a <span className="cf-exito-email">{regEmail}</span>
-                  </div>
-                  <div className="cf-exito-hint">¿No lo encontrás? Revisá la carpeta de spam.</div>
-                  <button className="cf-exito-btn" onClick={()=>{setFlipped(false);setEnviado(false)}}>
-                    Volver al login
-                  </button>
+          <div className="auth-left-center">
+            <span className="auth-left-tag">Para profesionales del bienestar</span>
+            <h2 className="auth-left-title">
+              Tu trabajo,<br/>
+              <span className="grad">organizado<br/>de verdad.</span>
+            </h2>
+            <p className="auth-left-sub">
+              Agenda, historial, cobros y página de reservas — todo en un solo lugar.
+            </p>
+            <div className="auth-left-features">
+              {[
+                'Historial completo de cada consultante',
+                'Página de reservas con Mercado Pago',
+                'Dashboard de finanzas en tiempo real',
+                '7 días gratis · Sin tarjeta',
+              ].map((f,i) => (
+                <div key={i} className="auth-left-feat">
+                  <div className="auth-left-feat-dot"/>
+                  {f}
                 </div>
-              ) : (
-                <div className="cf">
-                  <div className="cf-title">Empezá gratis</div>
-                  <div className="cf-sub">7 días para explorar todo. Sin tarjeta.</div>
-                  <form onSubmit={handleRegister}>
-                    <div className="cf-field">
-                      <label className="cf-label">Tu nombre</label>
-                      <input className="cf-input" type="text" value={nombre}
-                        onChange={e=>setNombre(e.target.value)} required placeholder="Ej: Florencia"/>
+              ))}
+            </div>
+
+            {/* DASHBOARD PREVIEW */}
+            <div className="dash-preview" style={{position:'relative',right:'unset',bottom:'unset',width:'100%',marginTop:'32px',transform:'none'}}>
+              <img src="/screenshots/dashboard.png" alt="Dashboard"/>
+              <div className="dash-preview-fade"/>
+            </div>
+          </div>
+
+          <div className="auth-left-bottom">
+            USD 7/mes · Cancelás cuando querés
+          </div>
+        </div>
+
+        {/* DERECHA */}
+        <div className="auth-right">
+          <div className="auth-right-inner">
+
+            <div className="form-logo">Luma<span>.</span></div>
+
+            <div className="flip-wrap">
+              <div className={`flip-inner${flipped ? ' flipped' : ''}`}>
+
+                {/* FRENTE — LOGIN */}
+                <div className="flip-face front">
+                  <div className="form-title">Iniciá sesión</div>
+                  <p className="form-sub">Bienvenida de vuelta. Tu trabajo te espera.</p>
+                  <form onSubmit={handleLogin}>
+                    <div className="form-field">
+                      <label className="form-label">Email</label>
+                      <input className="form-input" type="email" value={email}
+                        onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com"/>
                     </div>
-                    <div className="cf-field">
-                      <label className="cf-label">Email</label>
-                      <input className="cf-input" type="email" value={regEmail}
-                        onChange={e=>setRegEmail(e.target.value)} required placeholder="tu@email.com"/>
+                    <div className="form-field">
+                      <label className="form-label">Contraseña</label>
+                      <div className="form-input-wrap">
+                        <input className="form-input"
+                          type={showPassword ? 'text' : 'password'}
+                          value={password} onChange={e => setPassword(e.target.value)}
+                          required placeholder="••••••••••"/>
+                        <button type="button" className="form-eye"
+                          onClick={() => setShowPassword(!showPassword)}>
+                          {showPassword ? '○' : '●'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="cf-field">
-                      <label className="cf-label">Contraseña</label>
-                      <input className="cf-input" type="password" value={regPassword}
-                        onChange={e=>setRegPassword(e.target.value)} required
-                        minLength={6} placeholder="Mínimo 6 caracteres"/>
-                    </div>
-                    {regError && <div className="cf-error">{regError}</div>}
-                    <button type="submit" className="cf-btn" disabled={regLoading}>
-                      {regLoading?'Creando cuenta...':'✦ Crear cuenta'}
+                    {error && <div className="form-error">{error}</div>}
+                    <button type="submit" className="form-btn" disabled={loading}>
+                      {loading ? 'Ingresando...' : 'Ingresar →'}
                     </button>
                   </form>
-                  <div className="cf-flip">
-                    ¿Ya tenés cuenta?{' '}
-                    <span className="cf-flip-link" onClick={()=>{setFlipped(false);setRegError('')}}>
-                      Iniciá sesión
-                    </span>
+                  <div className="form-divider">o</div>
+                  <div className="form-switch">
+                    ¿No tenés cuenta?{' '}
+                    <button className="form-switch-link"
+                      onClick={() => { setFlipped(true); setError('') }}>
+                      Registrate gratis
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-            <div className="cn">Luma · II</div>
-          </div>
 
+                {/* DORSO — REGISTER */}
+                <div className="flip-face back">
+                  {enviado ? (
+                    <div className="exito">
+                      <span className="exito-icon">📬</span>
+                      <div className="exito-title">Revisá tu email</div>
+                      <p className="exito-sub">
+                        Te enviamos un link a{' '}
+                        <span className="exito-email">{regEmail}</span>.
+                        Hacé click para activar tu cuenta.
+                      </p>
+                      <div className="exito-hint">
+                        ¿No lo encontrás? Revisá la carpeta de spam o no deseados.
+                      </div>
+                      <button className="exito-back"
+                        onClick={() => { setFlipped(false); setEnviado(false) }}>
+                        ← Volver al login
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="form-title">Empezá gratis</div>
+                      <div className="form-trial">
+                        <div className="form-trial-dot"/>
+                        <span><strong>7 días gratis</strong> · Después USD 7/mes · Cancelás cuando querés</span>
+                      </div>
+                      <form onSubmit={handleRegister}>
+                        <div className="form-field">
+                          <label className="form-label">Tu nombre</label>
+                          <input className="form-input" type="text" value={nombre}
+                            onChange={e => setNombre(e.target.value)} required placeholder="Ej: Priscila"/>
+                        </div>
+                        <div className="form-field">
+                          <label className="form-label">Email</label>
+                          <input className="form-input" type="email" value={regEmail}
+                            onChange={e => setRegEmail(e.target.value)} required placeholder="tu@email.com"/>
+                        </div>
+                        <div className="form-field">
+                          <label className="form-label">Contraseña</label>
+                          <input className="form-input" type="password" value={regPassword}
+                            onChange={e => setRegPassword(e.target.value)}
+                            required minLength={6} placeholder="Mínimo 6 caracteres"/>
+                        </div>
+                        {regError && <div className="form-error">{regError}</div>}
+                        <button type="submit" className="form-btn" disabled={regLoading}>
+                          {regLoading ? 'Creando cuenta...' : 'Crear cuenta gratis →'}
+                        </button>
+                      </form>
+                      <div className="form-divider">o</div>
+                      <div className="form-switch">
+                        ¿Ya tenés cuenta?{' '}
+                        <button className="form-switch-link"
+                          onClick={() => { setFlipped(false); setRegError('') }}>
+                          Iniciá sesión
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+              </div>
+            </div>
+
+          </div>
         </div>
+
       </div>
     </>
   )
