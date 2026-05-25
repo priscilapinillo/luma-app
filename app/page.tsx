@@ -441,7 +441,7 @@ export default function LandingPage() {
       <section className="hero">
         <div className="hero-badge">
           <div className="hero-badge-dot"/>
-          Lanzamiento · USD 7/mes · 7 días gratis
+          Lanzamiento · ARS $9.900/mes · 7 días gratis
         </div>
         <h1 className="hero-title">
           Tu trabajo,<br/>
@@ -564,8 +564,8 @@ export default function LandingPage() {
         <div className="precio-card">
           <div style={{fontSize:'11px',fontWeight:700,color:'#8B5CF6',letterSpacing:'3px',textTransform:'uppercase'}}>Todo incluido</div>
           <div className="precio-amount">
-            <span style={{fontSize:'16px',color:'#A3A3A3',marginBottom:'10px',fontWeight:500}}>USD</span>
-            <span className="precio-num">7</span>
+            <span style={{fontSize:'16px',color:'#A3A3A3',marginBottom:'10px',fontWeight:500}}>ARS</span>
+            <span className="precio-num">9.900</span>
             <span className="precio-unit">/mes</span>
           </div>
           <div className="precio-trial">7 días gratis · Sin tarjeta</div>

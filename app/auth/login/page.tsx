@@ -313,7 +313,7 @@ export default function AuthPage() {
           </div>
 
           <div className="auth-left-bottom">
-            USD 7/mes · Cancelás cuando querés
+            ARS $9.900/mes · Cancelás cuando querés
           </div>
         </div>
 
@@ -388,7 +388,7 @@ export default function AuthPage() {
                       <div className="form-title">Empezá gratis</div>
                       <div className="form-trial">
                         <div className="form-trial-dot"/>
-                        <span><strong>7 días gratis</strong> · Después USD 7/mes · Cancelás cuando querés</span>
+                        <span><strong>7 días gratis</strong> · Después ARS $9.900/mes · Cancelás cuando querés</span>
                       </div>
                       <form onSubmit={handleRegister}>
                         <div className="form-field">
