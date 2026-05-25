@@ -461,7 +461,7 @@ export default function PacientesPage() {
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'6px'}}>
     <div className="pr-info-value">{pacienteSeleccionado.celular||'—'}</div>
     {pacienteSeleccionado.celular && (
-      <a href={`https://wa.me/549${pacienteSeleccionado.celular.replace(/\D/g,'')}`}
+      <a href={`https://wa.me/${pacienteSeleccionado.celular.replace(/\D/g,'').replace(/^0+/,'')}`}
         target="_blank" rel="noopener noreferrer"
         style={{display:'flex',alignItems:'center',gap:'4px',padding:'4px 9px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'10px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0',whiteSpace:'nowrap',flexShrink:0}}>
         💬 WA
@@ -618,8 +618,8 @@ export default function PacientesPage() {
             </div>
             <div className="field-row">
               <div className="field">
-                <label>Celular</label>
-                <input placeholder="Ej: 2236789012" value={form.celular} onChange={e => setForm({...form, celular: e.target.value})}/>
+              <label>Celular (con código de país)</label>
+                <input placeholder="Ej: 5492236789012" value={form.celular} onChange={e => setForm({...form, celular: e.target.value})}/>
               </div>
               <div className="field">
                 <label>Email</label>

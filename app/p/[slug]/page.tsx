@@ -148,6 +148,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [mostrarCalFull, setMostrarCalFull] = useState(false)
   const [faqAbierto, setFaqAbierto] = useState<number|null>(null)
   const reservaRef = useRef<HTMLDivElement>(null)
+  const horariosRef = useRef<HTMLDivElement>(null)
+  const formularioRef = useRef<HTMLDivElement>(null)
   const [form, setForm] = useState({ nombre: '', whatsapp: '', mensaje: '' })
 
   useEffect(() => { cargarDatos() }, [])
@@ -591,6 +593,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                     setFechaSel(new Date().toISOString().split('T')[0])
                     setHoraSel('00:00'); setPaso(3)
                   } else { setPaso(2) }
+                  setTimeout(() => {
+                    if (s.tipo_servicio === 'entrega') {
+                      formularioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    } else {
+                      horariosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }
+                  }, 150)
                 }}>
                 <div className="serv-tipo">{s.tipo_servicio === 'entrega' ? `⏳ Entrega en ${s.plazo_horas}hs` : '🔴 Sesión en vivo'}</div>
                 <div className="serv-nombre">{s.nombre}</div>
@@ -611,7 +620,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         {/* DISPONIBILIDAD */}
         {paso >= 1 && paso < 3 && servicioSel && servicioSel.tipo_servicio !== 'entrega' && !enviado && secciones.disponibilidad && (
-          <div style={{marginTop:'32px'}}>
+          <div ref={horariosRef} style={{marginTop:'32px'}}>
             <div className="section-label" style={{marginBottom:'16px'}}>Próximos turnos disponibles</div>
             {!mostrarCalFull ? (<>
               <div className="dias-scroll">
@@ -666,7 +675,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         {/* FORMULARIO */}
         {paso >= 3 && fechaSel && horaSel && !enviado && (
-          <div className="form-wrap">
+          <div className="form-wrap" ref={formularioRef}>
             <div style={{height:'1px',background:'var(--border)',margin:'28px 0'}}/>
             <div className="section-label" style={{marginBottom:'20px'}}>Tus datos</div>
             <div className="field">
@@ -709,7 +718,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               Tu sesión de <em>{servicioSel?.nombre}</em> quedó agendada.
               {terapeuta.nombre_profesional} se va a contactar con vos pronto.
             </p>
-            <a className="wsp-btn" href={`https://wa.me/549${terapeuta.whatsapp || ''}`} target="_blank" rel="noopener noreferrer">
+            <a className="wsp-btn" href={`https://wa.me/${(terapeuta.whatsapp || '').replace(/\D/g,'').replace(/^0+/,'')}`} target="_blank" rel="noopener noreferrer">
               💬 Escribir por WhatsApp
             </a>
           </div>
@@ -769,7 +778,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </div>
       </section>
 
-      {terapeuta.whatsapp && <a href={`https://wa.me/549${terapeuta.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" style={{position:'fixed',bottom:'24px',right:'24px',zIndex:200,display:'flex',alignItems:'center',gap:'10px',padding:'12px 20px',background:'#25D366',color:'white',borderRadius:'50px',fontFamily:'var(--font-body)',fontSize:'13px',fontWeight:600,textDecoration:'none',boxShadow:'0 6px 24px rgba(37,211,102,0.4)'}}>💬 ¿Dudas? Escribime</a>}
+      {terapeuta.whatsapp && <a href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}`}target="_blank" rel="noopener noreferrer" style={{position:'fixed',bottom:'24px',right:'24px',zIndex:200,display:'flex',alignItems:'center',gap:'10px',padding:'12px 20px',background:'#25D366',color:'white',borderRadius:'50px',fontFamily:'var(--font-body)',fontSize:'13px',fontWeight:600,textDecoration:'none',boxShadow:'0 6px 24px rgba(37,211,102,0.4)'}}>💬 ¿Dudas? Escribime</a>}
 
     <footer className="footer">
       © 2025 {terapeuta.nombre_profesional} · Powered by <span>Luma</span>

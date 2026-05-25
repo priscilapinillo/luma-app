@@ -124,3 +124,22 @@ html[data-page="public"].dark body * {
   background-color: revert !important;
   border-color: revert !important;
 }
+/* Evitar zoom en inputs mobile */
+@media(max-width:768px){
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+/* Scroll correcto en modales mobile */
+@media(max-width:768px){
+  .mo-overlay{
+    align-items: flex-end;
+  }
+  .mo-box{
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: 22px 22px 0 0;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}

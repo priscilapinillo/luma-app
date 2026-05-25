@@ -12,6 +12,7 @@ export default function Sidebar() {
   const [dark, setDark] = useState(false)
   const [perfil, setPerfil] = useState({ nombre: '', plan: 'Trial activo' })
   const [isMobile, setIsMobile] = useState(false)
+  const [menuMobile, setMenuMobile] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
@@ -101,6 +102,7 @@ export default function Sidebar() {
             transition:all 0.15s;
           }
         `}</style>
+
         <nav className="sb-mobile">
           {links.map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}
@@ -110,6 +112,56 @@ export default function Sidebar() {
             </Link>
           ))}
         </nav>
+
+        {/* BOTÓN FLOTANTE */}
+        <button onClick={() => setMenuMobile(!menuMobile)} style={{
+          position:'fixed',bottom:'72px',right:'16px',zIndex:300,
+          width:'44px',height:'44px',borderRadius:'50%',
+          background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',
+          border:'none',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',
+          boxShadow:'0 4px 16px rgba(139,92,246,0.4)',
+          fontSize:'18px',
+        }}>⚙️</button>
+
+        {menuMobile && (<>
+          <div style={{
+            position:'fixed',bottom:'124px',right:'16px',zIndex:300,
+            background:'var(--bg-card)',borderRadius:'16px',
+            border:'0.5px solid var(--border-light)',
+            boxShadow:'0 8px 32px rgba(0,0,0,0.2)',
+            overflow:'hidden',minWidth:'180px',
+          }}>
+            <button onClick={toggleTheme} style={{
+              width:'100%',padding:'12px 16px',background:'transparent',
+              border:'none',borderBottom:'0.5px solid var(--border-light)',
+              display:'flex',alignItems:'center',gap:'10px',
+              fontSize:'13px',color:'var(--text-primary)',cursor:'pointer',
+              fontFamily:'inherit',textAlign:'left' as const,
+            }}>
+              {dark ? '☀️' : '🌙'} {dark ? 'Modo claro' : 'Modo oscuro'}
+            </button>
+            <button onClick={() => { setMenuMobile(false); handleLogout() }} style={{
+              width:'100%',padding:'12px 16px',background:'transparent',
+              border:'none',borderBottom:'0.5px solid var(--border-light)',
+              display:'flex',alignItems:'center',gap:'10px',
+              fontSize:'13px',color:'var(--text-primary)',cursor:'pointer',
+              fontFamily:'inherit',textAlign:'left' as const,
+            }}>
+              🚪 Cerrar sesión
+            </button>
+            <a href="mailto:soporte@luma.app" style={{
+              display:'flex',alignItems:'center',gap:'10px',
+              padding:'12px 16px',
+              fontSize:'13px',color:'var(--text-primary)',textDecoration:'none',
+            }}>
+              💬 Ayuda
+            </a>
+          </div>
+          <div onClick={() => setMenuMobile(false)} style={{
+            position:'fixed',inset:0,zIndex:299,
+          }}/>
+        </>)}
       </>
     )
   }

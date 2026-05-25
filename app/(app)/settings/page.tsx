@@ -152,18 +152,27 @@ export default function AjustesPage() {
     const file = e.target.files?.[0]
     if (!file) return
     setSubiendoAvatar(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const ext = file.name.split('.').pop()
-    const path = `${user.id}/avatar.${ext}`
-    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (!error) {
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-      setPerfil(prev => ({ ...prev, avatar_url: urlData.publicUrl + '?t=' + Date.now() }))
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const ext = file.name.split('.').pop()
+      const path = `${user.id}/avatar.${ext}`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+        const newUrl = urlData.publicUrl + '?t=' + Date.now()
+        setPerfil(prev => ({ ...prev, avatar_url: newUrl }))
+        await supabase.from('therapist_profiles')
+          .update({ avatar_url: newUrl })
+          .eq('user_id', user.id)
+      }
+    } catch(err) {
+      console.error('Error subiendo avatar:', err)
+    } finally {
+      setSubiendoAvatar(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
-    setSubiendoAvatar(false)
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function cambiarPassword() {
@@ -363,6 +372,9 @@ export default function AjustesPage() {
                   <button className="avatar-btn" onClick={() => fileInputRef.current?.click()} disabled={subiendoAvatar}>
                     <Camera size={12}/>{subiendoAvatar ? 'Subiendo...' : 'Cambiar foto'}
                   </button>
+                  <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px',lineHeight:'1.5'}}>
+                    Esta foto también se usa en tu página pública de reservas.
+                  </div>
                 </div>
               </div>
               <div className="field-grid">
@@ -384,7 +396,7 @@ export default function AjustesPage() {
                 </div>
                 <div className="field">
                   <label>WhatsApp</label>
-                  <input placeholder="Ej: +54 9 223 000-0000" value={perfil.whatsapp}
+                  <input placeholder="Ej: 5492236789012 (con código de país sin +)" value={perfil.whatsapp}
                     onChange={e => setPerfil({...perfil, whatsapp: e.target.value})}/>
                 </div>
                 <div className="field full">

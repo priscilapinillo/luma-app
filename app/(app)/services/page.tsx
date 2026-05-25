@@ -62,6 +62,15 @@ export default function ServiciosPage() {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (modalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [modalOpen])
+
   async function cargarDatos() {
     try {
       const supabase = createClient()
@@ -259,7 +268,7 @@ export default function ServiciosPage() {
         .ranking-count{font-size:12px;font-weight:600;color:var(--text-primary);min-width:50px;text-align:right}
         .ranking-ingresos{font-size:11px;color:var(--text-muted);min-width:70px;text-align:right}
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-        .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:460px;max-height:80vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
         .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}

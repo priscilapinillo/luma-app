@@ -98,7 +98,15 @@ const [onboardingChecks, setOnboardingChecks] = useState({
     duracion: 60, servicio: '', servicioId: '', precio: 0,
     contexto: '', pago: 'pendiente' as Pago, sena: 0,
   })
-
+  
+  useEffect(() => {
+  if (modalOpen || historialOpen || editandoFecha || borrarConfirm || showOnboarding) {
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = ''
+  }
+  return () => { document.body.style.overflow = '' }
+}, [modalOpen, historialOpen, editandoFecha, borrarConfirm, showOnboarding])
   useEffect(() => {
     setNuevoTurno(prev => ({ ...prev, fecha: fechaSeleccionada }))
   }, [fechaSeleccionada])
@@ -350,7 +358,7 @@ const [onboardingChecks, setOnboardingChecks] = useState({
 
   function toggleGrabacion() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      toast('Tu navegador no soporta reconocimiento de voz. Usá Chrome.')
+      toast('Para transcribir voz usá Safari en iPhone o Chrome en Android.', 'error')
       return
     }
     if (grabando) {
@@ -578,7 +586,10 @@ const [onboardingChecks, setOnboardingChecks] = useState({
     <div className="widget-card widget-espacio" style={{background:'#F0FFF8',borderColor:'#BBF7D0'}}>
       <div className="widget-blob" style={{width:'60px',height:'60px',background:'#10B981',top:'-12px',right:'-12px'}}/>
       <div className="widget-label" style={{color:'#059669'}}>Disponibilidad hoy</div>
-      {proximoEspacioLibre ? (<>
+      {!disponibilidad.find(d => d.dia_semana === hoy.getDay())?.activo ? (<>
+        <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>Día libre 🌿</div>
+        <div className="widget-sub" style={{color:'#059669'}}>No trabajás hoy</div>
+      </>) : proximoEspacioLibre ? (<>
         <div className="widget-title" style={{color:'#166534',fontSize:'13px'}}>¡Tenés lugar!</div>
         <div className="widget-sub" style={{color:'#059669'}}>Próximo: <strong>{proximoEspacioLibre} hs</strong></div>
       </>) : (<>
@@ -719,7 +730,7 @@ const [onboardingChecks, setOnboardingChecks] = useState({
         .htxt{font-size:12px;color:var(--text-secondary);line-height:1.5}
         .ver-mas{text-align:center;font-size:11px;color:var(--accent);cursor:pointer;padding:4px;flex-shrink:0}
         .ver-mas:hover{text-decoration:underline}
-        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+       .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);overflow:hidden}
         .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:440px;max-height:88vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
         .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
@@ -1073,8 +1084,8 @@ const [onboardingChecks, setOnboardingChecks] = useState({
             </div>
             <div className="field-row">
               <div className="field">
-                <label>Celular</label>
-                <input placeholder="Ej: 2236789012" value={nuevoTurno.pacienteCelular}
+              <label>Celular (con código de país)</label>
+                <input placeholder="Ej: 5492236789012" value={nuevoTurno.pacienteCelular}
                   onChange={e => { setNuevoTurno({...nuevoTurno, pacienteCelular: e.target.value}); buscarSugerencias(e.target.value) }}/>
               </div>
               <div className="field">
