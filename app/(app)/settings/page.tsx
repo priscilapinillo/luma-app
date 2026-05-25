@@ -423,7 +423,7 @@ export default function AjustesPage() {
                 {suscripcion?.status === 'trial' ? 'Período de prueba' : suscripcion?.status === 'active' ? 'Plan activo' : 'Sin plan activo'}
               </div>
               <div className="subs-info">
-                {suscripcion?.status === 'trial' ? `${diasTrial} días restantes de prueba gratuita` : 'USD 7/mes · Facturación mensual'}
+                {suscripcion?.status === 'trial' ? `${diasTrial} días restantes de prueba gratuita` :'$9.900 ARS/mes · Facturación mensual'}
               </div>
               {suscripcion?.status === 'trial' && (<>
                 <div className="subs-trial-bar">

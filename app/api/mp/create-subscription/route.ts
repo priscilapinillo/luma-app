@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
           title: 'Luma — Suscripción mensual',
           quantity: 1,
           currency_id: 'ARS',
-          unit_price: 7000,
+          unit_price: 9900,
         }],
         payer: { email },
         back_urls: {

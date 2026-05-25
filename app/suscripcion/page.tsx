@@ -111,7 +111,7 @@ export default function SuscripcionPage() {
           </p>
 
           <div className="sus-precio">
-            <div className="sus-precio-num">$7.000</div>
+          <div className="sus-precio-num">$9.900</div>
             <div className="sus-precio-per">ARS por mes · Cancelás cuando querás</div>
           </div>
 
@@ -132,8 +132,21 @@ export default function SuscripcionPage() {
           </div>
 
           <button className="sus-btn" onClick={handlePagar} disabled={loading}>
-            {loading ? 'Redirigiendo...' : '✦ Activar Luma por $7.000/mes'}
-          </button>
+  {loading ? '⏳ Redirigiendo a Mercado Pago...' : '✦ Activar Luma por $9.900/mes'}
+</button>
+
+{loading && (
+  <div style={{
+    background:'#F4F0FF',border:'1px solid #DDD6FE',
+    borderRadius:'10px',padding:'12px 16px',
+    fontSize:'12px',color:'#6D28D9',
+    lineHeight:'1.7',marginTop:'8px',textAlign:'left',
+  }}>
+    <strong>⚠️ Importante:</strong> No cierres esta pestaña ni el navegador.<br/>
+    Vas a ser redirigida a Mercado Pago para completar el pago.<br/>
+    Una vez que pagues, <strong>esperá a que te redirija de vuelta a Luma</strong> para que tu suscripción se active automáticamente.
+  </div>
+)}
 
           <div className="sus-seguro">🔒 Pago seguro con Mercado Pago</div>
 

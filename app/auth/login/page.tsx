@@ -40,7 +40,15 @@ export default function AuthPage() {
       options: { data: { full_name: nombre } }
     })
     if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); return }
-    if (data.user) await supabase.from('subscriptions').insert({ user_id: data.user.id, status: 'trial' })
+    if (data.user) {
+      const trialEnds = new Date()
+      trialEnds.setDate(trialEnds.getDate() + 7)
+      await supabase.from('subscriptions').insert({
+        user_id: data.user.id,
+        status: 'trial',
+        trial_ends_at: trialEnds.toISOString(),
+      })
+    }
     setEnviado(true)
     setRegLoading(false)
   }

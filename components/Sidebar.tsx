@@ -13,7 +13,7 @@ export default function Sidebar() {
   const [perfil, setPerfil] = useState({ nombre: '', plan: 'Trial activo' })
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
-
+  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null} | null>(null)
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
     if (saved === 'dark') setDark(true)
@@ -29,9 +29,13 @@ export default function Sidebar() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: prof } = await supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle()
-      if (prof?.nombre_profesional) setPerfil({ nombre: prof.nombre_profesional, plan: 'Plan Pro' })
+      const [{ data: prof }, { data: sub }] = await Promise.all([
+        supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at').eq('user_id', user.id).maybeSingle(),
+      ])
+      if (prof?.nombre_profesional) setPerfil({ nombre: prof.nombre_profesional, plan: 'Plan activo' })
       else setPerfil({ nombre: user.email?.split('@')[0] || 'Terapeuta', plan: 'Trial activo' })
+      if (sub) setSub(sub)
     } catch (err) {
       console.error('Error perfil:', err)
     }
@@ -150,13 +154,13 @@ export default function Sidebar() {
             }}>
               🚪 Cerrar sesión
             </button>
-            <a href="mailto:soporte@luma.app" style={{
-              display:'flex',alignItems:'center',gap:'10px',
-              padding:'12px 16px',
-              fontSize:'13px',color:'var(--text-primary)',textDecoration:'none',
-            }}>
-              💬 Ayuda
-            </a>
+            <a href="/ayuda" style={{
+      display:'flex',alignItems:'center',gap:'10px',
+      padding:'12px 16px',
+      fontSize:'13px',color:'var(--text-primary)',textDecoration:'none',
+    }}>
+      💬 Ayuda
+    </a>
           </div>
           <div onClick={() => setMenuMobile(false)} style={{
             position:'fixed',inset:0,zIndex:299,
@@ -243,6 +247,10 @@ export default function Sidebar() {
           <Settings size={13}/>Configuración
         </Link>
 
+        <Link href="/ayuda" className={`sb-link${pathname==='/ayuda'?' active':''}`}>
+          <span style={{fontSize:'13px'}}>💬</span>Ayuda
+        </Link>
+
         <div className="sb-spacer"/>
 
         <button className="sb-theme" onClick={toggleTheme}>
@@ -255,11 +263,30 @@ export default function Sidebar() {
           </div>
         </button>
 
-        <div className="sb-trial">
-          <div className="sb-trial-t">✦ Trial activo</div>
-          <div className="sb-trial-s">5 días restantes</div>
-          <div className="sb-bar"><div className="sb-fill"/></div>
-        </div>
+        {sub && (() => {
+  const ahora = new Date()
+  const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
+  const esTrial = sub.status === 'trial' && sub.trial_ends_at
+  const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
+  const pct = esTrial ? Math.round((diasRestantes / 7) * 100) : 100
+
+  return (
+    <div className="sb-trial" style={{background: esActivo ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: esActivo ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
+      <div className="sb-trial-t" style={{color: esActivo ? '#059669' : 'var(--accent)'}}>
+        {esActivo ? '✓ Plan activo' : esTrial ? '✦ Trial activo' : '⚠️ Trial vencido'}
+      </div>
+      <div className="sb-trial-s">
+        {esActivo ? 'Suscripción vigente' : esTrial ? `${diasRestantes} días restantes` : 'Activá tu suscripción'}
+      </div>
+      {esTrial && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}
+      {!esActivo && !esTrial && (
+        <a href="/suscripcion" style={{fontSize:'10px',color:'var(--accent)',fontWeight:600,textDecoration:'none',display:'block',marginTop:'6px'}}>
+          Activar ahora →
+        </a>
+      )}
+    </div>
+  )
+})()}
 
         <div className="sb-user">
           <div className="sb-avatar">{iniciales}</div>

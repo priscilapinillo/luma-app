@@ -118,6 +118,14 @@ const [onboardingChecks, setOnboardingChecks] = useState({
   }, [turnoSeleccionado?.id])
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('pago') === 'ok') {
+      toast('✦ ¡Suscripción activada! Bienvenida a Luma.', 'success')
+      window.history.replaceState({}, '', '/dashboard')
+    }
+  }, [])
+
+  useEffect(() => {
     async function cargarDatos() {
       try {
         const supabase = createClient()
