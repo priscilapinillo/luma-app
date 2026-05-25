@@ -195,10 +195,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     try {
       const supabase = createClient()
       const { slug } = await Promise.resolve(params)
-      const slugDecoded = decodeURIComponent(slug).replace(/-/g, ' ')
+      const slugDecoded = decodeURIComponent(slug)
       const { data: perfil } = await supabase
         .from('therapist_profiles').select('*')
-        .ilike('nombre_profesional', slugDecoded).single()
+        .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
       setTerapeuta(perfil)
       const [{ data: servs }, { data: disp }, { data: sess }] = await Promise.all([

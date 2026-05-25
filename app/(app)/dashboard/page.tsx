@@ -22,7 +22,7 @@ type Turno = {
   created_at?: string
 }
 type Paciente = { id: string; nombre: string; apellido: string; celular: string; alias: string }
-type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number }
+type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number; tipo_servicio?: string; plazo_horas?: number }
 type Task = { id: string; texto: string; completada: boolean }
 type Disponibilidad = { dia_semana: number; activo: boolean; hora_inicio: string; hora_fin: string }
 type Archivo = { id: string; nombre_archivo: string; tipo: string; url: string }
@@ -292,11 +292,12 @@ const [onboardingChecks, setOnboardingChecks] = useState({
     setShowSugerencias(false)
   }
 
-  function toggleRealizado(id: string) {
+  async function toggleRealizado(id: string) {
     const turno = turnos.find(t => t.id === id)
     if (!turno) return
     const supabase = createClient()
-    supabase.from('sessions').update({ realizado: !turno.realizado }).eq('id', id)
+    const { error } = await supabase.from('sessions').update({ realizado: !turno.realizado }).eq('id', id)
+    if (error) { console.error('Error actualizando realizado:', error); return }
     setTurnos(prev => prev.map(t => t.id === id ? {...t, realizado: !t.realizado} : t))
     if (turnoSeleccionado?.id === id) setTurnoSeleccionado(prev => prev ? {...prev, realizado: !prev.realizado} : prev)
   }
