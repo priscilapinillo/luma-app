@@ -472,7 +472,7 @@ export default function ServiciosPage() {
                 <div className="field">
                   <label>Precio base ($)</label>
                   <input type="number" min="0" value={form.precio_base || ''}
-                    onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
+                    onChange={e => setForm({...form, precio_base: Math.round(Number(e.target.value))})}/>
                 </div>
               </div>
             ) : (

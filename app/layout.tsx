@@ -10,6 +10,7 @@ export default function RootLayout({
       <head>
         <title>Luma — Tu trabajo, en orden</title>
         <meta name="description" content="Agenda, historial, cobros y finanzas para terapeutas y profesionales del bienestar"/>
+        <meta name="google-site-verification" content="N1lasbNh0oCGL_I5CnUXt9CEod8MmmRjzqTC3eWmkmg" />
         <script dangerouslySetInnerHTML={{__html: `
           try {
             const theme = localStorage.getItem('luma-theme');
