@@ -177,7 +177,19 @@ export default function PacientesPage() {
       setGuardando(false)
     }
   }
-
+  async function borrarPaciente() {
+    if (!pacienteSeleccionado) return
+    if (!confirm(`¿Eliminar a ${pacienteSeleccionado.nombre} ${pacienteSeleccionado.apellido}? Esta acción no se puede deshacer.`)) return
+    const supabase = createClient()
+    await supabase.from('sessions').delete().eq('patient_id', pacienteSeleccionado.id)
+    await supabase.from('files').delete().eq('patient_id', pacienteSeleccionado.id)
+    await supabase.from('quick_notes').delete().eq('patient_id', pacienteSeleccionado.id)
+    await supabase.from('patients').delete().eq('id', pacienteSeleccionado.id)
+    setPacientes(prev => prev.filter(p => p.id !== pacienteSeleccionado.id))
+    setPacienteSeleccionado(null)
+    setModalNuevo(false)
+  }
+  
   async function guardarContexto(id: string, contexto: string) {
     const supabase = createClient()
     await supabase.from('patients').update({ contexto_general: contexto }).eq('id', id)
@@ -660,8 +672,16 @@ export default function PacientesPage() {
               )}
             </div>
             <button className="save-btn" onClick={guardarPaciente} disabled={guardando}>
-              {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Crear paciente'}
-            </button>
+  {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Crear paciente'}
+</button>
+{editando && (
+  <button onClick={borrarPaciente}
+    style={{width:'100%',padding:'11px',marginTop:'8px',background:'transparent',color:'#EF4444',border:'0.5px solid #FECACA',borderRadius:'11px',fontSize:'13px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s'}}
+    onMouseOver={e => (e.currentTarget.style.background='#FEF2F2')}
+    onMouseOut={e => (e.currentTarget.style.background='transparent')}>
+    Eliminar paciente
+  </button>
+)}
           </div>
         </div>
       )}

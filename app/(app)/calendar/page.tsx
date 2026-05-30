@@ -513,6 +513,19 @@ export default function AgendaPage() {
             <button className="a-disp-btn" onClick={() => { setDispLocal([...disponibilidad]); setModalDisponibilidad(true) }}><Settings size={11}/>Disponibilidad</button>
           </div>
         </div>
+        
+        {vistaTab === 'calendario' && (
+          <div style={{
+            background:'#EFF6FF', border:'0.5px solid #BFDBFE',
+            borderRadius:'12px', padding:'9px 14px',
+            fontSize:'11px', color:'#1D4ED8',
+            display:'flex', alignItems:'center', gap:'8px',
+            flexShrink: 0,
+          }}>
+            <span>📦</span>
+            <span>Los servicios de tipo <strong>entrega</strong> no aparecen en esta vista. Podés verlos y gestionarlos desde el <a href="/dashboard" style={{color:'#2563EB',fontWeight:600,textDecoration:'none'}}>inicio →</a></span>
+          </div>
+        )}
 
         {vistaTab === 'calendario' && vista === 'semana' && !isMobile && (
           <div className="semana-outer">

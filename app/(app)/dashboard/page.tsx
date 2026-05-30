@@ -20,6 +20,7 @@ type Turno = {
   pago: Pago; sena: number; realizado: boolean
   historial?: SesionHistorial[]
   created_at?: string
+origen?: string
 }
 type Paciente = { id: string; nombre: string; apellido: string; celular: string; alias: string }
 type Servicio = { id: string; nombre: string; precio_base: number; duracion_estimada: number; tipo_servicio?: string; plazo_horas?: number }
@@ -86,6 +87,9 @@ const [onboardingChecks, setOnboardingChecks] = useState({
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const archivoInputRef = useRef<HTMLInputElement>(null)
   const [grabando, setGrabando] = useState(false)
+  const [notasPaciente, setNotasPaciente] = useState<{id:string;contenido:string;created_at:string}[]>([])
+const [nuevaNota, setNuevaNota] = useState('')
+const [tabDetalle, setTabDetalle] = useState<'contexto'|'notas'>('contexto')
   const [contextoLocal, setContextoLocal] = useState('')
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
@@ -136,7 +140,7 @@ const [onboardingChecks, setOnboardingChecks] = useState({
         const mesFin = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-31`
 
         const [{ data: sesiones }, { data: pacs }, { data: servs }, { data: prof }, { data: tsks }, { data: avail }] = await Promise.all([
-          supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
+          supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).order('fecha', { ascending: true }),
           supabase.from('patients').select('*').eq('user_id', user.id),
           supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
           supabase.from('therapist_profiles').select('nombre_profesional, pagina_activa').eq('user_id', user.id).maybeSingle(),
@@ -209,6 +213,7 @@ const [onboardingChecks, setOnboardingChecks] = useState({
               realizado: s.realizado || false,
               historial,
               created_at: s.created_at || '',
+              origen: s.public_bookings?.[0]?.estado === 'pendiente_pago' && s.estado_pago === 'pendiente' ? 'pagina_publica' : undefined,
             }
           })
           setTurnos(convertidos)
@@ -393,6 +398,30 @@ const [onboardingChecks, setOnboardingChecks] = useState({
     recognition.start()
     setGrabando(true)
   }
+ 
+  async function cargarNotas(pacienteId: string) {
+    const supabase = createClient()
+    const { data } = await supabase.from('quick_notes').select('*').eq('patient_id', pacienteId).order('created_at', { ascending: false })
+    if (data) setNotasPaciente(data)
+  }
+  
+  async function agregarNota() {
+    if (!nuevaNota.trim() || !turnoSeleccionado?.pacienteDbId) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('quick_notes').insert({
+      user_id: user.id, patient_id: turnoSeleccionado.pacienteDbId, contenido: nuevaNota.trim(),
+    }).select().single()
+    if (data) setNotasPaciente(prev => [data, ...prev])
+    setNuevaNota('')
+  }
+  
+  async function borrarNota(id: string) {
+    const supabase = createClient()
+    await supabase.from('quick_notes').delete().eq('id', id)
+    setNotasPaciente(prev => prev.filter(n => n.id !== id))
+  }
 
   async function cargarArchivos(pacienteId: string) {
     const supabase = createClient()
@@ -490,11 +519,16 @@ const [onboardingChecks, setOnboardingChecks] = useState({
   }
 
   async function guardarTurno() {
-    if (!nuevoTurno.pacienteNombre || !nuevoTurno.hora) { toast('Completá nombre y hora'); return }
-    const horaInicioNuevo = horaAMin(nuevoTurno.hora)
+    const esEntrega = servicios.find(s => s.nombre === nuevoTurno.servicio)?.tipo_servicio === 'entrega'
+    if (!nuevoTurno.pacienteNombre) { toast('Completá el nombre del paciente'); return }
+    if (!nuevoTurno.hora && !esEntrega) { toast('Completá la hora del turno'); return }
+    const horaFinal = nuevoTurno.hora || '12:00'
+    const horaInicioNuevo = horaAMin(horaFinal)
     const horaFinNuevo = horaInicioNuevo + nuevoTurno.duracion
-    const hayConflicto = turnos.some(t => {
+    const hayConflicto = !esEntrega && turnos.some(t => {
       if (t.fecha !== nuevoTurno.fecha) return false
+      const esEntregaExistente = servicios.find(s => s.nombre === t.servicio)?.tipo_servicio === 'entrega'
+      if (esEntregaExistente) return false
       const horaInicioExistente = horaAMin(t.hora)
       const horaFinExistente = horaInicioExistente + t.duracion
       return horaInicioNuevo < horaFinExistente && horaFinNuevo > horaInicioExistente
@@ -520,8 +554,8 @@ const [onboardingChecks, setOnboardingChecks] = useState({
     const { data: nuevaSesion, error } = await supabase.from('sessions').insert({
       user_id: user.id, patient_id: pacienteDbId,
       service_id: nuevoTurno.servicioId || null,
-      fecha: nuevoTurno.fecha+'T'+nuevoTurno.hora+':00',
-      hora: nuevoTurno.hora, duracion: nuevoTurno.duracion,
+      fecha: nuevoTurno.fecha+'T'+horaFinal+':00',
+      hora: horaFinal, duracion: nuevoTurno.duracion,
       contexto_sesion: nuevoTurno.contexto,
       servicio_nombre: nuevoTurno.servicio, precio: nuevoTurno.precio,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
@@ -617,13 +651,35 @@ const [onboardingChecks, setOnboardingChecks] = useState({
         .dl{display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;background:var(--bg-card);border-radius:22px;padding:18px;height:100%;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light)}
         .dr{display:flex;flex-direction:column;gap:10px;background:var(--bg-card);overflow-y:auto;border-radius:22px;padding:18px;height:100%;box-shadow:0 8px 32px var(--shadow);border:0.5px solid var(--border-light)}
         @media(max-width:768px){
-          .dw{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible;padding:10px 10px 80px;gap:10px}
-          .dl{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
-          .dr{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
-          .tlist{overflow:visible;min-height:unset;flex:unset;max-height:unset}
-          .mo-box{width:95vw !important;max-width:440px}
-          .hist-box{width:95vw !important}
-        }
+  .dw{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible;padding:10px 10px 80px;gap:10px}
+  .dl{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+  .dr{height:auto;min-height:unset;overflow:visible;border-radius:16px;flex-shrink:0}
+  .tlist{overflow:visible;min-height:unset;flex:unset;max-height:unset}
+  .mo-box{width:95vw !important;max-width:440px}
+  .hist-box{width:95vw !important}
+}
+@media(min-width:769px) and (max-width:1024px){
+  .dw{grid-template-columns:1fr;height:100vh;overflow:hidden;padding:12px 12px 12px;gap:12px}
+  .dl{height:100%;overflow-y:auto;border-radius:18px;flex-shrink:0}
+  .dr{height:auto;min-height:unset;overflow:visible;border-radius:18px;flex-shrink:0}
+  .wc{padding:8px 12px !important}
+  .wc-h{font-size:13px !important}
+  .wc-s{font-size:11px !important}
+  .si{padding:7px 32px 7px 11px !important;font-size:12px !important}
+  .stats{gap:6px !important}
+  .st{padding:7px 10px !important;border-radius:11px !important}
+  .st-n{font-size:18px !important}
+  .st-l{font-size:9px !important}
+  .widget-card{padding:10px 12px !important;border-radius:14px !important}
+  .widget-title{font-size:14px !important}
+  .widget-label{font-size:9px !important}
+  .widget-sub{font-size:10px !important}
+  .widget-pill{font-size:9px !important;padding:2px 8px !important;margin-top:4px !important}
+  .tlist{flex:1;overflow-y:auto;min-height:200px}
+  .mo-box{width:90vw !important;max-width:480px}
+  .hist-box{width:90vw !important}
+  .ab{display:block !important;visibility:visible !important;opacity:1 !important}
+}
         .wc{background:var(--accent-light);border-radius:16px;padding:13px 16px;border:0.5px solid var(--border);flex-shrink:0;position:relative;overflow:hidden}
         .wc-blob{position:absolute;border-radius:50%;background:var(--accent);opacity:0.12;width:80px;height:80px;top:-20px;right:-20px;pointer-events:none}
         .wc-h{font-size:16px;font-weight:800;color:var(--accent);font-family:'Manrope',sans-serif}
@@ -872,7 +928,8 @@ const [onboardingChecks, setOnboardingChecks] = useState({
                   const turnoConHistorial = turnos.find(t => t.id === turno.id)
                   const t2 = turnoConHistorial || turno
                   setTurnoSeleccionado(t2)
-                  if (t2.pacienteDbId) cargarArchivos(t2.pacienteDbId)
+                  if (t2.pacienteDbId) { cargarArchivos(t2.pacienteDbId); cargarNotas(t2.pacienteDbId) }
+setTabDetalle('contexto')
                 }}>
                 <div className="tdot"/>
                 <div className="tb">
@@ -882,7 +939,20 @@ const [onboardingChecks, setOnboardingChecks] = useState({
                     {turno.hora} · {turno.duracion} min
                   </div>
                   <div className="ttags">
-                    <span className="tg tg-s">{turno.servicio}</span>
+                  <span className="tg tg-s">{turno.servicio}</span>
+{(() => {
+  const s = servicios.find(sv => sv.nombre === turno.servicio) as any
+  if (s?.tipo_servicio === 'entrega') return (
+    <span className="tg" style={{background:'#EFF6FF',color:'#1D4ED8',borderColor:'#BFDBFE'}}>
+      📦 Entrega {s.plazo_horas}h
+    </span>
+  )
+  return (
+    <span className="tg" style={{background:'#F0FDF4',color:'#166534',borderColor:'#BBF7D0'}}>
+      🔴 En vivo
+    </span>
+  )
+})()}
                     <span className={`tg ${PAGO_CONFIG[turno.pago].cls}`}>{PAGO_CONFIG[turno.pago].label}</span>
                   </div>
                 </div>
@@ -958,6 +1028,30 @@ const [onboardingChecks, setOnboardingChecks] = useState({
                 )
               })()}
             </div>
+             
+            {turnoSeleccionado.origen === 'pagina_publica' && (
+  <div style={{
+    background:'#FEF9C3',border:'0.5px solid #FDE68A',
+    borderRadius:'12px',padding:'11px 14px',
+    fontSize:'12px',color:'#854D0E',lineHeight:'1.6',
+    flexShrink:0
+  }}>
+    ⚠️ Esta persona reservó desde tu página pública pero <strong>aún no completó el pago</strong>. Te recomendamos contactarla para confirmar.
+    {(() => {
+      const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
+      if (!pac?.celular) return null
+      const numero = pac.celular.replace(/\D/g,'')
+      const prefijo = numero.startsWith('54') ? '' : '549'
+      return (
+        <a href={`https://wa.me/${prefijo}${numero}?text=Hola%20${encodeURIComponent(turnoSeleccionado.pacienteNombre)}%2C%20te%20escribo%20por%20tu%20reserva%20pendiente%20de%20pago%20%F0%9F%99%8F`}
+          target="_blank" rel="noopener noreferrer"
+          style={{display:'block',marginTop:'8px',textAlign:'center',padding:'7px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0'}}>
+          💬 Contactar por WhatsApp
+        </a>
+      )
+    })()}
+  </div>
+)}
 
             <div className="rbadges">
               <span className="rb rb-s">{turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}</span>
@@ -984,38 +1078,66 @@ const [onboardingChecks, setOnboardingChecks] = useState({
               </div>
             )}
 
-            <div className="ctxl">Contexto de esta sesión</div>
-            <div className="editor">
-              <div className="etb">
-                <button className="ebico" onClick={toggleGrabacion} style={{
-                  background: grabando ? '#FEF2F2' : 'var(--bg-card)',
-                  borderColor: grabando ? '#FECACA' : 'var(--border)',
-                  color: grabando ? '#EF4444' : 'var(--text-secondary)',
-                  display:'flex',alignItems:'center',gap:'4px',width:'auto',padding:'0 8px',fontSize:'11px'
-                }}>
-                  <Mic size={11}/>
-                  {grabando ? 'Detener' : 'Transcribir voz'}
-                </button>
-                {grabando && (
-                  <span style={{fontSize:'10px',color:'#EF4444',display:'flex',alignItems:'center',gap:'4px'}}>
-                    <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#EF4444',display:'inline-block'}}/>
-                    Escuchando...
-                  </span>
-                )}
-              </div>
-              <textarea
-                key={turnoSeleccionado.id}
-                className="ea"
-                value={contextoLocal}
-                onChange={e => setContextoLocal(e.target.value)}
-                onBlur={() => updateContexto(turnoSeleccionado.id, contextoLocal)}
-                placeholder="Escribí el contexto de esta sesión..."
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}/>
-            </div>
+           {/* TABS CONTEXTO / NOTAS */}
+<div style={{display:'flex',gap:'2px',background:'var(--bg-input)',padding:'3px',borderRadius:'10px',flexShrink:0}}>
+  <button onClick={() => setTabDetalle('contexto')} style={{flex:1,padding:'6px',borderRadius:'7px',border:'none',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',background:tabDetalle==='contexto'?'var(--bg-card)':'transparent',color:tabDetalle==='contexto'?'var(--accent)':'var(--text-muted)',transition:'all 0.15s'}}>
+    Contexto
+  </button>
+  <button onClick={() => setTabDetalle('notas')} style={{flex:1,padding:'6px',borderRadius:'7px',border:'none',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',background:tabDetalle==='notas'?'var(--bg-card)':'transparent',color:tabDetalle==='notas'?'var(--accent)':'var(--text-muted)',transition:'all 0.15s'}}>
+    Post-sesión {notasPaciente.length > 0 ? `(${notasPaciente.length})` : ''}
+  </button>
+</div>
 
+{tabDetalle === 'contexto' && (<>
+  <div className="ctxl">Contexto de esta sesión</div>
+  <div className="editor">
+    <div className="etb">
+      {grabando && (
+        <span style={{fontSize:'10px',color:'#EF4444',display:'flex',alignItems:'center',gap:'4px'}}>
+          <span style={{width:'6px',height:'6px',borderRadius:'50%',background:'#EF4444',display:'inline-block'}}/>
+          Escuchando...
+        </span>
+      )}
+    </div>
+    <textarea
+      key={turnoSeleccionado.id}
+      className="ea"
+      value={contextoLocal}
+      onChange={e => setContextoLocal(e.target.value)}
+      onBlur={() => updateContexto(turnoSeleccionado.id, contextoLocal)}
+      placeholder="Escribí el contexto de esta sesión..."
+      autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}/>
+  </div>
+</>)}
+
+{tabDetalle === 'notas' && (<>
+  <div className="ctxl">Notas post-sesión</div>
+  <div style={{background:'var(--bg-input)',borderRadius:'12px',padding:'10px',border:'0.5px solid var(--border-light)',flexShrink:0}}>
+    <textarea
+      placeholder="¿Qué pasó en esta sesión? ¿Qué salió?"
+      value={nuevaNota}
+      onChange={e => setNuevaNota(e.target.value)}
+      style={{width:'100%',border:'none',background:'transparent',fontSize:'12px',color:'var(--text-primary)',outline:'none',resize:'none',height:'65px',fontFamily:'inherit',lineHeight:'1.6'}}/>
+    <div style={{display:'flex',justifyContent:'flex-end',marginTop:'6px'}}>
+      <button onClick={agregarNota} style={{padding:'5px 12px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'7px',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+        Guardar nota
+      </button>
+    </div>
+  </div>
+  {notasPaciente.length === 0 ? (
+    <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'12px 0'}}>Sin notas post-sesión aún</div>
+  ) : notasPaciente.map(n => (
+    <div key={n.id} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'10px 12px',border:'0.5px solid var(--border-light)',flexShrink:0}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
+        <span style={{fontSize:'9px',color:'var(--text-muted)'}}>{new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
+        <button onClick={() => borrarNota(n.id)} style={{width:'18px',height:'18px',border:'none',background:'transparent',cursor:'pointer',color:'var(--text-muted)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <X size={10}/>
+        </button>
+      </div>
+      <div style={{fontSize:'12px',color:'var(--text-primary)',lineHeight:'1.6',whiteSpace:'pre-wrap'}}>{n.contenido}</div>
+    </div>
+  ))}
+</>)}
             {/* ARCHIVOS */}
             <hr className="rdiv"/>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
@@ -1104,28 +1226,44 @@ const [onboardingChecks, setOnboardingChecks] = useState({
               </div>
             </div>
             <div className="field-row">
-              <div className="field">
-                <label>Hora</label>
-                <input type="time" value={nuevoTurno.hora}
-                  onChange={e => setNuevoTurno({...nuevoTurno, hora: e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Duración (min)</label>
-                <input type="number" value={nuevoTurno.duracion}
-                  onChange={e => setNuevoTurno({...nuevoTurno, duracion: Number(e.target.value)})}/>
-              </div>
-            </div>
-            <div className="field">
+            {servicios.find(s => s.nombre === nuevoTurno.servicio)?.tipo_servicio !== 'entrega' && (
+     <div className="field">
+       <label>Hora</label>
+      <input type="time" value={nuevoTurno.hora}
+        onChange={e => setNuevoTurno({...nuevoTurno, hora: e.target.value})}/>
+    </div>
+  )}
+  {servicios.find(s => s.nombre === nuevoTurno.servicio)?.tipo_servicio !== 'entrega' && (
+     <div className="field">
+       <label>Duración (min)</label>
+      <input type="number" value={nuevoTurno.duracion}
+        onChange={e => setNuevoTurno({...nuevoTurno, duracion: Number(e.target.value)})}/>
+    </div>
+  )}
+</div>
+<div className="field">
               <label>Servicio</label>
               <select value={nuevoTurno.servicio}
                 onChange={e => {
                   const s = servicios.find(sv => sv.nombre === e.target.value)
-                  setNuevoTurno({...nuevoTurno, servicio: e.target.value, servicioId: s?.id||'', precio: s?.precio_base||0, duracion: s?.duracion_estimada||60})
+                  setNuevoTurno({...nuevoTurno, servicio: e.target.value, servicioId: s?.id||'', precio: s?.precio_base||0, duracion: s?.duracion_estimada||60, hora: s?.tipo_servicio === 'entrega' ? '00:00' : ''})
                 }}>
                 {servicios.length === 0 && <option>Sin servicios cargados</option>}
                 {servicios.map(s => <option key={s.id} value={s.nombre}>{s.nombre} · ${s.precio_base?.toLocaleString()}</option>)}
               </select>
             </div>
+
+            {servicios.find(s => s.nombre === nuevoTurno.servicio)?.tipo_servicio === 'entrega' && (
+              <div style={{
+                background:'#EFF6FF', border:'0.5px solid #BFDBFE',
+                borderRadius:'10px', padding:'10px 12px',
+                fontSize:'12px', color:'#1D4ED8', lineHeight:'1.6',
+                marginBottom:'13px'
+              }}>
+              Este servicio es de entrega. No requiere horario — se agendará automáticamente y podés tener varias entregas el mismo día sin conflictos.
+              </div>
+            )}
+
             <div className="field">
               <label>Estado de pago</label>
               <select value={nuevoTurno.pago} onChange={e => setNuevoTurno({...nuevoTurno, pago: e.target.value as Pago})}>
