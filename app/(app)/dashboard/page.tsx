@@ -87,10 +87,17 @@ const [onboardingChecks, setOnboardingChecks] = useState({
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const archivoInputRef = useRef<HTMLInputElement>(null)
   const [grabando, setGrabando] = useState(false)
-  const [notasPaciente, setNotasPaciente] = useState<{id:string;contenido:string;created_at:string}[]>([])
+  const [sessionNotes, setSessionNotes] = useState<{id:string;titulo:string;contenido:string;archivo_url:string|null;archivo_tipo:string|null;archivo_nombre:string|null;created_at:string}[]>([])
 const [nuevaNota, setNuevaNota] = useState('')
+const [nuevoTitulo, setNuevoTitulo] = useState('')
 const [tabDetalle, setTabDetalle] = useState<'contexto'|'notas'>('contexto')
-  const [contextoLocal, setContextoLocal] = useState('')
+const [editandoNota, setEditandoNota] = useState<string|null>(null)
+const [editTitulo, setEditTitulo] = useState('')
+const [editContenido, setEditContenido] = useState('')
+const [subiendoNotaArchivo, setSubiendoNotaArchivo] = useState(false)
+const [archivoNota, setArchivoNota] = useState<File|null>(null)
+const notaArchivoRef = useRef<HTMLInputElement>(null)
+const [contextoLocal, setContextoLocal] = useState('')
 
   const diaSeleccionado = diasPorMes[mesIdx] ?? 1
   const diasDelMes = new Date(hoy.getFullYear(), mesIdx+1, 0).getDate()
@@ -401,28 +408,63 @@ const [tabDetalle, setTabDetalle] = useState<'contexto'|'notas'>('contexto')
  
   async function cargarNotas(pacienteId: string) {
     const supabase = createClient()
-    const { data } = await supabase.from('quick_notes').select('*').eq('patient_id', pacienteId).order('created_at', { ascending: false })
-    if (data) setNotasPaciente(data)
+    const { data } = await supabase.from('session_notes').select('*')
+      .eq('patient_id', pacienteId).order('created_at', { ascending: false })
+    if (data) setSessionNotes(data)
   }
   
   async function agregarNota() {
-    if (!nuevaNota.trim() || !turnoSeleccionado?.pacienteDbId) return
+    if (!nuevaNota.trim() && !archivoNota) return
+    if (!turnoSeleccionado?.pacienteDbId) return
+    setSubiendoNotaArchivo(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+  
+      let archivo_url = null, archivo_tipo = null, archivo_nombre = null
+      if (archivoNota) {
+        const ext = archivoNota.name.split('.').pop()
+        const path = `${user.id}/${turnoSeleccionado.pacienteDbId}/notas/${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage.from('patient-files').upload(path, archivoNota)
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(path)
+          archivo_url = urlData.publicUrl
+          archivo_tipo = archivoNota.type.startsWith('image') ? 'imagen' : archivoNota.type.includes('pdf') ? 'pdf' : 'archivo'
+          archivo_nombre = archivoNota.name
+        }
+      }
+  
+      const { data } = await supabase.from('session_notes').insert({
+        user_id: user.id,
+        patient_id: turnoSeleccionado.pacienteDbId,
+        session_id: turnoSeleccionado.id,
+        titulo: nuevoTitulo.trim() || 'Sin título',
+        contenido: nuevaNota.trim() || null,
+        archivo_url, archivo_tipo, archivo_nombre,
+      }).select().single()
+  
+      if (data) setSessionNotes(prev => [data, ...prev])
+      setNuevaNota('')
+      setNuevoTitulo('')
+      setArchivoNota(null)
+      if (notaArchivoRef.current) notaArchivoRef.current.value = ''
+    } catch(err) { console.error(err) } finally { setSubiendoNotaArchivo(false) }
+  }
+  
+  async function guardarEdicionNota(id: string) {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase.from('quick_notes').insert({
-      user_id: user.id, patient_id: turnoSeleccionado.pacienteDbId, contenido: nuevaNota.trim(),
-    }).select().single()
-    if (data) setNotasPaciente(prev => [data, ...prev])
-    setNuevaNota('')
+    await supabase.from('session_notes').update({ titulo: editTitulo, contenido: editContenido }).eq('id', id)
+    setSessionNotes(prev => prev.map(n => n.id === id ? {...n, titulo: editTitulo, contenido: editContenido} : n))
+    setEditandoNota(null)
   }
   
   async function borrarNota(id: string) {
+    if (!confirm('¿Eliminar esta ficha?')) return
     const supabase = createClient()
-    await supabase.from('quick_notes').delete().eq('id', id)
-    setNotasPaciente(prev => prev.filter(n => n.id !== id))
+    await supabase.from('session_notes').delete().eq('id', id)
+    setSessionNotes(prev => prev.filter(n => n.id !== id))
   }
-
   async function cargarArchivos(pacienteId: string) {
     const supabase = createClient()
     const { data } = await supabase.from('files').select('*').eq('patient_id', pacienteId).order('created_at', { ascending: false })
@@ -1084,7 +1126,7 @@ setTabDetalle('contexto')
     Contexto
   </button>
   <button onClick={() => setTabDetalle('notas')} style={{flex:1,padding:'6px',borderRadius:'7px',border:'none',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',background:tabDetalle==='notas'?'var(--bg-card)':'transparent',color:tabDetalle==='notas'?'var(--accent)':'var(--text-muted)',transition:'all 0.15s'}}>
-    Post-sesión {notasPaciente.length > 0 ? `(${notasPaciente.length})` : ''}
+    Post-sesión {sessionNotes.length > 0 ? `(${sessionNotes.length})` : ''}
   </button>
 </div>
 
@@ -1111,62 +1153,224 @@ setTabDetalle('contexto')
 </>)}
 
 {tabDetalle === 'notas' && (<>
-  <div className="ctxl">Notas post-sesión</div>
-  <div style={{background:'var(--bg-input)',borderRadius:'12px',padding:'10px',border:'0.5px solid var(--border-light)',flexShrink:0}}>
+  {/* NUEVA FICHA */}
+  <div style={{background:'var(--bg-input)',borderRadius:'14px',padding:'12px',border:'0.5px solid var(--border-light)',flexShrink:0}}>
+    <input
+      placeholder="Nombre de la ficha..."
+      value={nuevoTitulo}
+      onChange={e => setNuevoTitulo(e.target.value)}
+      style={{width:'100%',border:'none',background:'transparent',fontSize:'12px',fontWeight:600,color:'var(--text-primary)',outline:'none',fontFamily:'inherit',marginBottom:'7px'}}/>
     <textarea
-      placeholder="¿Qué pasó en esta sesión? ¿Qué salió?"
+      placeholder="¿Qué pasó en esta sesión? (opcional)"
       value={nuevaNota}
       onChange={e => setNuevaNota(e.target.value)}
-      style={{width:'100%',border:'none',background:'transparent',fontSize:'12px',color:'var(--text-primary)',outline:'none',resize:'none',height:'65px',fontFamily:'inherit',lineHeight:'1.6'}}/>
-    <div style={{display:'flex',justifyContent:'flex-end',marginTop:'6px'}}>
-      <button onClick={agregarNota} style={{padding:'5px 12px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'7px',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-        Guardar nota
+      style={{width:'100%',border:'none',background:'transparent',fontSize:'12px',color:'var(--text-primary)',outline:'none',resize:'none',height:'55px',fontFamily:'inherit',lineHeight:'1.6'}}/>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'6px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+        <input ref={notaArchivoRef} type="file" accept="image/*,.pdf,.doc,.docx,audio/*" style={{display:'none'}}
+          onChange={e => setArchivoNota(e.target.files?.[0] || null)}/>
+        <button onClick={() => notaArchivoRef.current?.click()}
+          style={{padding:'4px 10px',borderRadius:'7px',background:'var(--bg-card)',border:'0.5px solid var(--border)',fontSize:'10px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit'}}>
+          📎 {archivoNota ? archivoNota.name.slice(0,20)+'...' : 'Adjuntar'}
+        </button>
+        {archivoNota && (
+          <button onClick={() => { setArchivoNota(null); if(notaArchivoRef.current) notaArchivoRef.current.value='' }}
+            style={{background:'transparent',border:'none',cursor:'pointer',color:'var(--text-muted)'}}>
+            <X size={10}/>
+          </button>
+        )}
+      </div>
+      <button onClick={agregarNota} disabled={subiendoNotaArchivo}
+        style={{padding:'5px 12px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'7px',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',opacity:subiendoNotaArchivo?0.6:1}}>
+        {subiendoNotaArchivo ? 'Guardando...' : '+ Guardar ficha'}
       </button>
     </div>
   </div>
-  {notasPaciente.length === 0 ? (
-    <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'12px 0'}}>Sin notas post-sesión aún</div>
-  ) : notasPaciente.map(n => (
-    <div key={n.id} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'10px 12px',border:'0.5px solid var(--border-light)',flexShrink:0}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
-        <span style={{fontSize:'9px',color:'var(--text-muted)'}}>{new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
-        <button onClick={() => borrarNota(n.id)} style={{width:'18px',height:'18px',border:'none',background:'transparent',cursor:'pointer',color:'var(--text-muted)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <X size={10}/>
-        </button>
-      </div>
-      <div style={{fontSize:'12px',color:'var(--text-primary)',lineHeight:'1.6',whiteSpace:'pre-wrap'}}>{n.contenido}</div>
-    </div>
-  ))}
-</>)}
-            {/* ARCHIVOS */}
-            <hr className="rdiv"/>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-              <div className="hl">Archivos del paciente</div>
-              <button onClick={() => archivoInputRef.current?.click()}
-                style={{fontSize:'10px',padding:'4px 10px',borderRadius:'8px',background:'var(--accent-light)',color:'var(--accent)',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
-                {subiendoArchivo ? 'Subiendo...' : '+ Subir'}
-              </button>
-            </div>
-            <input ref={archivoInputRef} type="file" accept="image/*,.pdf,audio/*,.doc,.docx" style={{display:'none'}} onChange={subirArchivo}/>
-            {archivos.length === 0 ? (
-              <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'8px 0'}}>Sin archivos para este paciente</div>
-            ) : (
-              <div style={{display:'flex',flexDirection:'column',gap:'6px',flexShrink:0}}>
-                {archivos.map(a => (
-                  <div key={a.id} style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--bg-input)',borderRadius:'10px',padding:'8px 10px',border:'0.5px solid var(--border-light)'}}>
-                    <span style={{fontSize:'16px'}}>{a.tipo==='imagen'?'🖼️':a.tipo==='pdf'?'📄':a.tipo==='audio'?'🎵':'📎'}</span>
-                    <span style={{flex:1,fontSize:'11px',color:'var(--text-primary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nombre_archivo}</span>
-                    <a href={a.url} target="_blank" rel="noopener noreferrer"
-                      style={{fontSize:'10px',color:'var(--accent)',textDecoration:'none',fontWeight:'600',flexShrink:0}}>Ver</a>
-                    <button onClick={() => borrarArchivo(a.id)}
-                      style={{width:'18px',height:'18px',border:'none',background:'transparent',cursor:'pointer',color:'var(--text-muted)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <X size={10}/>
+
+ {/* FICHERO */}
+{sessionNotes.length === 0 ? (
+  <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'12px 0'}}>Sin fichas aún</div>
+) : (
+  <div style={{position:'relative',flexShrink:0,minHeight:`${sessionNotes.length * 32 + 160}px`}}>
+    {[...sessionNotes].reverse().map((n, i, arr) => {
+      const isActive = editandoNota === n.id || editandoNota === n.id + '_expand'
+      const expandida = editandoNota === n.id + '_expand'
+      const topBase = i * 32
+      const topActive = isActive ? Math.max(0, i * 32 - 20) : topBase
+      const FOLDER_COLORS = [
+        {tab:'#E9D5FF', body:'var(--bg-card)', border:'rgba(233,213,255,0.3)'},
+        {tab:'#C7D2FE', body:'var(--bg-card)', border:'rgba(199,210,254,0.3)'},
+        {tab:'#A7F3D0', body:'var(--bg-card)', border:'rgba(167,243,208,0.3)'},
+        {tab:'#FBCFE8', body:'var(--bg-card)', border:'rgba(251,207,232,0.3)'},
+        {tab:'#FDE68A', body:'var(--bg-card)', border:'rgba(211, 200, 159, 0.3)'},
+        {tab:'#BAE6FD', body:'var(--bg-card)', border:'rgba(186,230,253,0.3)'},
+      ]
+      const color = FOLDER_COLORS[i % FOLDER_COLORS.length]
+      return (
+        <div key={n.id} style={{
+          position:'absolute',
+          top: isActive ? `${Math.max(0, topBase - 10)}px` : `${topBase}px`,
+          left:0, right:0,
+          zIndex: isActive ? 100 : i + 1,
+          transition:'all 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+          filter: isActive ? 'drop-shadow(0 20px 40px rgba(0,0,0,0.5))' : 'none',
+          transform: isActive ? 'translateY(-12px) scale(1.01)' : 'translateY(0) scale(1)',
+        }}>
+          {/* PESTAÑA */}
+          <div style={{
+            display:'inline-flex',alignItems:'center',gap:'5px',
+            background: color.tab,
+            borderRadius:'7px 12px 0 0',
+            padding:'4px 14px 4px 10px',
+            fontSize:'10px',fontWeight:700,
+            color:'rgba(0,0,0,0.75)',
+            marginLeft:`${12 + (i % 4) * 18}px`,
+            maxWidth:'160px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+            cursor:'pointer',
+            boxShadow:`0 -2px 8px rgba(0,0,0,0.3)`,
+            letterSpacing:'0.3px',
+          }}
+          onClick={() => setEditandoNota(isActive ? null : n.id + '_expand')}>
+            {n.archivo_tipo === 'imagen' && '🖼 '}
+            {n.archivo_tipo === 'pdf' && '📄 '}
+            {n.titulo}
+          </div>
+          {/* CUERPO DE LA CARPETA */}
+          <div style={{
+            background:`var(--bg-card)`,
+            border:`1px solid ${color.border}`,
+            borderRadius:'0 12px 12px 12px',
+            padding: isActive ? '14px' : '0 14px',
+            maxHeight: isActive ? '400px' : '0px',
+            overflow: isActive ? 'auto' : 'hidden',
+            transition:'all 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+            boxShadow:`inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 32px rgba(0,0,0,0.4)`,
+          }}>
+
+            
+             {/* PREVIEW cuando está cerrada */}
+{!isActive && n.contenido && (
+  <div style={{
+    padding:'6px 14px 8px',
+    fontSize:'10px',
+    color:'var(--text-muted)',
+    lineHeight:'1.5',
+    overflow:'hidden',
+    maxHeight:'32px',
+    whiteSpace:'nowrap',
+    textOverflow:'ellipsis',
+  }}>
+    {n.contenido.slice(0,80)}
+  </div>
+)}
+
+
+
+
+            {isActive && (<>
+              {editandoNota === n.id ? (
+                <>
+                  <input value={editTitulo} onChange={e => setEditTitulo(e.target.value)}
+                    placeholder="Nombre de la ficha..."
+                    style={{width:'100%',border:`0.5px solid ${color.border}`,borderRadius:'8px',padding:'6px 8px',fontSize:'11px',fontWeight:600,color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',fontFamily:'inherit',marginBottom:'7px'}}/>
+                  <textarea value={editContenido} onChange={e => setEditContenido(e.target.value)}
+                    style={{width:'100%',border:`0.5px solid ${color.border}`,borderRadius:'8px',padding:'7px',fontSize:'11px',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',resize:'none',height:'80px',fontFamily:'inherit',lineHeight:'1.6'}}/>
+                  <div style={{marginTop:'7px',display:'flex',alignItems:'center',gap:'6px'}}>
+                    <input ref={notaArchivoRef} type="file" accept="image/*,.pdf,.doc,.docx,audio/*" style={{display:'none'}}
+                      onChange={e => setArchivoNota(e.target.files?.[0] || null)}/>
+                    <button onClick={() => notaArchivoRef.current?.click()}
+                      style={{padding:'3px 9px',borderRadius:'6px',background:'var(--bg-input)',border:`0.5px solid ${color.border}`,fontSize:'10px',color:'var(--text-primary)',cursor:'pointer',fontFamily:'inherit'}}>
+                      📎 {archivoNota ? archivoNota.name.slice(0,18)+'...' : n.archivo_nombre ? 'Cambiar' : 'Adjuntar'}
+                    </button>
+                    {n.archivo_url && !archivoNota && (
+                      <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
+                        style={{fontSize:'10px',color:color.tab,textDecoration:'none',fontWeight:600}}>Ver actual</a>
+                    )}
+                  </div>
+                  <div style={{display:'flex',gap:'6px',marginTop:'10px',justifyContent:'flex-end'}}>
+                    <button onClick={() => { setEditandoNota(null); setArchivoNota(null) }}
+                      style={{padding:'5px 12px',borderRadius:'7px',border:`0.5px solid ${color.border}`,background:'transparent',fontSize:'10px',color:'var(--text-secondary)',cursor:'pointer',fontFamily:'inherit'}}>
+                      Cancelar
+                    </button>
+                    <button onClick={async () => {
+                      const supabase = createClient()
+                      let archivo_url = n.archivo_url, archivo_tipo = n.archivo_tipo, archivo_nombre = n.archivo_nombre
+                      if (archivoNota) {
+                        const { data: { user } } = await supabase.auth.getUser()
+                        if (user) {
+                          const ext = archivoNota.name.split('.').pop()
+                          const path = `${user.id}/${turnoSeleccionado?.pacienteDbId}/notas/${Date.now()}.${ext}`
+                          const { error } = await supabase.storage.from('patient-files').upload(path, archivoNota)
+                          if (!error) {
+                            const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(path)
+                            archivo_url = urlData.publicUrl
+                            archivo_tipo = archivoNota.type.startsWith('image') ? 'imagen' : archivoNota.type.includes('pdf') ? 'pdf' : 'archivo'
+                            archivo_nombre = archivoNota.name
+                          }
+                        }
+                      }
+                      await supabase.from('session_notes').update({ titulo: editTitulo, contenido: editContenido, archivo_url, archivo_tipo, archivo_nombre }).eq('id', n.id)
+                      setSessionNotes(prev => prev.map(x => x.id === n.id ? {...x, titulo: editTitulo, contenido: editContenido, archivo_url, archivo_tipo, archivo_nombre} : x))
+                      setEditandoNota(null); setArchivoNota(null)
+                    }}
+                      style={{padding:'5px 12px',borderRadius:'7px',border:'none',background:color.tab,color:'rgba(0,0,0,0.8)',fontSize:'10px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+                      Guardar
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
+                </>
+              ) : (
+                <>
+                  {n.contenido && (
+                    <div style={{fontSize:'12px',color:'var(--text-primary)',lineHeight:'1.7',whiteSpace:'pre-wrap',marginBottom:'10px'}}>
+                      {expandida ? n.contenido : n.contenido.slice(0,180)}
+                      {n.contenido.length > 180 && (
+                        <span onClick={() => setEditandoNota(expandida ? n.id+'_expand' : n.id+'_expand')}
+                          style={{color:color.tab,cursor:'pointer',fontWeight:600,fontSize:'10px',marginLeft:'4px'}}>
+                          {expandida ? ' ver menos ↑' : '... ver más ↓'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {n.archivo_url && (
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--bg-input)',borderRadius:'8px',padding:'8px 10px',marginBottom:'10px',border:`0.5px solid ${color.border}`}}>
+                      {n.archivo_tipo === 'imagen'
+                        ? <img src={n.archivo_url} alt="" style={{width:'48px',height:'48px',borderRadius:'6px',objectFit:'cover'}}/>
+                        : <span style={{fontSize:'20px'}}>{n.archivo_tipo==='pdf'?'📄':'📎'}</span>}
+                      <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
+                        style={{fontSize:'11px',color:color.tab,textDecoration:'none',fontWeight:600}}>
+                        {n.archivo_nombre?.slice(0,28) || 'Ver archivo'}
+                      </a>
+                    </div>
+                  )}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:`0.5px solid rgba(255,255,255,0.08)`,paddingTop:'8px'}}>
+                    <span style={{fontSize:'9px',color:'var(--text-muted)',letterSpacing:'0.5px'}}>
+                      {new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}
+                    </span>
+                    <div style={{display:'flex',gap:'5px'}}>
+                      <button onClick={() => { setEditandoNota(n.id); setEditTitulo(n.titulo); setEditContenido(n.contenido||''); setArchivoNota(null) }}
+                        style={{width:'24px',height:'24px',border:`0.5px solid ${color.border}`,borderRadius:'6px',background:'var(--bg-input)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:color.tab}}>
+                        <Pencil size={9}/>
+                      </button>
+                      <button onClick={() => borrarNota(n.id)}
+                        style={{width:'24px',height:'24px',border:'0.5px solid #EF4444',borderRadius:'6px',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#EF4444'}}>
+                        <Trash2 size={9}/>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>)}
+          </div>
+        </div>
+      )
+    })}
+  </div>
 
+   
+)}
+</>)}
+
+            
             {/* HISTORIAL */}
             {turnoSeleccionado.historial && turnoSeleccionado.historial.length > 0 && (<>
               <hr className="rdiv"/>

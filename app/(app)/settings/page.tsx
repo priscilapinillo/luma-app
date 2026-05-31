@@ -431,6 +431,24 @@ export default function AjustesPage() {
                 </div>
                 <div className="subs-trial-text">{diasTrial} de 7 días restantes</div>
               </>)}
+              {suscripcion?.status !== 'active' && (
+                <button
+                  onClick={() => window.location.href = '/suscripcion'}
+                  style={{
+                    marginTop:'14px', width:'100%', padding:'11px',
+                    background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',
+                    color:'white', border:'none', borderRadius:'11px',
+                    fontSize:'13px', fontWeight:600, cursor:'pointer',
+                    fontFamily:'inherit', boxShadow:'0 4px 14px rgba(139,92,246,0.35)',
+                    transition:'all 0.15s',
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.transform='translateY(-1px)')}
+                  onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
+                  {suscripcion?.status === 'expired'
+                    ? '✦ Reactivar suscripción — $9.900 ARS/mes'
+                    : '✦ Activar ahora y no perder acceso — $9.900 ARS/mes'}
+                </button>
+              )}
             </div>
           </>)}
 
