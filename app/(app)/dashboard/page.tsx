@@ -141,13 +141,16 @@ const [contextoLocal, setContextoLocal] = useState('')
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { setLoading(false); return }
+        if (!user || !user.email) { 
+          window.location.href = '/auth/login'
+          return 
+        }
 
         const mesInicio = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
         const mesFin = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-31`
 
         const [{ data: sesiones }, { data: pacs }, { data: servs }, { data: prof }, { data: tsks }, { data: avail }] = await Promise.all([
-          supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).order('fecha', { ascending: true }),
+          supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).neq('estado_sesion', 'cancelada').order('fecha', { ascending: true }),
           supabase.from('patients').select('*').eq('user_id', user.id),
           supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
           supabase.from('therapist_profiles').select('nombre_profesional, pagina_activa').eq('user_id', user.id).maybeSingle(),
@@ -1150,6 +1153,20 @@ setTabDetalle('contexto')
       placeholder="Escribí el contexto de esta sesión..."
       autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}/>
   </div>
+  <button onClick={() => window.location.href=`/patients?paciente=${turnoSeleccionado.pacienteDbId}`}
+    style={{
+      width:'100%',padding:'9px',
+      background:'var(--bg-input)',
+      border:'0.5px solid var(--border)',
+      borderRadius:'11px',fontSize:'12px',
+      color:'var(--text-secondary)',cursor:'pointer',
+      fontFamily:'inherit',flexShrink:0,
+      transition:'all 0.15s',
+    }}
+    onMouseOver={e => { e.currentTarget.style.borderColor='var(--accent)'; e.currentTarget.style.color='var(--accent)' }}
+    onMouseOut={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.color='var(--text-secondary)' }}>
+    Ver historial completo en Pacientes →
+  </button>
 </>)}
 
 {tabDetalle === 'notas' && (<>
@@ -1371,22 +1388,7 @@ setTabDetalle('contexto')
 </>)}
 
             
-            {/* HISTORIAL */}
-            {turnoSeleccionado.historial && turnoSeleccionado.historial.length > 0 && (<>
-              <hr className="rdiv"/>
-              <div className="hl">Sesiones anteriores</div>
-              {turnoSeleccionado.historial.slice(0,2).map((h,i) => (
-                <div key={i} className="hi">
-                  <div className="ht2"><span>{h.fecha}</span><span>·</span><span>{h.servicio}</span></div>
-                  <div className="htxt">{h.contexto}</div>
-                </div>
-              ))}
-              {turnoSeleccionado.historial.length > 2 && (
-                <div className="ver-mas" onClick={() => setHistorialOpen(true)}>
-                  ver historial completo ({turnoSeleccionado.historial.length} sesiones) →
-                </div>
-              )}
-            </>)}
+            
           </>)}
         </div>
       </div>

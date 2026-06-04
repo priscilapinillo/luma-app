@@ -21,17 +21,18 @@ export async function middleware(req: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const isAuthenticated = !!user && !authError && !!user.email
 
   // Rutas públicas — no requieren auth
-  const publicPaths = ['/auth/login', '/auth/register', '/p/', '/politica-de-privacidad']
+  const publicPaths = ['/auth/login', '/auth/register', '/auth/reset-password', '/p/', '/politica-de-privacidad', '/ayuda', '/api/mp/']
   const isPublic = publicPaths.some(p => req.nextUrl.pathname.startsWith(p))
 
-  if (!user && !isPublic) {
+  if (!isAuthenticated && !isPublic) {
     return NextResponse.redirect(new URL('/auth/login', req.url))
   }
 
-  if (user && !isPublic) {
+  if (isAuthenticated && !isPublic) {
     const { data: sub } = await supabase
       .from('subscriptions')
       .select('status, trial_ends_at, current_period_ends_at')

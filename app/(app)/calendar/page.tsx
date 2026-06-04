@@ -97,7 +97,10 @@ export default function AgendaPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !user.email) {
+        window.location.href = '/auth/login'
+        return
+      }
 
       const [{ data: sess }, { data: pacs }, { data: blocks }, { data: avail }] = await Promise.all([
         supabase.from('sessions').select('*, services(color)').eq('user_id', user.id),
@@ -384,10 +387,10 @@ export default function AgendaPage() {
         .semana-grid{display:grid;grid-template-columns:44px repeat(7,1fr)}
         .hora-lbl{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 5px 0;font-size:10px;color:var(--text-muted);font-weight:500;background:var(--bg-input)}
         .celda{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);height:56px;position:relative;transition:background 0.1s}
-        .celda.fuera{background:var(--bg-input);opacity:0.6}
-        .celda.bloqueada{background:#FFFBEB}
-        html.dark .celda.bloqueada{background:#1A1200}
-        .celda.hoy-col{background:rgba(139,92,246,0.02)}
+        .celda.fuera{background:rgba(235, 172, 172, 0.14);opacity:1}
+        .celda.bloqueada{background:repeating-linear-gradient(45deg,#FEF9C3,#FEF9C3 4px,#FFFBEB 4px,#FFFBEB 12px)}
+html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3D2E00 4px,#1A1200 4px,#1A1200 12px)}
+        .celda.hoy-col{background:rgba(158, 115, 245, 0.14)}
         .celda:not(.fuera):not(.bloqueada):hover{background:var(--accent-hover);cursor:pointer}
         .bloqueo-chip{position:absolute;inset:2px 3px;border-radius:6px;padding:3px 6px;z-index:2;display:flex;align-items:center;gap:4px;overflow:hidden}
         .bloqueo-chip-label{font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

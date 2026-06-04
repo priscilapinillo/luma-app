@@ -33,8 +33,11 @@ export default function Sidebar() {
         supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
         supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at').eq('user_id', user.id).maybeSingle(),
       ])
-      if (prof?.nombre_profesional) setPerfil({ nombre: prof.nombre_profesional, plan: 'Plan activo' })
-      else setPerfil({ nombre: user.email?.split('@')[0] || 'Terapeuta', plan: 'Trial activo' })
+      const planLabel = sub?.status === 'active' ? 'Plan activo' : sub?.status === 'trial' ? 'Trial activo' : 'Sin plan'
+setPerfil({ 
+  nombre: prof?.nombre_profesional || user.email?.split('@')[0] || 'Terapeuta', 
+  plan: planLabel 
+})
       if (sub) setSub(sub)
     } catch (err) {
       console.error('Error perfil:', err)

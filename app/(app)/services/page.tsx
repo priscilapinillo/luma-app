@@ -75,7 +75,10 @@ export default function ServiciosPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !user.email) {
+        window.location.href = '/auth/login'
+        return
+      }
       const [{ data: servs }, { data: sess }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', user.id).order('created_at'),
         supabase.from('sessions').select('servicio_nombre,precio,estado_pago').eq('user_id', user.id),

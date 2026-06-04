@@ -68,7 +68,10 @@ export default function AjustesPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !user.email) {
+        window.location.href = '/auth/login'
+        return
+      }
       setEmail(user.email || '')
       setUltimoAcceso(user.last_sign_in_at || '')
       const [{ data: prof }, { data: subs }] = await Promise.all([
@@ -395,10 +398,13 @@ export default function AjustesPage() {
                     onChange={e => setPerfil({...perfil, especialidad: e.target.value})}/>
                 </div>
                 <div className="field">
-                  <label>WhatsApp</label>
-                  <input placeholder="Ej: 5492236789012 (con código de país sin +)" value={perfil.whatsapp}
-                    onChange={e => setPerfil({...perfil, whatsapp: e.target.value})}/>
-                </div>
+  <label>WhatsApp</label>
+  <input placeholder="Ej: 5492236789012 (con código de país sin +)" value={perfil.whatsapp}
+    onChange={e => setPerfil({...perfil, whatsapp: e.target.value})}/>
+  <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5'}}>
+    💡 Este número aparece en tu página pública para que las consultantes puedan contactarte por WhatsApp.
+  </div>
+</div>
                 <div className="field full">
                   <label>Bio corta</label>
                   <textarea placeholder="Una descripción breve de tu práctica profesional..."

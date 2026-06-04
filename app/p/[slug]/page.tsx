@@ -39,10 +39,12 @@ const TEMPLATES = {
     border: 'rgba(201,168,76,0.2)',
     fontTitle: "'Cormorant Garamond', serif",
     fontBody: "'Jost', sans-serif",
+    fontSubtitle: "'Jost', sans-serif",
     googleFonts: 'Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Jost:wght@300;400;500;600',
-    deco: '✦', stars: true,
+    deco: '✦', stars: true, dark: true,
     cardBg: 'rgba(26,22,40,0.6)',
     heroBg: 'linear-gradient(135deg,#1A1035,#0D0B14)',
+    navBg: 'linear-gradient(to bottom,rgba(13,11,20,0.97),rgba(13,11,20,0))',
     btnBg: 'linear-gradient(135deg,#6B3FA0,#8B5CF6)',
     btnColor: '#E8D5A3',
   },
@@ -54,10 +56,12 @@ const TEMPLATES = {
     border: 'rgba(124,58,237,0.15)',
     fontTitle: "'Playfair Display', serif",
     fontBody: "'DM Sans', sans-serif",
+    fontSubtitle: "'DM Sans', sans-serif",
     googleFonts: 'Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:wght@300;400;500;600',
-    deco: '◈', stars: false,
+    deco: '◈', stars: false, dark: false,
     cardBg: 'rgba(255,255,255,0.8)',
     heroBg: 'linear-gradient(135deg,#F8F4FF,#EDE9FE)',
+    navBg: 'rgba(248,244,255,0.95)',
     btnBg: 'linear-gradient(135deg,#7C3AED,#EC4899)',
     btnColor: 'white',
   },
@@ -69,10 +73,12 @@ const TEMPLATES = {
     border: 'rgba(146,64,14,0.15)',
     fontTitle: "'Lora', serif",
     fontBody: "'Nunito', sans-serif",
+    fontSubtitle: "'Nunito', sans-serif",
     googleFonts: 'Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito:wght@300;400;500;600',
-    deco: '❧', stars: false,
+    deco: '❧', stars: false, dark: false,
     cardBg: 'rgba(255,255,255,0.7)',
     heroBg: 'linear-gradient(135deg,#FAF7F0,#F5F0E8)',
+    navBg: 'rgba(250,247,240,0.95)',
     btnBg: 'linear-gradient(135deg,#92400E,#D97706)',
     btnColor: 'white',
   },
@@ -84,10 +90,12 @@ const TEMPLATES = {
     border: 'rgba(190,24,93,0.15)',
     fontTitle: "'Playfair Display', serif",
     fontBody: "'DM Sans', sans-serif",
+    fontSubtitle: "'DM Sans', sans-serif",
     googleFonts: 'Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:wght@300;400;500;600',
-    deco: '✿', stars: false,
+    deco: '✿', stars: false, dark: false,
     cardBg: 'rgba(255,255,255,0.85)',
     heroBg: 'linear-gradient(135deg,#FFF0F6,#FFE4F0)',
+    navBg: 'rgba(255,240,246,0.95)',
     btnBg: 'linear-gradient(135deg,#BE185D,#EC4899)',
     btnColor: 'white',
   },
@@ -99,10 +107,12 @@ const TEMPLATES = {
     border: 'rgba(192,132,252,0.25)',
     fontTitle: "'Cormorant Garamond', serif",
     fontBody: "'Jost', sans-serif",
+    fontSubtitle: "'Jost', sans-serif",
     googleFonts: 'Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Jost:wght@300;400;500;600',
-    deco: '✧', stars: true,
+    deco: '✧', stars: true, dark: true,
     cardBg: 'rgba(61,21,112,0.5)',
     heroBg: 'linear-gradient(135deg,#1E0A3C,#2D1058)',
+    navBg: 'linear-gradient(to bottom,rgba(30,10,60,0.97),rgba(30,10,60,0))',
     btnBg: 'linear-gradient(135deg,#7C3AED,#C084FC)',
     btnColor: 'white',
   },
@@ -114,10 +124,12 @@ const TEMPLATES = {
     border: 'rgba(6,95,70,0.15)',
     fontTitle: "'Lora', serif",
     fontBody: "'Nunito', sans-serif",
+    fontSubtitle: "'Nunito', sans-serif",
     googleFonts: 'Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito:wght@300;400;500;600',
-    deco: '❧', stars: false,
+    deco: '❧', stars: false, dark: false,
     cardBg: 'rgba(255,255,255,0.8)',
     heroBg: 'linear-gradient(135deg,#F0FDF4,#DCFCE7)',
+    navBg: 'rgba(240,253,244,0.95)',
     btnBg: 'linear-gradient(135deg,#065F46,#10B981)',
     btnColor: 'white',
   },
@@ -155,11 +167,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
-    // Guardar estado actual
     const teniaDark = document.documentElement.classList.contains('dark')
     document.documentElement.classList.remove('dark')
-    
-    // Restaurar al salir de la página
     return () => {
       if (teniaDark) document.documentElement.classList.add('dark')
     }
@@ -270,7 +279,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         }).select().single()
         if (np) pacienteId = np.id
       }
-  
+
       const { data: sesion } = await supabase.from('sessions').insert({
         user_id: terapeuta.user_id, patient_id: pacienteId,
         service_id: servicioSel.id,
@@ -279,7 +288,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         servicio_nombre: servicioSel.nombre, precio: servicioSel.precio_base,
         estado_pago: 'pendiente', realizado: false, contexto_sesion: form.mensaje,
       }).select().single()
-  
+
       if (sesion) {
         await supabase.from('public_bookings').insert({
           therapist_id: terapeuta.user_id, patient_name: form.nombre,
@@ -288,18 +297,16 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           fecha: fechaSel, hora: horaSel, duracion: servicioSel.duracion_estimada,
           precio: servicioSel.precio_base, estado: 'pendiente_pago', session_id: sesion.id,
         })
-  
-        // Si requiere pago → redirigir a MP
-        console.log('tipo_pago:', terapeuta.tipo_pago)
+
         if (terapeuta.tipo_pago === 'sena' || terapeuta.tipo_pago === 'completo') {
           const monto = terapeuta.tipo_pago === 'completo'
             ? servicioSel.precio_base
-            : Math.round(servicioSel.precio_base * 0.3) // 30% de seña por defecto
-  
+            : Math.round(servicioSel.precio_base * 0.3)
+
           const origin = window.location.origin
           const successUrl = `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`
           const failureUrl = `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`
-  
+
           const res = await fetch('/api/mp/create-preference', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -312,14 +319,14 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               failureUrl,
             }),
           })
-  
+
           const data = await res.json()
           if (data.init_point) {
             window.location.href = data.init_point
             return
           }
         }
-  
+
         setEnviado(true)
       }
     } catch(e) { console.error(e) } finally { setEnviando(false) }
@@ -366,58 +373,66 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           --card-bg: ${t.cardBg};
           --font-title: ${t.fontTitle};
           --font-body: ${t.fontBody};
+          --font-subtitle: ${t.fontSubtitle};
           --btn-bg: ${t.btnBg};
           --btn-color: ${t.btnColor};
         }
         *{box-sizing:border-box;margin:0;padding:0}
-        html{background:${t.bg} !important}
-        body{background:${t.bg} !important;color:${t.text} !important;font-family:var(--font-body);overflow-x:hidden}
+        html{background:${t.bg} !important;width:100%}
+        body{background:${t.bg} !important;color:${t.text} !important;font-family:var(--font-body);overflow-x:hidden;width:100%}
         html.dark body{background:${t.bg} !important;color:${t.text} !important}
-        html.dark *{--bg:${t.bg};--bg-card:${t.cardBg};--text-primary:${t.cream};--border:${t.border}}.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${isLuna?'linear-gradient(to bottom,rgba(13,11,20,0.95),transparent)':'rgba(255,255,255,0.9)'};backdrop-filter:blur(8px);${!isLuna?'border-bottom:0.5px solid var(--border);':''}}
+        html.dark *{--bg:${t.bg};--bg-card:${t.cardBg};--text-primary:${t.cream};--border:${t.border}}
+
+        .nav{position:fixed;top:0;left:0;right:0;width:100%;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${t.navBg};${!t.dark?'border-bottom:0.5px solid var(--border);backdrop-filter:blur(12px);':''}}
         .nav-logo{font-family:var(--font-title);font-size:20px;font-weight:600;color:var(--primary);letter-spacing:3px}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
-        .hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
+
+        .hero{position:relative;min-height:100vh;width:100vw;display:flex;adding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
         .carta-wrap{position:relative;margin-bottom:32px;animation:float 6s ease-in-out infinite}
         @keyframes float{0%,100%{transform:translateY(0px)}50%{transform:translateY(-12px)}}
         .carta{width:220px;height:340px;border-radius:16px;border:1.5px solid var(--primary);position:relative;overflow:hidden;box-shadow:0 0 40px var(--primary-dim),0 0 80px var(--accent-dim),inset 0 0 30px var(--primary-dim)}
         .carta-foto{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
-        .carta-overlay{position:absolute;inset:0;background:${isLuna?'linear-gradient(to bottom,rgba(13,11,20,0.3) 0%,transparent 30%,transparent 60%,rgba(13,11,20,0.7) 100%)':'linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,transparent 40%,transparent 60%,rgba(0,0,0,0.3) 100%)'}}
+        .carta-overlay{position:absolute;inset:0;background:${t.dark?'linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,transparent 30%,transparent 60%,rgba(0,0,0,0.6) 100%)':'linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,transparent 40%,transparent 60%,rgba(0,0,0,0.2) 100%)'}}
         .carta-frame{position:absolute;inset:8px;border:0.5px solid var(--primary-dim);border-radius:10px;pointer-events:none}
-        .carta-roman{position:absolute;top:12px;left:0;right:0;text-align:center;font-family:var(--font-title);font-size:11px;font-weight:500;color:var(--primary);letter-spacing:4px}
-        .carta-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-family:var(--font-title);font-size:11px;font-weight:500;color:var(--primary-light);letter-spacing:3px;text-transform:uppercase}
+        .carta-roman{position:absolute;top:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary);letter-spacing:4px}
+        .carta-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary-light);letter-spacing:3px;text-transform:uppercase}
         .hero-nombre{font-family:var(--font-title);font-size:clamp(42px,8vw,64px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1;margin-bottom:8px}
-        .hero-esp{font-size:14px;font-weight:400;color:var(--primary);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px}
-        .hero-bio{font-size:18px;line-height:1.8;color:var(--text);max-width:340px;font-weight:300;margin-bottom:32px;font-style:italic;font-family:var(--font-title)}
-        .hero-cta{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;margin-bottom:16px}
+        .hero-esp{font-size:13px;font-weight:600;color:var(--primary);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;font-family:var(--font-subtitle)}
+        .hero-bio{font-size:17px;line-height:1.8;color:var(--text);max-width:340px;font-weight:400;margin-bottom:32px;font-family:var(--font-subtitle)}
+        .hero-cta{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;margin-bottom:16px}
         .hero-cta:hover{transform:translateY(-2px);box-shadow:0 12px 40px var(--accent-dim)}
-        .hero-trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);letter-spacing:1px}
-        .section{position:relative;z-index:1;padding:60px 20px;max-width:560px;margin:0 auto}
-        .section-label{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--primary);margin-bottom:12px;justify-content:center}
+        .hero-trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);letter-spacing:1px;font-family:var(--font-subtitle)}
+
+        .section{position:relative;z-index:1;padding:60px 20px;max-width:560px;margin:0 auto;width:100%}
+        .section-label{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--primary);margin-bottom:12px;justify-content:center;font-family:var(--font-subtitle);font-weight:700}
         .section-title{font-family:var(--font-title);font-size:clamp(32px,6vw,48px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1.1;text-align:center;margin-bottom:8px}
-        .section-sub{font-size:14px;color:var(--text-dim);text-align:center;margin-bottom:32px;font-style:italic;font-family:var(--font-title)}
-        .sobre-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:20px;padding:28px 24px;position:relative;overflow:hidden;${!isLuna?'box-shadow:0 4px 24px rgba(0,0,0,0.06);':''}}
+        .section-sub{font-size:14px;color:var(--text-dim);text-align:center;margin-bottom:32px;font-family:var(--font-subtitle);font-weight:400}
+
+        .sobre-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:20px;padding:28px 24px;position:relative;overflow:hidden;${!t.dark?'box-shadow:0 4px 24px rgba(0,0,0,0.06);':''}}
         .sobre-values{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
         .sobre-val{text-align:center;padding:12px 8px;background:var(--primary-dim);border-radius:12px;border:0.5px solid var(--border)}
-        .sobre-val-icon{font-size:10px;margin-bottom:6px}
-        .sobre-val-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:4px}
-        .sobre-val-desc{font-size:12px;color:var(--text-dim);line-height:1.4}
+        .sobre-val-icon{font-size:20px;margin-bottom:6px}
+        .sobre-val-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:4px;font-family:var(--font-subtitle);font-weight:700}
+        .sobre-val-desc{font-size:12px;color:var(--text-dim);line-height:1.4;font-family:var(--font-subtitle)}
+
         .serv-list{display:flex;flex-direction:column;gap:12px}
-        .serv-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:20px;cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden;${!isLuna?'box-shadow:0 2px 12px rgba(0,0,0,0.06);':''}}
+        .serv-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:20px;cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden;${!t.dark?'box-shadow:0 2px 12px rgba(0,0,0,0.06);':''}}
         .serv-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:0 2px 2px 0;background:linear-gradient(to bottom,var(--primary),var(--accent))}
         .serv-card:hover,.serv-card.sel{border-color:var(--primary-dim);box-shadow:0 0 20px var(--primary-dim);transform:translateX(4px)}
-        .serv-tipo{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
+        .serv-tipo{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);margin-bottom:6px;font-family:var(--font-subtitle);font-weight:700}
         .serv-nombre{font-family:var(--font-title);font-size:20px;font-weight:500;color:var(--cream);margin-bottom:4px}
-        .serv-desc{font-size:14px;color:var(--text-dim);line-height:1.6;margin-bottom:12px}
+        .serv-desc{font-size:14px;color:var(--text-dim);line-height:1.6;margin-bottom:12px;font-family:var(--font-subtitle)}
         .serv-footer{display:flex;justify-content:space-between;align-items:center}
         .serv-precio{font-family:var(--font-title);font-size:22px;color:var(--primary-light);font-weight:500}
-        .serv-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim)}
-        .serv-btn{padding:8px 20px;background:transparent;border:0.5px solid var(--primary-dim);color:var(--primary);border-radius:50px;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:var(--font-body);transition:all 0.2s}
+        .serv-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);font-family:var(--font-subtitle)}
+        .serv-btn{padding:8px 20px;background:transparent;border:0.5px solid var(--primary-dim);color:var(--primary);border-radius:50px;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:var(--font-subtitle);font-weight:600;transition:all 0.2s}
         .serv-btn:hover{background:var(--primary-dim)}
+
         .dias-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:20px;scrollbar-width:none}
         .dias-scroll::-webkit-scrollbar{display:none}
         .dia-pill{flex-shrink:0;padding:10px 16px;border-radius:50px;border:0.5px solid var(--border);background:var(--card-bg);cursor:pointer;transition:all 0.2s;text-align:center}
         .dia-pill.act{background:var(--btn-bg);border-color:var(--accent)}
-        .dia-pill-dia{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px}
+        .dia-pill-dia{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;font-family:var(--font-subtitle);font-weight:600}
         .dia-pill.act .dia-pill-dia{color:rgba(255,255,255,0.7)}
         .dia-pill-num{font-family:var(--font-title);font-size:18px;font-weight:500;color:var(--cream)}
         .horas-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -426,51 +441,58 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hora-btn.sel{background:var(--btn-bg);border-color:var(--accent);color:var(--btn-color)}
         .cal-full{margin-top:16px}
         .cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-        .cal-mes-lbl{font-family:var(--font-title);font-size:18px;color:var(--cream)}
+        .cal-mes-lbl{font-family:var(--font-subtitle);font-size:16px;font-weight:600;color:var(--cream)}
         .cal-nav-btn{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim)}
         .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-        .cal-hdr{text-align:center;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);padding:4px 0}
-        .cal-dia{height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-dim);transition:all 0.15s}
+        .cal-hdr{text-align:center;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);padding:4px 0;font-family:var(--font-subtitle);font-weight:700}
+        .cal-dia{height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-dim);transition:all 0.15s;font-family:var(--font-body)}
         .cal-dia.disp{cursor:pointer;color:var(--text)}
         .cal-dia.disp:hover{background:var(--accent-dim);color:var(--primary)}
         .cal-dia.sel-d{background:var(--btn-bg);color:var(--btn-color)}
         .cal-dia.pasado{opacity:0.3;cursor:not-allowed}
+
         .form-wrap{margin-top:20px}
         .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
-        .field label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--primary)}
+        .field label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700}
         .field input,.field textarea{padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--card-bg);font-size:14px;font-family:var(--font-body);color:var(--cream);outline:none;width:100%;transition:border-color 0.2s}
         .field input:focus,.field textarea:focus{border-color:var(--primary-dim)}
         .field textarea{min-height:90px;resize:none}
-        .field-hint{font-size:11px;color:var(--text-dim);font-style:italic}
+        .field-hint{font-size:11px;color:var(--text-dim);font-family:var(--font-subtitle)}
         .resumen{background:var(--card-bg);border:0.5px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
-        .resumen-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
+        .resumen-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;font-family:var(--font-subtitle)}
         .resumen-row:last-child{margin-bottom:0;padding-top:10px;border-top:0.5px solid var(--border);font-size:16px}
         .resumen-lbl{color:var(--text-dim)}
         .resumen-val{color:var(--cream);font-weight:500}
         .resumen-total{color:var(--primary);font-family:var(--font-title);font-size:20px}
-        .confirmar-btn{width:100%;padding:16px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s}
+        .confirmar-btn{width:100%;padding:16px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-subtitle);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s}
         .confirmar-btn:hover{transform:translateY(-1px)}
         .confirmar-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
-        .testi-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:24px;position:relative;${!isLuna?'box-shadow:0 4px 24px rgba(0,0,0,0.06);':''}}
+
+        .testi-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:24px;position:relative;${!t.dark?'box-shadow:0 4px 24px rgba(0,0,0,0.06);':''}}
         .testi-quote{font-size:48px;color:var(--primary-dim);font-family:serif;line-height:0.8;margin-bottom:12px}
-        .testi-texto{font-family:var(--font-title);font-size:18px;font-style:italic;color:var(--cream);line-height:1.7;margin-bottom:16px}
-        .testi-nombre{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--primary)}
+        .testi-texto{font-family:var(--font-subtitle);font-size:17px;font-weight:400;color:var(--cream);line-height:1.7;margin-bottom:16px}
+        .testi-nombre{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700}
         .testi-dots{display:flex;gap:8px;justify-content:center;margin-top:16px}
         .testi-dot{width:6px;height:6px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.2s}
         .testi-dot.act{width:20px;border-radius:3px;background:var(--primary)}
+
         .faq-item{border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px;background:var(--card-bg)}
-        .faq-pregunta{padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:500;color:var(--cream)}
-        .faq-respuesta{padding:0 16px 14px;font-size:13px;color:var(--text-dim);line-height:1.7}
+        .faq-pregunta{padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;color:var(--cream);font-family:var(--font-subtitle)}
+        .faq-respuesta{padding:0 16px 14px;font-size:13px;color:var(--text-dim);line-height:1.7;font-family:var(--font-subtitle)}
+
         .divider{display:flex;align-items:center;gap:12px;margin:0 auto 48px;max-width:200px;color:var(--primary);font-size:10px;justify-content:center}
         .divider::before,.divider::after{content:'';flex:1;height:0.5px;background:var(--border)}
-        .cta-final{background:${isLuna?'linear-gradient(135deg,rgba(107,63,160,0.3),rgba(26,22,40,0.9))':isLuna?'':'linear-gradient(135deg,var(--accent-dim),var(--primary-dim))'};border:0.5px solid var(--border);border-radius:24px;padding:48px 24px;text-align:center;position:relative;overflow:hidden;margin:0 0 60px}
+        .cta-final{background:${t.dark?'linear-gradient(135deg,rgba(107,63,160,0.3),rgba(26,22,40,0.9))':'linear-gradient(135deg,var(--accent-dim),var(--primary-dim))'};border:0.5px solid var(--border);border-radius:24px;padding:48px 24px;text-align:center;position:relative;overflow:hidden;margin:0 0 60px}
+
         .exito-wrap{text-align:center;padding:48px 20px}
         .exito-circle{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#10B981,#34D399);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:0 0 40px rgba(16,185,129,0.4)}
         .exito-title{font-family:var(--font-title);font-size:32px;font-weight:300;color:var(--cream);margin-bottom:12px}
-        .exito-sub{font-size:14px;color:var(--text-dim);line-height:1.8;margin-bottom:28px;font-style:italic;font-family:var(--font-title)}
-        .wsp-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#25D366;color:white;border:none;border-radius:50px;font-size:14px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;box-shadow:0 6px 20px rgba(37,211,102,0.3);text-decoration:none}
-        .footer{text-align:center;padding:20px;font-size:11px;color:var(--text-dim);letter-spacing:2px;z-index:1;position:relative}
+        .exito-sub{font-size:14px;color:var(--text-dim);line-height:1.8;margin-bottom:28px;font-family:var(--font-subtitle)}
+        .wsp-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#25D366;color:white;border:none;border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;box-shadow:0 6px 20px rgba(37,211,102,0.3);text-decoration:none}
+
+        .footer{text-align:center;padding:20px;font-size:11px;color:var(--text-dim);letter-spacing:2px;z-index:1;position:relative;font-family:var(--font-subtitle)}
         .footer span{color:var(--primary)}
+
         .stars-bg{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
         .star{position:absolute;width:2px;height:2px;background:var(--primary-light);border-radius:50%;opacity:0;animation:twinkle var(--dur,3s) var(--delay,0s) infinite}
         @keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--op,0.6)}}
@@ -478,8 +500,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         @keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
         .hero-scroll{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);color:var(--primary-dim);animation:bounce 2s infinite}
         .carta-glow{position:absolute;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,var(--accent-dim) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:-1;animation:pulseGlow 4s ease-in-out infinite}
+
         @media(min-width:768px){
-          .hero{flex-direction:row;text-align:left;max-width:900px;margin:0 auto;gap:60px;padding:100px 40px 80px}
+          .hero{flex-direction:row;text-align:left;width:100vw;padding:100px 80px 80px;justify-content:center;align-items:center;gap:80px}
+.hero .carta-wrap{flex-shrink:0}
+.hero .hero-text{max-width:500px;flex:1}
+.hero .hero-nombre{font-size:clamp(52px,6vw,80px)}
+.hero .hero-bio{font-size:18px}
+.hero .hero-esp{font-size:14px}
+
           .hero-text{flex:1}
           .hero-bio{max-width:none}
           .carta{width:280px;height:420px}
@@ -489,11 +518,16 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           .sobre-values{grid-template-columns:repeat(3,1fr)}
           .cta-final{margin:0 40px 60px}
           .nav{padding:20px 40px}
-        }
+        } 
+          @media(max-width:767px){
+  .hero{flex-direction:column;text-align:center;padding:90px 24px 60px;gap:32px;align-items:center}
+  .hero .hero-text{max-width:100%;flex:unset}
+  .hero .hero-bio{max-width:100%}
+  .hero-trust{justify-content:center}
+}
       `}</style>
 
-      {/* STARS — solo template luna */}
-      {isLuna && (
+      {t.stars && (
         <div className="stars-bg">
           {Array.from({length:40}).map((_,i) => (
             <div key={i} className="star" style={{
@@ -507,7 +541,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </div>
       )}
 
-      {/* NAV */}
       <nav className="nav">
         <div className="nav-logo">{isLuna ? '✦ ' : ''}{terapeuta.nombre_profesional?.split(' ')[0]?.toUpperCase() || 'LUMA'}</div>
         <button className="nav-cta" onClick={() => reservaRef.current?.scrollIntoView({behavior:'smooth'})}>
@@ -515,7 +548,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </button>
       </nav>
 
-      {/* HERO */}
       <section className="hero">
         <div className="carta-wrap">
           <div className="carta-glow"/>
@@ -544,14 +576,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <div className="hero-scroll"><ChevronDown size={20}/></div>
       </section>
 
-      {/* SOBRE MÍ */}
       {secciones.sobre_mi && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
           <div className="section-label">Sobre mí</div>
           <h2 className="section-title">Mi propósito</h2>
           <div className="sobre-card">
-            <p style={{fontSize:'15px',lineHeight:'1.9',color:'var(--text)',fontFamily:'var(--font-title)',fontStyle:'italic',marginBottom:'8px'}}>
+            <p style={{fontSize:'15px',lineHeight:'1.9',color:'var(--text)',fontFamily:'var(--font-subtitle)',fontWeight:400,marginBottom:'8px'}}>
               {terapeuta.bio || 'Trabajo desde una mirada holística para acompañar procesos de transformación y crecimiento.'}
             </p>
             <div className="sobre-values">
@@ -573,14 +604,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
       <div className="divider">{t.deco} {t.deco} {t.deco}</div>
 
-      {/* SERVICIOS */}
       <section className="section" ref={reservaRef}>
         <div className="section-label">Servicios</div>
         <h2 className="section-title">¿Cómo puedo acompañarte?</h2>
         <p className="section-sub">Elegí el servicio que resuene con lo que necesitás hoy</p>
 
         {servicios.length === 0 ? (
-          <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontStyle:'italic',fontFamily:'var(--font-title)',fontSize:'16px'}}>
+          <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
             Próximamente disponibles {t.deco}
           </div>
         ) : (
@@ -618,7 +648,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </div>
         )}
 
-        {/* DISPONIBILIDAD */}
         {paso >= 1 && paso < 3 && servicioSel && servicioSel.tipo_servicio !== 'entrega' && !enviado && secciones.disponibilidad && (
           <div ref={horariosRef} style={{marginTop:'32px'}}>
             <div className="section-label" style={{marginBottom:'16px'}}>Próximos turnos disponibles</div>
@@ -635,15 +664,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               {fechaSel && (
                 <div className="horas-grid">
                   {horariosDisponibles(fechaSel).length === 0
-                    ? <div style={{gridColumn:'1/-1',textAlign:'center',color:'var(--text-dim)',fontSize:'13px',padding:'16px',fontStyle:'italic'}}>No hay horarios disponibles este día</div>
+                    ? <div style={{gridColumn:'1/-1',textAlign:'center',color:'var(--text-dim)',fontSize:'13px',padding:'16px',fontFamily:'var(--font-subtitle)'}}>No hay horarios disponibles este día</div>
                     : horariosDisponibles(fechaSel).map(h => (
                       <button key={h} className={`hora-btn${horaSel===h?' sel':''}`}
-                      onClick={() => { setHoraSel(h); setPaso(3) }}>{h}</button>
+                        onClick={() => { setHoraSel(h); setPaso(3) }}>{h}</button>
                     ))}
                 </div>
               )}
               <button onClick={() => setMostrarCalFull(true)}
-                style={{marginTop:'16px',width:'100%',padding:'10px',background:'transparent',border:'0.5px solid var(--border)',color:'var(--text-dim)',borderRadius:'10px',fontSize:'12px',letterSpacing:'2px',textTransform:'uppercase',cursor:'pointer',fontFamily:'var(--font-body)'}}>
+                style={{marginTop:'16px',width:'100%',padding:'10px',background:'transparent',border:'0.5px solid var(--border)',color:'var(--text-dim)',borderRadius:'10px',fontSize:'12px',letterSpacing:'2px',textTransform:'uppercase',cursor:'pointer',fontFamily:'var(--font-subtitle)',fontWeight:600}}>
                 Ver calendario completo
               </button>
             </>) : (
@@ -673,7 +702,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </div>
         )}
 
-        {/* FORMULARIO */}
         {paso >= 3 && fechaSel && horaSel && !enviado && (
           <div className="form-wrap" ref={formularioRef}>
             <div style={{height:'1px',background:'var(--border)',margin:'28px 0'}}/>
@@ -684,8 +712,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             </div>
             <div className="field">
               <label>WhatsApp</label>
-              <input placeholder="Ej: 2236789012" value={form.whatsapp} onChange={e => setForm({...form,whatsapp:e.target.value})}/>
-              <div className="field-hint">Te contactaremos para confirmar</div>
+              <input placeholder="Ej: 5492236789012" value={form.whatsapp} onChange={e => setForm({...form,whatsapp:e.target.value})}/>
+              <div className="field-hint">Incluí el código de país sin el + · Ej: 5492236789012 (Argentina) · 521XXXXXXXXXX (México)</div>
             </div>
             <div className="field">
               <label>¿Qué querés trabajar? (opcional)</label>
@@ -709,7 +737,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </div>
         )}
 
-        {/* ÉXITO */}
         {enviado && (
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={36} color="white"/></div>
@@ -725,7 +752,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         )}
       </section>
 
-      {/* FAQ */}
       {secciones.faq && faqItems.length > 0 && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
@@ -743,7 +769,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </section>
       </>)}
 
-      {/* TESTIMONIOS */}
       {secciones.testimonios && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
@@ -752,24 +777,23 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div className="testi-card">
             <div className="testi-quote">"</div>
             <p className="testi-texto">{(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.texto}</p>
-          <div className="testi-nombre">— {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.nombre}</div>
-        </div>
-        <div className="testi-dots">
-          {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
+            <div className="testi-nombre">— {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.nombre}</div>
+          </div>
+          <div className="testi-dots">
+            {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
               <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
             ))}
           </div>
         </section>
       </>)}
 
-      {/* CTA FINAL */}
       <section className="section">
         <div className="cta-final">
           <div className="section-label">¿Lista para tu próximo paso?</div>
           <h2 style={{fontFamily:'var(--font-title)',fontSize:'clamp(28px,5vw,40px)',fontWeight:300,color:'var(--cream)',marginBottom:'8px'}}>
             Tu proceso merece<br/>un espacio cuidado {t.deco}
           </h2>
-          <p style={{fontSize:'15px',color:'var(--text-dim)',marginBottom:'28px',fontStyle:'italic',fontFamily:'var(--font-title)'}}>
+          <p style={{fontSize:'15px',color:'var(--text-dim)',marginBottom:'28px',fontFamily:'var(--font-subtitle)'}}>
             Estoy aquí para acompañarte
           </p>
           <button className="hero-cta" onClick={() => reservaRef.current?.scrollIntoView({behavior:'smooth'})}>
@@ -778,11 +802,17 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </div>
       </section>
 
-      {terapeuta.whatsapp && <a href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}`}target="_blank" rel="noopener noreferrer" style={{position:'fixed',bottom:'24px',right:'24px',zIndex:200,display:'flex',alignItems:'center',gap:'10px',padding:'12px 20px',background:'#25D366',color:'white',borderRadius:'50px',fontFamily:'var(--font-body)',fontSize:'13px',fontWeight:600,textDecoration:'none',boxShadow:'0 6px 24px rgba(37,211,102,0.4)'}}>💬 ¿Dudas? Escribime</a>}
+      {terapeuta.whatsapp && (
+        <a href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}`}
+          target="_blank" rel="noopener noreferrer"
+          style={{position:'fixed',bottom:'24px',right:'24px',zIndex:200,display:'flex',alignItems:'center',gap:'10px',padding:'12px 20px',background:'#25D366',color:'white',borderRadius:'50px',fontFamily:'var(--font-body)',fontSize:'13px',fontWeight:600,textDecoration:'none',boxShadow:'0 6px 24px rgba(37,211,102,0.4)'}}>
+          💬 ¿Dudas? Escribime
+        </a>
+      )}
 
-    <footer className="footer">
-      © 2025 {terapeuta.nombre_profesional} · Powered by <span>Luma</span>
-    </footer>
+      <footer className="footer">
+        © 2025 {terapeuta.nombre_profesional} · Powered by <span>Luma</span>
+      </footer>
     </div>
   )
 }

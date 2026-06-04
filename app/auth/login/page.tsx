@@ -18,6 +18,10 @@ export default function AuthPage() {
   const [regError, setRegError] = useState('')
   const [regLoading, setRegLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
+  const [recuperando, setRecuperando] = useState(false)
+  const [emailRecuperar, setEmailRecuperar] = useState('')
+  const [enviandoRecuperar, setEnviandoRecuperar] = useState(false)
+  const [recuperadoEnviado, setRecuperadoEnviado] = useState(false)
   const router = useRouter()
 
   async function handleLogin(e: React.FormEvent) {
@@ -28,6 +32,16 @@ export default function AuthPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
     router.push('/dashboard')
+  }
+  async function handleRecuperar(e?: React.FormEvent) {
+    e?.preventDefault()
+    setEnviandoRecuperar(true)
+    const supabase = createClient()
+    await supabase.auth.resetPasswordForEmail(emailRecuperar, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+    setRecuperadoEnviado(true)
+    setEnviandoRecuperar(false)
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -350,7 +364,46 @@ export default function AuthPage() {
                       </div>
                     </div>
                     {error && <div className="form-error">{error}</div>}
-                    <button type="submit" className="form-btn" disabled={loading}>
+{!recuperando ? (
+  <div style={{textAlign:'right',marginBottom:'12px'}}>
+    <button type="button" className="form-switch-link"
+      onClick={() => setRecuperando(true)}>
+      ¿Olvidaste tu contraseña?
+    </button>
+  </div>
+) : (
+  <div style={{background:'#F4F0FF',border:'1px solid #DDD6FE',borderRadius:'10px',padding:'16px',marginBottom:'16px'}}>
+    {recuperadoEnviado ? (
+      <>
+        <div style={{fontSize:'14px',fontWeight:700,color:'#6D28D9',marginBottom:'6px'}}>📬 Revisá tu email</div>
+        <div style={{fontSize:'13px',color:'#737373',marginBottom:'10px'}}>Te enviamos un link para restablecer tu contraseña.</div>
+        <button type="button" className="form-switch-link" onClick={() => { setRecuperando(false); setRecuperadoEnviado(false); setEmailRecuperar('') }}>
+          ← Volver al login
+        </button>
+      </>
+    ) : (
+      <div onSubmit={handleRecuperar}>
+        <div style={{fontSize:'13px',fontWeight:600,color:'#6D28D9',marginBottom:'10px'}}>Recuperar contraseña</div>
+        <input className="form-input" type="email" placeholder="tu@email.com"
+          value={emailRecuperar} onChange={e => setEmailRecuperar(e.target.value)}
+          required style={{marginBottom:'10px'}}/>
+        <div style={{display:'flex',gap:'8px'}}>
+          <button type="button" className="form-switch-link"
+            onClick={() => setRecuperando(false)}>
+            Cancelar
+          </button>
+          <button type="button" className="form-btn"
+            onClick={() => handleRecuperar()}
+            disabled={enviandoRecuperar}
+            style={{flex:1,marginTop:0,padding:'10px'}}>
+            {enviandoRecuperar ? 'Enviando...' : 'Enviar link →'}
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+<button type="submit" className="form-btn" disabled={loading}>
                       {loading ? 'Ingresando...' : 'Ingresar →'}
                     </button>
                   </form>

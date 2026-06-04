@@ -43,7 +43,10 @@ export default function FinanzasPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !user.email) {
+        window.location.href = '/auth/login'
+        return
+      }
 
       const [{ data: sess }, { data: pacs }] = await Promise.all([
         supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
