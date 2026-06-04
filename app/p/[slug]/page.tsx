@@ -180,9 +180,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     const sessionId = params.get('session_id')
     if (status === 'approved' && sessionId) {
       const supabase = createClient()
-      supabase.from('sessions').update({ estado_pago: 'pagado' }).eq('id', sessionId)
-      supabase.from('public_bookings').update({ estado: 'confirmada' }).eq('session_id', sessionId)
-      setEnviado(true)
+      Promise.all([
+        supabase.from('sessions').update({ estado_pago: 'pagado' }).eq('id', sessionId),
+        supabase.from('public_bookings').update({ estado: 'confirmada' }).eq('session_id', sessionId),
+      ]).then(() => setEnviado(true))
     }
   }, [])
 
@@ -322,7 +323,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
           const data = await res.json()
           if (data.init_point) {
-            window.location.href = data.init_point
+            const link = document.createElement('a')
+            link.href = data.init_point
+            link.target = '_blank'
+            link.rel = 'noopener noreferrer'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
             return
           }
         }

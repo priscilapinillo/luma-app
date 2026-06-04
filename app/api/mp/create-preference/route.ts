@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
           failure: failureUrl,
           pending: failureUrl,
         },
+        payment_methods: {
+          excluded_payment_types: [],
+        },
         auto_return: 'approved',
+binary_mode: true,
       }),
     })
 
