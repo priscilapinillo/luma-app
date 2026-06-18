@@ -17,7 +17,7 @@ type Turno = {
   id: string; pacienteId: string; pacienteNombre: string; pacienteDbId?: string
   fecha: string; hora: string; duracion: number
   servicio: string; precio: number; contexto: string
-  pago: Pago; sena: number; realizado: boolean
+  pago: Pago; sena: number; metodo_pago?: string; realizado: boolean
   historial?: SesionHistorial[]
   created_at?: string
 origen?: string
@@ -224,6 +224,7 @@ const [contextoLocal, setContextoLocal] = useState('')
               historial,
               created_at: s.created_at || '',
               origen: s.public_bookings?.[0]?.estado === 'pendiente_pago' && s.estado_pago === 'pendiente' ? 'pagina_publica' : undefined,
+metodo_pago: s.metodo_pago || 'mercadopago',
             }
           })
           setTurnos(convertidos)
@@ -621,6 +622,7 @@ const [contextoLocal, setContextoLocal] = useState('')
       contexto: nuevoTurno.contexto, pago: nuevoTurno.pago,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
       realizado: false,
+      metodo_pago: 'mercadopago',
       historial: turnos.filter(t => {
         if (t.pacienteDbId !== pacienteDbId || t.id === nuevaSesion.id) return false
         return new Date(t.fecha?.split('T')[0]+'T12:00:00') < new Date(nuevoTurno.fecha+'T12:00:00')
@@ -1099,7 +1101,12 @@ setTabDetalle('contexto')
 )}
 
             <div className="rbadges">
-              <span className="rb rb-s">{turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}</span>
+            <span className="rb rb-s">
+  {turnoSeleccionado.servicio} · ${turnoSeleccionado.precio.toLocaleString()}
+  {turnoSeleccionado.metodo_pago === 'transferencia' && (
+    <span title="Pago por transferencia" style={{marginLeft:'6px'}}>🏦</span>
+  )}
+</span>
               <select
                 className={`pago-dd${turnoSeleccionado.pago==='pagado'?' ok':turnoSeleccionado.pago==='señado'?' dep':''}`}
                 value={turnoSeleccionado.pago}

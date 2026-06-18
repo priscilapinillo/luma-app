@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 export default function Sidebar() {
@@ -14,6 +14,7 @@ export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
   const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null} | null>(null)
+
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
     if (saved === 'dark') setDark(true)
@@ -34,10 +35,10 @@ export default function Sidebar() {
         supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at').eq('user_id', user.id).maybeSingle(),
       ])
       const planLabel = sub?.status === 'active' ? 'Plan activo' : sub?.status === 'trial' ? 'Trial activo' : 'Sin plan'
-setPerfil({ 
-  nombre: prof?.nombre_profesional || user.email?.split('@')[0] || 'Terapeuta', 
-  plan: planLabel 
-})
+      setPerfil({
+        nombre: prof?.nombre_profesional || user.email?.split('@')[0] || 'Terapeuta',
+        plan: planLabel
+      })
       if (sub) setSub(sub)
     } catch (err) {
       console.error('Error perfil:', err)
@@ -78,101 +79,286 @@ setPerfil({
       <>
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
-          .sb-mobile{
-            position:fixed;bottom:0;left:0;right:0;z-index:200;
-            background:rgba(255,255,255,0.95);
-            backdrop-filter:blur(12px);
-            border-top:0.5px solid rgba(139,92,246,0.15);
-            display:flex;align-items:center;justify-content:space-around;
-            padding:8px 0 max(8px,env(safe-area-inset-bottom));
-            font-family:'Inter',sans-serif;
+
+          /* ── NAV PILL GLASSMORPHISM ── */
+          .sb-mobile {
+            position: fixed;
+            bottom: 12px;
+            bottom: calc(12px + env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 24px);
+            max-width: 420px;
+            z-index: 200;
+            backdrop-filter: blur(16px) saturate(200%) contrast(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(200%) contrast(180%);
+            background: rgba(139,92,246,0.25);
+            border: 1px solid rgba(167,139,250,0.3);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.25), 0 2px 0 rgba(255,255,255,0.05) inset;
+            padding: 6px;
+            border-radius: 99rem;
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            font-family: 'Inter', sans-serif;
           }
-          html.dark .sb-mobile{
-            background:rgba(19,17,31,0.95);
-            border-top-color:rgba(100,80,180,0.2);
+          .sb-mobile {
+  position: fixed;
+  bottom: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 420px;
+  z-index: 200;
+  backdrop-filter: blur(16px) saturate(200%);
+  -webkit-backdrop-filter: blur(16px) saturate(200%);
+  background: rgba(139,92,246,0.25);
+  border: 1px solid rgba(167,139,250,0.4);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  padding: 6px;
+  border-radius: 99rem;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  font-family: 'Inter', sans-serif;
+}
+html.dark .sb-mobile {
+  background: rgba(20,12,40,0.85);
+  border-color: rgba(139,92,246,0.35);
+}
+.sb-mob-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+ color: rgb(140 110 185 / 85%);
+  text-decoration: none;
+  padding: 8px 4px;
+  border-radius: 999rem;
+  font-size: 9px;
+  font-weight: 600;
+  transition: all 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  gap: 3px;
+}
+.sb-mob-item:hover {
+  background: rgba(255,255,255,0.15);
+  color: rgb(205, 173, 226);
+}
+.sb-mob-item:active { transform: scale(0.96) }
+.sb-mob-item.active {
+  background: rgba(255,255,255,0.3);
+  color: rgb(73, 41, 138);
+}
+.sb-mob-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+          /* ── BOTÓN FLOTANTE ── */
+          .sb-float-btn {
+  position: fixed;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  right: 16px;
+  z-index: 300;
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg,#6B3FA0,#8B5CF6);
+  border: 1px solid rgba(167,139,250,0.3);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+  color: white;
+  transition: all 0.2s;
+}
+.sb-float-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(139,92,246,0.5) }
+.sb-float-btn:active { transform: scale(0.95) }
+
+          /* ── MENÚ DESPLEGABLE ── */
+          .sb-dropdown {
+            position: fixed;
+            bottom: calc(148px + env(safe-area-inset-bottom));
+            right: 16px;
+            z-index: 300;
+            width: 200px;
+            background: linear-gradient(139deg,rgba(26,16,50,1) 0%,rgba(37,16,52,1) 100%);
+            border-radius: 14px;
+            padding: 12px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            border: 0.5px solid rgba(139,92,246,0.25);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+            animation: dropIn 0.15s ease;
           }
-          .sb-mob-item{
-            display:flex;flex-direction:column;align-items:center;gap:3px;
-            padding:6px 10px;border-radius:12px;
-            text-decoration:none;color:var(--text-muted);
-            transition:all 0.15s;font-size:9px;font-weight:500;
-            min-width:48px;
+          html:not(.dark) .sb-dropdown {
+            background: linear-gradient(139deg,rgba(255,255,255,1) 0%,rgba(248,240,255,1) 100%);
+            border-color: rgba(139,92,246,0.15);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.15);
           }
-          .sb-mob-item.active{color:var(--accent)}
-          .sb-mob-item.active .sb-mob-icon{
-            background:var(--accent-light);
-            color:var(--accent);
+          @keyframes dropIn {
+            from { opacity:0; transform:translateY(8px) scale(0.97) }
+            to { opacity:1; transform:translateY(0) scale(1) }
           }
-          .sb-mob-icon{
-            width:32px;height:32px;border-radius:10px;
-            display:flex;align-items:center;justify-content:center;
-            transition:all 0.15s;
+          .sb-dropdown-sep {
+            border: none;
+            border-top: 1px solid rgba(139,92,246,0.15);
+            margin: 6px 0;
           }
+          html:not(.dark) .sb-dropdown-sep { border-top-color: rgba(139,92,246,0.1) }
+
+          .sb-dropdown-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 0 8px;
+          }
+          .sb-dropdown-item {
+            display: flex;
+            align-items: center;
+            color: rgba(167,139,250,0.8);
+            gap: 10px;
+            transition: all 0.2s ease;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            text-decoration: none;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+          }
+          html:not(.dark) .sb-dropdown-item { color: rgba(107,63,160,0.8) }
+          .sb-dropdown-item:hover {
+            background: rgba(139,92,246,0.2);
+            color: white;
+            transform: translate(1px,-1px);
+          }
+          html:not(.dark) .sb-dropdown-item:hover {
+            background: rgba(139,92,246,0.12);
+            color: #6B3FA0;
+          }
+          .sb-dropdown-item:active { transform: scale(0.98) }
+          .sb-dropdown-item.danger { color: rgba(252,165,165,0.8) }
+          html:not(.dark) .sb-dropdown-item.danger { color: rgba(220,38,38,0.8) }
+          .sb-dropdown-item.danger:hover {
+            background: rgba(142,42,42,0.6);
+            color: white;
+          }
+          html:not(.dark) .sb-dropdown-item.danger:hover {
+            background: rgba(254,226,226,1);
+            color: #DC2626;
+          }
+
+          /* ── TOGGLE THEME ── */
+          .sb-mob-toggle-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(167,139,250,0.8);
+            font-family: 'Inter', sans-serif;
+            margin: 0 8px;
+            transition: all 0.2s;
+          }
+          html:not(.dark) .sb-mob-toggle-wrap { color: rgba(107,63,160,0.8) }
+          .sb-mob-toggle-wrap:hover {
+            background: rgba(139,92,246,0.15);
+            color: white;
+          }
+          html:not(.dark) .sb-mob-toggle-wrap:hover {
+            background: rgba(139,92,246,0.08);
+            color: #6B3FA0;
+          }
+          .sb-mob-toggle-left { display:flex;align-items:center;gap:8px }
+          .sb-mob-toggle {
+            width:36px;height:20px;border-radius:20px;
+            background:rgba(139,92,246,0.3);
+            position:relative;transition:background 0.2s;flex-shrink:0;
+          }
+          .sb-mob-toggle.on { background:linear-gradient(135deg,#6B3FA0,#8B5CF6) }
+          .sb-mob-toggle-dot {
+            position:absolute;top:2px;
+            width:16px;height:16px;border-radius:50%;
+            background:white;transition:left 0.2s;
+            box-shadow:0 1px 4px rgba(0,0,0,0.3);
+          }
+          .sb-mob-toggle.on .sb-mob-toggle-dot { left:18px }
+          .sb-mob-toggle.off .sb-mob-toggle-dot { left:2px }
         `}</style>
 
+        {/* NAV BOTTOM */}
         <nav className="sb-mobile">
           {links.map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}
               className={`sb-mob-item${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
-              <div className="sb-mob-icon"><Icon size={18}/></div>
+              <div className="sb-mob-icon"><Icon size={17}/></div>
               <span>{label}</span>
             </Link>
           ))}
         </nav>
 
         {/* BOTÓN FLOTANTE */}
-        <button onClick={() => setMenuMobile(!menuMobile)} style={{
-          position:'fixed',bottom:'72px',right:'16px',zIndex:300,
-          width:'44px',height:'44px',borderRadius:'50%',
-          background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',
-          border:'none',cursor:'pointer',
-          display:'flex',alignItems:'center',justifyContent:'center',
-          boxShadow:'0 4px 16px rgba(139,92,246,0.4)',
-          fontSize:'18px',
-        }}>⚙️</button>
+        <button className="sb-float-btn" onClick={() => setMenuMobile(!menuMobile)}>
+  <Settings size={18}/>
+</button>
 
+        {/* MENÚ DESPLEGABLE */}
         {menuMobile && (<>
-          <div style={{
-            position:'fixed',bottom:'124px',right:'16px',zIndex:300,
-            background:'var(--bg-card)',borderRadius:'16px',
-            border:'0.5px solid var(--border-light)',
-            boxShadow:'0 8px 32px rgba(0,0,0,0.2)',
-            overflow:'hidden',minWidth:'180px',
-          }}>
-            <button onClick={toggleTheme} style={{
-              width:'100%',padding:'12px 16px',background:'transparent',
-              border:'none',borderBottom:'0.5px solid var(--border-light)',
-              display:'flex',alignItems:'center',gap:'10px',
-              fontSize:'13px',color:'var(--text-primary)',cursor:'pointer',
-              fontFamily:'inherit',textAlign:'left' as const,
-            }}>
-              {dark ? '☀️' : '🌙'} {dark ? 'Modo claro' : 'Modo oscuro'}
-            </button>
-            <button onClick={() => { setMenuMobile(false); handleLogout() }} style={{
-              width:'100%',padding:'12px 16px',background:'transparent',
-              border:'none',borderBottom:'0.5px solid var(--border-light)',
-              display:'flex',alignItems:'center',gap:'10px',
-              fontSize:'13px',color:'var(--text-primary)',cursor:'pointer',
-              fontFamily:'inherit',textAlign:'left' as const,
-            }}>
-              🚪 Cerrar sesión
-            </button>
-            <a href="/ayuda" style={{
-      display:'flex',alignItems:'center',gap:'10px',
-      padding:'12px 16px',
-      fontSize:'13px',color:'var(--text-primary)',textDecoration:'none',
-    }}>
-      💬 Ayuda
-    </a>
+          <div className="sb-dropdown">
+            {/* TOGGLE THEME */}
+            <div className="sb-mob-toggle-wrap" onClick={toggleTheme}>
+              <div className="sb-mob-toggle-left">
+                <span>{dark ? '🌙' : '☀️'}</span>
+                <span>{dark ? 'Modo oscuro' : 'Modo claro'}</span>
+              </div>
+              <div className={`sb-mob-toggle${dark?' on':' off'}`}>
+                <div className="sb-mob-toggle-dot"/>
+              </div>
+            </div>
+
+            <hr className="sb-dropdown-sep"/>
+
+            <ul className="sb-dropdown-list">
+              <li>
+                <Link href="/roadmap" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
+                  <Map size={16}/> <span>Novedades</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/ayuda" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
+                  <HelpCircle size={16}/> <span>Ayuda</span>
+                </Link>
+              </li>
+            </ul>
+
+            <hr className="sb-dropdown-sep"/>
+
+            <ul className="sb-dropdown-list">
+              <li>
+                <button className="sb-dropdown-item danger" onClick={() => { setMenuMobile(false); handleLogout() }}>
+                  <LogOut size={16}/> <span>Cerrar sesión</span>
+                </button>
+              </li>
+            </ul>
           </div>
-          <div onClick={() => setMenuMobile(false)} style={{
-            position:'fixed',inset:0,zIndex:299,
-          }}/>
+          <div onClick={() => setMenuMobile(false)} style={{position:'fixed',inset:0,zIndex:299}}/>
         </>)}
       </>
     )
   }
 
+  // ── SIDEBAR DESKTOP ──
   return (
     <>
       <style>{`
@@ -207,7 +393,7 @@ setPerfil({
         .sb-theme:hover{background:rgba(139,92,246,0.1)}
         .sb-theme-left{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--text-secondary)}
         .sb-toggle{width:32px;height:18px;border-radius:20px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0;background:var(--border)}
-        .sb-toggle.on{background:var(--accent)}
+        .sb-toggle.on{background:linear-gradient(135deg,#6B3FA0,#8B5CF6)}
         .sb-toggle-dot{position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
         .sb-toggle.on .sb-toggle-dot{left:16px}
         .sb-toggle.off .sb-toggle-dot{left:2px}
@@ -250,8 +436,12 @@ setPerfil({
           <Settings size={13}/>Configuración
         </Link>
 
+        <Link href="/roadmap" className={`sb-link${pathname==='/roadmap'?' active':''}`}>
+          <Map size={13}/>Novedades
+        </Link>
+
         <Link href="/ayuda" className={`sb-link${pathname==='/ayuda'?' active':''}`}>
-          <span style={{fontSize:'13px'}}>💬</span>Ayuda
+          <HelpCircle size={13}/>Ayuda
         </Link>
 
         <div className="sb-spacer"/>
@@ -267,29 +457,29 @@ setPerfil({
         </button>
 
         {sub && (() => {
-  const ahora = new Date()
-  const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
-  const esTrial = sub.status === 'trial' && sub.trial_ends_at
-  const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
-  const pct = esTrial ? Math.round((diasRestantes / 7) * 100) : 100
+          const ahora = new Date()
+          const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
+          const esTrial = sub.status === 'trial' && sub.trial_ends_at
+          const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
+          const pct = esTrial ? Math.round((diasRestantes / 7) * 100) : 100
 
-  return (
-    <div className="sb-trial" style={{background: esActivo ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: esActivo ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
-      <div className="sb-trial-t" style={{color: esActivo ? '#059669' : 'var(--accent)'}}>
-        {esActivo ? '✓ Plan activo' : esTrial ? '✦ Trial activo' : '⚠️ Trial vencido'}
-      </div>
-      <div className="sb-trial-s">
-        {esActivo ? 'Suscripción vigente' : esTrial ? `${diasRestantes} días restantes` : 'Activá tu suscripción'}
-      </div>
-      {esTrial && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}
-      {!esActivo && !esTrial && (
-        <a href="/suscripcion" style={{fontSize:'10px',color:'var(--accent)',fontWeight:600,textDecoration:'none',display:'block',marginTop:'6px'}}>
-          Activar ahora →
-        </a>
-      )}
-    </div>
-  )
-})()}
+          return (
+            <div className="sb-trial" style={{background: esActivo ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: esActivo ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
+              <div className="sb-trial-t" style={{color: esActivo ? '#059669' : 'var(--accent)'}}>
+                {esActivo ? '✓ Plan activo' : esTrial ? '✦ Trial activo' : '⚠️ Trial vencido'}
+              </div>
+              <div className="sb-trial-s">
+                {esActivo ? 'Suscripción vigente' : esTrial ? `${diasRestantes} días restantes` : 'Activá tu suscripción'}
+              </div>
+              {esTrial && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}
+              {!esActivo && !esTrial && (
+                <a href="/suscripcion" style={{fontSize:'10px',color:'var(--accent)',fontWeight:600,textDecoration:'none',display:'block',marginTop:'6px'}}>
+                  Activar ahora →
+                </a>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="sb-user">
           <div className="sb-avatar">{iniciales}</div>

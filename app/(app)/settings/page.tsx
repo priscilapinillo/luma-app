@@ -17,9 +17,16 @@ type Perfil = {
   faq: { pregunta: string; respuesta: string }[]
   mp_access_token: string
   mp_activo: boolean
+  acepta_transferencia?: boolean
+alias_pago?: string
+cbu?: string
+titular_cuenta?: string
+banco?: string
+instrucciones_pago?: string
   valores: { icon: string; name: string; desc: string }[]
   testimonios: { texto: string; nombre: string }[]
 }
+
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
 const MONEDAS = ['ARS','USD','EUR','CLP','PEN','COP','MXN','UYU']
@@ -136,6 +143,12 @@ export default function AjustesPage() {
         faq: perfil.faq,
         mp_access_token: perfil.mp_access_token,
         mp_activo: perfil.mp_activo,
+        acepta_transferencia: perfil.acepta_transferencia || false,
+        alias_pago: perfil.alias_pago || '',
+        cbu: perfil.cbu || '',
+        titular_cuenta: perfil.titular_cuenta || '',
+        banco: perfil.banco || '',
+        instrucciones_pago: perfil.instrucciones_pago || '',
         valores: perfil.valores,
         testimonios: perfil.testimonios,
         updated_at: new Date().toISOString(),
@@ -404,6 +417,50 @@ export default function AjustesPage() {
   <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5'}}>
     💡 Este número aparece en tu página pública para que las consultantes puedan contactarte por WhatsApp.
   </div>
+
+  <div style={{height:'0.5px',background:'var(--border)',margin:'8px 0'}}/>
+<div style={{fontSize:'11px',fontWeight:700,color:'var(--text-primary)',marginBottom:'8px',letterSpacing:'0.5px',textTransform:'uppercase'}}>
+  Datos para transferencia bancaria
+</div>
+<div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+  <input type="checkbox" id="acepta_transferencia"
+    checked={perfil.acepta_transferencia || false}
+    onChange={e => setPerfil({...perfil, acepta_transferencia: e.target.checked})}
+    style={{width:'16px',height:'16px',cursor:'pointer'}}/>
+  <label htmlFor="acepta_transferencia" style={{fontSize:'13px',color:'var(--text-primary)',cursor:'pointer'}}>
+    Aceptar pagos por transferencia bancaria
+  </label>
+</div>
+{perfil.acepta_transferencia && (<>
+  <div className="field">
+    <label>Alias (requerido)</label>
+    <input placeholder="Ej: mi.alias.mp" value={perfil.alias_pago || ''}
+      onChange={e => setPerfil({...perfil, alias_pago: e.target.value})}/>
+  </div>
+  <div className="field">
+    <label>CBU (opcional)</label>
+    <input placeholder="22 dígitos" value={perfil.cbu || ''}
+      onChange={e => setPerfil({...perfil, cbu: e.target.value})}/>
+  </div>
+  <div className="field">
+    <label>Titular de la cuenta</label>
+    <input placeholder="Nombre y apellido" value={perfil.titular_cuenta || ''}
+      onChange={e => setPerfil({...perfil, titular_cuenta: e.target.value})}/>
+  </div>
+  <div className="field">
+    <label>Banco (opcional)</label>
+    <input placeholder="Ej: Banco Galicia" value={perfil.banco || ''}
+      onChange={e => setPerfil({...perfil, banco: e.target.value})}/>
+  </div>
+  <div className="field">
+    <label>Instrucciones adicionales (opcional)</label>
+    <textarea placeholder="Ej: Enviame el comprobante por WhatsApp una vez que transferiste."
+      value={perfil.instrucciones_pago || ''}
+      onChange={e => setPerfil({...perfil, instrucciones_pago: e.target.value})}
+      style={{minHeight:'70px',resize:'none'}}/>
+  </div>
+</>)}
+
 </div>
                 <div className="field full">
                   <label>Bio corta</label>

@@ -8,13 +8,14 @@ type Terapeuta = {
   user_id: string; nombre_profesional: string; especialidad: string
   bio: string; avatar_url: string; mensaje_bienvenida: string
   tipo_pago: string; pagina_activa: boolean
-  template?: string
-  slug?: string
+  template?: string; slug?: string
   secciones?: { sobre_mi: boolean; testimonios: boolean; faq: boolean; disponibilidad: boolean }
   faq?: { pregunta: string; respuesta: string }[]
   valores?: { icon: string; name: string; desc: string }[]
   testimonios?: { texto: string; nombre: string }[]
   whatsapp?: string
+  alias?: string; cbu?: string; titular_cuenta?: string; banco?: string
+  instrucciones_pago?: string; acepta_transferencia?: boolean
 }
 type Servicio = { id: string; nombre: string; descripcion: string; duracion_estimada: number; precio_base: number; color: string; tipo_servicio?: string; plazo_horas?: number }
 type Disponibilidad = { dia_semana: number; hora_inicio: string; hora_fin: string; activo: boolean }
@@ -159,19 +160,33 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [testiIdx, setTestiIdx] = useState(0)
   const [mostrarCalFull, setMostrarCalFull] = useState(false)
   const [faqAbierto, setFaqAbierto] = useState<number|null>(null)
+  const [servicioModal, setServicioModal] = useState<Servicio|null>(null)
+  const [mpInitPoint, setMpInitPoint] = useState<string|null>(null)
+  const [preparandoMP, setPreparandoMP] = useState(false)
+  const [reservaCreada, setReservaCreada] = useState<string|null>(null)
+  const [metodoPago, setMetodoPago] = useState<'mp'|'transferencia'|null>(null)
+  const [enviandoTransferencia, setEnviandoTransferencia] = useState(false)
   const reservaRef = useRef<HTMLDivElement>(null)
   const horariosRef = useRef<HTMLDivElement>(null)
   const formularioRef = useRef<HTMLDivElement>(null)
   const [form, setForm] = useState({ nombre: '', whatsapp: '', mensaje: '' })
+
+  function abrirModal(s: Servicio) {
+    setServicioModal(s)
+    document.body.style.overflow = 'hidden'
+  }
+
+  function cerrarModal() {
+    setServicioModal(null)
+    document.body.style.overflow = ''
+  }
 
   useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
     const teniaDark = document.documentElement.classList.contains('dark')
     document.documentElement.classList.remove('dark')
-    return () => {
-      if (teniaDark) document.documentElement.classList.add('dark')
-    }
+    return () => { if (teniaDark) document.documentElement.classList.add('dark') }
   }, [])
 
   useEffect(() => {
@@ -186,6 +201,73 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       ]).then(() => setEnviado(true))
     }
   }, [])
+
+  useEffect(() => {
+    if (!form.nombre || !form.whatsapp || !terapeuta || !servicioSel || !fechaSel || !horaSel) return
+    if (mpInitPoint || reservaCreada || preparandoMP) return
+    if (terapeuta.tipo_pago !== 'sena' && terapeuta.tipo_pago !== 'completo') return
+    if (metodoPago !== 'mp') return
+
+    const prepararReserva = async () => {
+      setPreparandoMP(true)
+      try {
+        const supabase = createClient()
+        let pacienteId = null
+        const { data: pacEx } = await supabase.from('patients').select('id')
+          .eq('user_id', terapeuta.user_id).eq('celular', form.whatsapp).maybeSingle()
+        if (pacEx) {
+          pacienteId = pacEx.id
+        } else {
+          const partes = form.nombre.trim().split(' ')
+          const { data: np } = await supabase.from('patients').insert({
+            user_id: terapeuta.user_id, nombre: partes[0],
+            apellido: partes.slice(1).join(' '), celular: form.whatsapp,
+            alias: form.whatsapp.slice(-4), contexto_general: '',
+          }).select().single()
+          if (np) pacienteId = np.id
+        }
+        const { data: sesion } = await supabase.from('sessions').insert({
+          user_id: terapeuta.user_id, patient_id: pacienteId,
+          service_id: servicioSel.id,
+          fecha: fechaSel + 'T' + horaSel + ':00', hora: horaSel,
+          duracion: servicioSel.duracion_estimada,
+          servicio_nombre: servicioSel.nombre, precio: servicioSel.precio_base,
+          estado_pago: 'pendiente', realizado: false, contexto_sesion: form.mensaje,
+          metodo_pago: 'mercadopago',
+        }).select().single()
+        if (sesion) {
+          setReservaCreada(sesion.id)
+          await supabase.from('public_bookings').insert({
+            therapist_id: terapeuta.user_id, patient_name: form.nombre,
+            patient_whatsapp: form.whatsapp, patient_message: form.mensaje,
+            service_id: servicioSel.id, service_name: servicioSel.nombre,
+            fecha: fechaSel, hora: horaSel, duracion: servicioSel.duracion_estimada,
+            precio: servicioSel.precio_base, estado: 'pendiente_pago', session_id: sesion.id,
+          })
+          const monto = terapeuta.tipo_pago === 'completo'
+            ? servicioSel.precio_base
+            : Math.round(servicioSel.precio_base * 0.3)
+          const origin = window.location.origin
+          const successUrl = `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`
+          const failureUrl = `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`
+          const res = await fetch('/api/mp/create-preference', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              servicioNombre: servicioSel.nombre,
+              precio: servicioSel.precio_base,
+              monto, therapistId: terapeuta.user_id,
+              successUrl, failureUrl,
+            }),
+          })
+          const data = await res.json()
+          if (data.init_point) setMpInitPoint(data.init_point)
+        }
+      } catch(e) { console.error(e) }
+      finally { setPreparandoMP(false) }
+    }
+    prepararReserva()
+  }, [form.nombre, form.whatsapp, servicioSel?.id, fechaSel, horaSel, metodoPago])
 
   useEffect(() => {
     const proximos: Date[] = []
@@ -261,7 +343,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     return disp?.activo || false
   }
 
-  async function confirmarReserva() {
+  async function confirmarReservaLibre() {
     if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) return
     setEnviando(true)
     try {
@@ -280,7 +362,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         }).select().single()
         if (np) pacienteId = np.id
       }
-
       const { data: sesion } = await supabase.from('sessions').insert({
         user_id: terapeuta.user_id, patient_id: pacienteId,
         service_id: servicioSel.id,
@@ -288,8 +369,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         duracion: servicioSel.duracion_estimada,
         servicio_nombre: servicioSel.nombre, precio: servicioSel.precio_base,
         estado_pago: 'pendiente', realizado: false, contexto_sesion: form.mensaje,
+        metodo_pago: 'mercadopago',
       }).select().single()
-
       if (sesion) {
         await supabase.from('public_bookings').insert({
           therapist_id: terapeuta.user_id, patient_name: form.nombre,
@@ -298,45 +379,50 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           fecha: fechaSel, hora: horaSel, duracion: servicioSel.duracion_estimada,
           precio: servicioSel.precio_base, estado: 'pendiente_pago', session_id: sesion.id,
         })
-
-        if (terapeuta.tipo_pago === 'sena' || terapeuta.tipo_pago === 'completo') {
-          const monto = terapeuta.tipo_pago === 'completo'
-            ? servicioSel.precio_base
-            : Math.round(servicioSel.precio_base * 0.3)
-
-          const origin = window.location.origin
-          const successUrl = `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`
-          const failureUrl = `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`
-
-          const res = await fetch('/api/mp/create-preference', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              servicioNombre: servicioSel.nombre,
-              precio: servicioSel.precio_base,
-              monto,
-              therapistId: terapeuta.user_id,
-              successUrl,
-              failureUrl,
-            }),
-          })
-
-          const data = await res.json()
-          if (data.init_point) {
-            const link = document.createElement('a')
-            link.href = data.init_point
-            link.target = '_blank'
-            link.rel = 'noopener noreferrer'
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            return
-          }
-        }
-
         setEnviado(true)
       }
     } catch(e) { console.error(e) } finally { setEnviando(false) }
+  }
+
+  async function confirmarTransferencia() {
+    if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) return
+    setEnviandoTransferencia(true)
+    try {
+      const supabase = createClient()
+      let pacienteId = null
+      const { data: pacEx } = await supabase.from('patients').select('id')
+        .eq('user_id', terapeuta.user_id).eq('celular', form.whatsapp).maybeSingle()
+      if (pacEx) {
+        pacienteId = pacEx.id
+      } else {
+        const partes = form.nombre.trim().split(' ')
+        const { data: np } = await supabase.from('patients').insert({
+          user_id: terapeuta.user_id, nombre: partes[0],
+          apellido: partes.slice(1).join(' '), celular: form.whatsapp,
+          alias: form.whatsapp.slice(-4), contexto_general: '',
+        }).select().single()
+        if (np) pacienteId = np.id
+      }
+      const { data: sesion } = await supabase.from('sessions').insert({
+        user_id: terapeuta.user_id, patient_id: pacienteId,
+        service_id: servicioSel.id,
+        fecha: fechaSel + 'T' + horaSel + ':00', hora: horaSel,
+        duracion: servicioSel.duracion_estimada,
+        servicio_nombre: servicioSel.nombre, precio: servicioSel.precio_base,
+        estado_pago: 'pendiente', realizado: false, contexto_sesion: form.mensaje,
+        metodo_pago: 'transferencia',
+      }).select().single()
+      if (sesion) {
+        await supabase.from('public_bookings').insert({
+          therapist_id: terapeuta.user_id, patient_name: form.nombre,
+          patient_whatsapp: form.whatsapp, patient_message: form.mensaje,
+          service_id: servicioSel.id, service_name: servicioSel.nombre,
+          fecha: fechaSel, hora: horaSel, duracion: servicioSel.duracion_estimada,
+          precio: servicioSel.precio_base, estado: 'pendiente_pago', session_id: sesion.id,
+        })
+        setEnviado(true)
+      }
+    } catch(e) { console.error(e) } finally { setEnviandoTransferencia(false) }
   }
 
   const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
@@ -344,6 +430,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const secciones = terapeuta?.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true }
   const faqItems = terapeuta?.faq || []
   const isLuna = (terapeuta?.template || 'luna') === 'luna'
+  const mostrarTransferencia = terapeuta?.acepta_transferencia && terapeuta?.alias
 
   if (loading) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:TEMPLATES.luna.bg,color:TEMPLATES.luna.primary,fontFamily:'serif',fontSize:'14px',letterSpacing:'2px'}}>
@@ -364,25 +451,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=${t.googleFonts}&display=swap');
         :root {
-          --bg: ${t.bg};
-          --bg2: ${t.bg2};
-          --bg3: ${t.bg3};
-          --primary: ${t.primary};
-          --primary-light: ${t.primaryLight};
-          --primary-dim: ${t.primaryDim};
-          --accent: ${t.accent};
-          --accent-light: ${t.accentLight};
-          --accent-dim: ${t.accentDim};
-          --text: ${t.text};
-          --text-dim: ${t.textDim};
-          --cream: ${t.cream};
-          --border: ${t.border};
-          --card-bg: ${t.cardBg};
-          --font-title: ${t.fontTitle};
-          --font-body: ${t.fontBody};
-          --font-subtitle: ${t.fontSubtitle};
-          --btn-bg: ${t.btnBg};
-          --btn-color: ${t.btnColor};
+          --bg: ${t.bg}; --bg2: ${t.bg2}; --bg3: ${t.bg3};
+          --primary: ${t.primary}; --primary-light: ${t.primaryLight}; --primary-dim: ${t.primaryDim};
+          --accent: ${t.accent}; --accent-light: ${t.accentLight}; --accent-dim: ${t.accentDim};
+          --text: ${t.text}; --text-dim: ${t.textDim}; --cream: ${t.cream};
+          --border: ${t.border}; --card-bg: ${t.cardBg};
+          --font-title: ${t.fontTitle}; --font-body: ${t.fontBody}; --font-subtitle: ${t.fontSubtitle};
+          --btn-bg: ${t.btnBg}; --btn-color: ${t.btnColor};
         }
         *{box-sizing:border-box;margin:0;padding:0}
         html{background:${t.bg} !important;width:100%}
@@ -394,7 +469,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .nav-logo{font-family:var(--font-title);font-size:20px;font-weight:600;color:var(--primary);letter-spacing:3px}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
 
-        .hero{position:relative;min-height:100vh;width:100vw;display:flex;adding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
+        .hero{position:relative;min-height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
         .carta-wrap{position:relative;margin-bottom:32px;animation:float 6s ease-in-out infinite}
         @keyframes float{0%,100%{transform:translateY(0px)}50%{transform:translateY(-12px)}}
         .carta{width:220px;height:340px;border-radius:16px;border:1.5px solid var(--primary);position:relative;overflow:hidden;box-shadow:0 0 40px var(--primary-dim),0 0 80px var(--accent-dim),inset 0 0 30px var(--primary-dim)}
@@ -422,18 +497,50 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .sobre-val-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:4px;font-family:var(--font-subtitle);font-weight:700}
         .sobre-val-desc{font-size:12px;color:var(--text-dim);line-height:1.4;font-family:var(--font-subtitle)}
 
-        .serv-list{display:flex;flex-direction:column;gap:12px}
-        .serv-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:20px;cursor:pointer;transition:all 0.3s;position:relative;overflow:hidden;${!t.dark?'box-shadow:0 2px 12px rgba(0,0,0,0.06);':''}}
+        .serv-list{display:flex;flex-direction:column;gap:12px;width:100%}
+        .serv-card{background:var(--card-bg);border:0.5px solid var(--border);border-radius:16px;padding:20px;cursor:pointer;transition:all 0.18s;position:relative;overflow:hidden;${!t.dark?'box-shadow:0 2px 12px rgba(0,0,0,0.06);':''}}
         .serv-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:0 2px 2px 0;background:linear-gradient(to bottom,var(--primary),var(--accent))}
-        .serv-card:hover,.serv-card.sel{border-color:var(--primary-dim);box-shadow:0 0 20px var(--primary-dim);transform:translateX(4px)}
+        .serv-card:hover{border-color:var(--primary-dim);box-shadow:0 0 20px var(--primary-dim);transform:translateY(-2px)}
+        .serv-card.sel{border-color:var(--primary-dim);box-shadow:0 0 20px var(--primary-dim)}
         .serv-tipo{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);margin-bottom:6px;font-family:var(--font-subtitle);font-weight:700}
         .serv-nombre{font-family:var(--font-title);font-size:20px;font-weight:500;color:var(--cream);margin-bottom:4px}
-        .serv-desc{font-size:14px;color:var(--text-dim);line-height:1.6;margin-bottom:12px;font-family:var(--font-subtitle)}
+        .serv-desc{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:12px;font-family:var(--font-subtitle)}
         .serv-footer{display:flex;justify-content:space-between;align-items:center}
         .serv-precio{font-family:var(--font-title);font-size:22px;color:var(--primary-light);font-weight:500}
         .serv-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);font-family:var(--font-subtitle)}
-        .serv-btn{padding:8px 20px;background:transparent;border:0.5px solid var(--primary-dim);color:var(--primary);border-radius:50px;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:var(--font-subtitle);font-weight:600;transition:all 0.2s}
+        .serv-btn{padding:8px 20px;background:transparent;border:0.5px solid var(--primary-dim);color:var(--primary);border-radius:50px;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:var(--font-subtitle);font-weight:600;transition:all 0.2s;min-height:36px}
         .serv-btn:hover{background:var(--primary-dim)}
+
+        .serv-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.88);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn 0.2s ease}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        .serv-modal{background:var(--bg2);border-radius:20px;padding:28px 24px 32px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;animation:slideUp 0.2s ease;border:0.5px solid var(--border);position:relative;box-shadow:0 40px 80px rgba(0,0,0,0.8)}
+        @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+        .serv-modal-tipo{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);margin-bottom:8px;font-family:var(--font-subtitle);font-weight:700}
+        .serv-modal-nombre{font-family:var(--font-title);font-size:28px;font-weight:300;color:var(--cream);margin-bottom:12px;letter-spacing:-0.5px}
+        .serv-modal-desc{font-size:15px;color:var(--text);line-height:1.8;font-family:var(--font-subtitle);margin-bottom:20px}
+        .serv-modal-meta{display:flex;gap:16px;margin-bottom:16px}
+        .serv-modal-pill{padding:8px 16px;border-radius:50px;border:0.5px solid var(--border);background:var(--card-bg);font-size:12px;color:var(--text-dim);font-family:var(--font-subtitle)}
+        .serv-modal-precio{font-family:var(--font-title);font-size:32px;color:var(--primary-light);font-weight:400;margin-bottom:20px}
+        .serv-modal-btn{width:100%;padding:16px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-subtitle);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);min-height:52px}
+        .serv-modal-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:50%;border:0.5px solid var(--border);background:var(--card-bg);color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;font-weight:300}
+
+        .metodo-pago-wrap{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+        .metodo-pago-opt{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;border:1px solid var(--border);background:var(--card-bg);cursor:pointer;transition:all 0.18s;font-family:var(--font-subtitle)}
+        .metodo-pago-opt.sel{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+        .metodo-pago-opt:hover{border-color:var(--primary-dim)}
+        .metodo-radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.18s}
+        .metodo-pago-opt.sel .metodo-radio{border-color:var(--primary);background:var(--primary)}
+        .metodo-radio-inner{width:8px;height:8px;border-radius:50%;background:white}
+        .metodo-label{font-size:14px;font-weight:600;color:var(--cream)}
+        .metodo-sub{font-size:11px;color:var(--text-dim);margin-top:2px}
+
+        .transferencia-datos{background:var(--card-bg);border:0.5px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+        .transferencia-titulo{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700;margin-bottom:12px}
+        .transferencia-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-family:var(--font-subtitle)}
+        .transferencia-row:last-child{border-bottom:none}
+        .transferencia-lbl{font-size:11px;color:var(--text-dim)}
+        .transferencia-val{font-size:14px;font-weight:600;color:var(--cream)}
+        .transferencia-instrucciones{font-size:13px;color:var(--text);line-height:1.6;margin-top:12px;font-family:var(--font-subtitle)}
 
         .dias-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:20px;scrollbar-width:none}
         .dias-scroll::-webkit-scrollbar{display:none}
@@ -443,7 +550,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .dia-pill.act .dia-pill-dia{color:rgba(255,255,255,0.7)}
         .dia-pill-num{font-family:var(--font-title);font-size:18px;font-weight:500;color:var(--cream)}
         .horas-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-        .hora-btn{padding:11px 6px;border-radius:10px;border:0.5px solid var(--border);background:var(--card-bg);font-size:13px;color:var(--text);cursor:pointer;text-align:center;transition:all 0.2s;font-family:var(--font-body)}
+        .hora-btn{padding:11px 6px;border-radius:10px;border:0.5px solid var(--border);background:var(--card-bg);font-size:13px;color:var(--text);cursor:pointer;text-align:center;transition:all 0.2s;font-family:var(--font-body);min-height:44px}
         .hora-btn:hover{border-color:var(--primary-dim);color:var(--primary)}
         .hora-btn.sel{background:var(--btn-bg);border-color:var(--accent);color:var(--btn-color)}
         .cal-full{margin-top:16px}
@@ -461,9 +568,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .form-wrap{margin-top:20px}
         .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
         .field label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700}
-        .field input,.field textarea{padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--card-bg);font-size:14px;font-family:var(--font-body);color:var(--cream);outline:none;width:100%;transition:border-color 0.2s}
+        .field input,.field textarea{padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--card-bg);font-size:16px;font-family:var(--font-body);color:var(--cream);outline:none;width:100%;transition:border-color 0.2s;min-height:44px}
         .field input:focus,.field textarea:focus{border-color:var(--primary-dim)}
-        .field textarea{min-height:90px;resize:none}
+        .field textarea{min-height:90px;resize:none;font-size:14px}
         .field-hint{font-size:11px;color:var(--text-dim);font-family:var(--font-subtitle)}
         .resumen{background:var(--card-bg);border:0.5px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
         .resumen-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;font-family:var(--font-subtitle)}
@@ -471,7 +578,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .resumen-lbl{color:var(--text-dim)}
         .resumen-val{color:var(--cream);font-weight:500}
         .resumen-total{color:var(--primary);font-family:var(--font-title);font-size:20px}
-        .confirmar-btn{width:100%;padding:16px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-subtitle);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s}
+        .confirmar-btn{width:100%;padding:16px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-subtitle);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;min-height:52px;display:flex;align-items:center;justify-content:center;text-decoration:none}
         .confirmar-btn:hover{transform:translateY(-1px)}
         .confirmar-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
 
@@ -495,7 +602,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .exito-circle{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#10B981,#34D399);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:0 0 40px rgba(16,185,129,0.4)}
         .exito-title{font-family:var(--font-title);font-size:32px;font-weight:300;color:var(--cream);margin-bottom:12px}
         .exito-sub{font-size:14px;color:var(--text-dim);line-height:1.8;margin-bottom:28px;font-family:var(--font-subtitle)}
-        .wsp-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#25D366;color:white;border:none;border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;box-shadow:0 6px 20px rgba(37,211,102,0.3);text-decoration:none}
+        .wsp-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:#25D366;color:white;border:none;border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;box-shadow:0 6px 20px rgba(37,211,102,0.3);text-decoration:none;min-height:52px}
 
         .footer{text-align:center;padding:20px;font-size:11px;color:var(--text-dim);letter-spacing:2px;z-index:1;position:relative;font-family:var(--font-subtitle)}
         .footer span{color:var(--primary)}
@@ -510,14 +617,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         @media(min-width:768px){
           .hero{flex-direction:row;text-align:left;width:100vw;padding:100px 80px 80px;justify-content:center;align-items:center;gap:80px}
-.hero .carta-wrap{flex-shrink:0}
-.hero .hero-text{max-width:500px;flex:1}
-.hero .hero-nombre{font-size:clamp(52px,6vw,80px)}
-.hero .hero-bio{font-size:18px}
-.hero .hero-esp{font-size:14px}
-
-          .hero-text{flex:1}
-          .hero-bio{max-width:none}
+          .hero .carta-wrap{flex-shrink:0}
+          .hero .hero-text{max-width:500px;flex:1}
+          .hero .hero-nombre{font-size:clamp(52px,6vw,80px)}
+          .hero .hero-bio{font-size:18px;max-width:none}
+          .hero .hero-esp{font-size:14px}
           .carta{width:280px;height:420px}
           .hero-cta{margin-bottom:0}
           .section{max-width:800px}
@@ -525,13 +629,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           .sobre-values{grid-template-columns:repeat(3,1fr)}
           .cta-final{margin:0 40px 60px}
           .nav{padding:20px 40px}
-        } 
-          @media(max-width:767px){
-  .hero{flex-direction:column;text-align:center;padding:90px 24px 60px;gap:32px;align-items:center}
-  .hero .hero-text{max-width:100%;flex:unset}
-  .hero .hero-bio{max-width:100%}
-  .hero-trust{justify-content:center}
-}
+          .hero-trust{justify-content:flex-start}
+        }
+        @media(max-width:767px){
+          .hero{flex-direction:column;text-align:center;padding:90px 24px 60px;gap:32px;align-items:center}
+          .hero .hero-text{max-width:100%;flex:unset}
+          .hero-trust{justify-content:center}
+        }
       `}</style>
 
       {t.stars && (
@@ -624,23 +728,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div className="serv-list">
             {servicios.map(s => (
               <div key={s.id} className={`serv-card${servicioSel?.id===s.id?' sel':''}`}
-                onClick={() => {
-                  setServicioSel(s); setFechaSel(''); setHoraSel('')
-                  if (s.tipo_servicio === 'entrega') {
-                    setFechaSel(new Date().toISOString().split('T')[0])
-                    setHoraSel('00:00'); setPaso(3)
-                  } else { setPaso(2) }
-                  setTimeout(() => {
-                    if (s.tipo_servicio === 'entrega') {
-                      formularioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                    } else {
-                      horariosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                    }
-                  }, 150)
-                }}>
+                onClick={() => abrirModal(s)}>
                 <div className="serv-tipo">{s.tipo_servicio === 'entrega' ? `⏳ Entrega en ${s.plazo_horas}hs` : '🔴 Sesión en vivo'}</div>
                 <div className="serv-nombre">{s.nombre}</div>
-                <div className="serv-desc">{s.descripcion}</div>
+                <div className="serv-desc">{s.descripcion?.slice(0,120)}{(s.descripcion?.length ?? 0) > 120 ? '...' : ''}</div>
                 <div className="serv-footer">
                   <div>
                     <div className="serv-precio">${s.precio_base.toLocaleString()}</div>
@@ -648,7 +739,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                       ? <div className="serv-meta">📦 Recibís en {s.plazo_horas}hs</div>
                       : <div className="serv-meta"><Clock size={10}/>{s.duracion_estimada} min</div>}
                   </div>
-                  <button className="serv-btn">{s.tipo_servicio === 'entrega' ? 'Solicitar' : 'Reservar'}</button>
+                  <button className="serv-btn">Ver detalles</button>
                 </div>
               </div>
             ))}
@@ -679,7 +770,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 </div>
               )}
               <button onClick={() => setMostrarCalFull(true)}
-                style={{marginTop:'16px',width:'100%',padding:'10px',background:'transparent',border:'0.5px solid var(--border)',color:'var(--text-dim)',borderRadius:'10px',fontSize:'12px',letterSpacing:'2px',textTransform:'uppercase',cursor:'pointer',fontFamily:'var(--font-subtitle)',fontWeight:600}}>
+                style={{marginTop:'16px',width:'100%',padding:'10px',background:'transparent',border:'0.5px solid var(--border)',color:'var(--text-dim)',borderRadius:'10px',fontSize:'12px',letterSpacing:'2px',textTransform:'uppercase',cursor:'pointer',fontFamily:'var(--font-subtitle)',fontWeight:600,minHeight:'44px'}}>
                 Ver calendario completo
               </button>
             </>) : (
@@ -720,13 +811,14 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             <div className="field">
               <label>WhatsApp</label>
               <input placeholder="Ej: 5492236789012" value={form.whatsapp} onChange={e => setForm({...form,whatsapp:e.target.value})}/>
-              <div className="field-hint">Incluí el código de país sin el + · Ej: 5492236789012 (Argentina) · 521XXXXXXXXXX (México)</div>
+              <div className="field-hint">Incluí el código de país sin el + · Ej: 5492236789012 (Argentina)</div>
             </div>
             <div className="field">
               <label>¿Qué querés trabajar? (opcional)</label>
               <textarea placeholder="Contanos un poco sobre lo que querés consultar..."
                 value={form.mensaje} onChange={e => setForm({...form,mensaje:e.target.value})}/>
             </div>
+
             {form.nombre && form.whatsapp && (<>
               <div className="resumen">
                 <div className="resumen-row"><span className="resumen-lbl">Servicio</span><span className="resumen-val">{servicioSel?.nombre}</span></div>
@@ -737,9 +829,60 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {servicioSel?.tipo_servicio === 'entrega' && <div className="resumen-row"><span className="resumen-lbl">Entrega estimada</span><span className="resumen-val">En {servicioSel.plazo_horas}hs</span></div>}
                 <div className="resumen-row"><span className="resumen-lbl">Total</span><span className="resumen-total">${servicioSel?.precio_base.toLocaleString()}</span></div>
               </div>
-              <button className="confirmar-btn" onClick={confirmarReserva} disabled={enviando}>
-                {enviando ? `${t.deco} confirmando...` : `${t.deco} Confirmar reserva`}
-              </button>
+
+              {(terapeuta.tipo_pago === 'sena' || terapeuta.tipo_pago === 'completo') && (<>
+                <div className="section-label" style={{marginBottom:'12px',justifyContent:'flex-start'}}>¿Cómo querés pagar?</div>
+                <div className="metodo-pago-wrap">
+                  <div className={`metodo-pago-opt${metodoPago==='mp'?' sel':''}`} onClick={() => { setMetodoPago('mp'); setMpInitPoint(null); setReservaCreada(null) }}>
+                    <div className="metodo-radio">{metodoPago==='mp' && <div className="metodo-radio-inner"/>}</div>
+                    <div>
+                      <div className="metodo-label">💳 Mercado Pago</div>
+                      <div className="metodo-sub">Pagá con tarjeta, débito o saldo MP</div>
+                    </div>
+                  </div>
+                  {mostrarTransferencia && (
+                    <div className={`metodo-pago-opt${metodoPago==='transferencia'?' sel':''}`} onClick={() => { setMetodoPago('transferencia'); setMpInitPoint(null); setReservaCreada(null) }}>
+                      <div className="metodo-radio">{metodoPago==='transferencia' && <div className="metodo-radio-inner"/>}</div>
+                      <div>
+                        <div className="metodo-label">🏦 Transferencia bancaria</div>
+                        <div className="metodo-sub">Transferí y enviá el comprobante por WhatsApp</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {metodoPago === 'transferencia' && (<>
+                  <div className="transferencia-datos">
+                    <div className="transferencia-titulo">Datos para transferir</div>
+                    {terapeuta.alias && <div className="transferencia-row"><span className="transferencia-lbl">Alias</span><span className="transferencia-val">{terapeuta.alias}</span></div>}
+                    {terapeuta.cbu && <div className="transferencia-row"><span className="transferencia-lbl">CBU</span><span className="transferencia-val" style={{fontSize:'12px'}}>{terapeuta.cbu}</span></div>}
+                    {terapeuta.titular_cuenta && <div className="transferencia-row"><span className="transferencia-lbl">Titular</span><span className="transferencia-val">{terapeuta.titular_cuenta}</span></div>}
+                    {terapeuta.banco && <div className="transferencia-row"><span className="transferencia-lbl">Banco</span><span className="transferencia-val">{terapeuta.banco}</span></div>}
+                    {terapeuta.instrucciones_pago && <div className="transferencia-instrucciones">{terapeuta.instrucciones_pago}</div>}
+                  </div>
+                  <button className="confirmar-btn" onClick={confirmarTransferencia} disabled={enviandoTransferencia}>
+                    {enviandoTransferencia ? `${t.deco} confirmando...` : `${t.deco} Ya realicé el pago`}
+                  </button>
+                </>)}
+
+                {metodoPago === 'mp' && (
+                  mpInitPoint ? (
+                    <a href={mpInitPoint} className="confirmar-btn" style={{display:'flex'}}>
+                      {t.deco} Ir a pagar con Mercado Pago
+                    </a>
+                  ) : (
+                    <button className="confirmar-btn" disabled style={{opacity:0.6}}>
+                      {preparandoMP ? `${t.deco} preparando pago...` : `${t.deco} Confirmar reserva`}
+                    </button>
+                  )
+                )}
+              </>)}
+
+              {terapeuta.tipo_pago !== 'sena' && terapeuta.tipo_pago !== 'completo' && (
+                <button className="confirmar-btn" onClick={confirmarReservaLibre} disabled={enviando}>
+                  {enviando ? `${t.deco} confirmando...` : `${t.deco} Confirmar reserva`}
+                </button>
+              )}
             </>)}
           </div>
         )}
@@ -747,14 +890,26 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         {enviado && (
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={36} color="white"/></div>
-            <h2 className="exito-title">¡Reserva confirmada!</h2>
+            <h2 className="exito-title">
+              {metodoPago === 'transferencia' ? '¡Reserva recibida!' : '¡Reserva confirmada!'}
+            </h2>
             <p className="exito-sub">
-              Tu sesión de <em>{servicioSel?.nombre}</em> quedó agendada.
-              {terapeuta.nombre_profesional} se va a contactar con vos pronto.
+              {metodoPago === 'transferencia'
+                ? <>Tu reserva de <em>{servicioSel?.nombre}</em> fue registrada. Una vez que confirmemos tu pago, te vamos a avisar por WhatsApp.</>
+                : <>Tu sesión de <em>{servicioSel?.nombre}</em> quedó agendada. {terapeuta.nombre_profesional} se va a contactar con vos pronto.</>}
             </p>
-            <a className="wsp-btn" href={`https://wa.me/${(terapeuta.whatsapp || '').replace(/\D/g,'').replace(/^0+/,'')}`} target="_blank" rel="noopener noreferrer">
-              💬 Escribir por WhatsApp
-            </a>
+            {metodoPago === 'transferencia' && terapeuta.whatsapp && (
+              <a className="wsp-btn" style={{marginBottom:'12px'}}
+                href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Te envío el comprobante de pago por mi reserva de ${servicioSel?.nombre} el ${fechaSel} a las ${horaSel}hs. 🧾`)}`}
+                target="_blank" rel="noopener noreferrer">
+                📎 Enviar comprobante por WhatsApp
+              </a>
+            )}
+            {terapeuta.whatsapp && (
+              <a className="wsp-btn" href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}`} target="_blank" rel="noopener noreferrer">
+                💬 Escribir por WhatsApp
+              </a>
+            )}
           </div>
         )}
       </section>
@@ -815,6 +970,40 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           style={{position:'fixed',bottom:'24px',right:'24px',zIndex:200,display:'flex',alignItems:'center',gap:'10px',padding:'12px 20px',background:'#25D366',color:'white',borderRadius:'50px',fontFamily:'var(--font-body)',fontSize:'13px',fontWeight:600,textDecoration:'none',boxShadow:'0 6px 24px rgba(37,211,102,0.4)'}}>
           💬 ¿Dudas? Escribime
         </a>
+      )}
+
+      {/* MODAL — fuera de cualquier section para evitar stacking context */}
+      {servicioModal && (
+        <div className="serv-modal-overlay" onClick={cerrarModal}>
+          <div className="serv-modal" onClick={e => e.stopPropagation()}>
+            <button className="serv-modal-close" onClick={cerrarModal}>×</button>
+            <div className="serv-modal-tipo">{servicioModal.tipo_servicio === 'entrega' ? `⏳ Entrega en ${servicioModal.plazo_horas}hs` : '🔴 Sesión en vivo'}</div>
+            <div className="serv-modal-nombre">{servicioModal.nombre}</div>
+            <div className="serv-modal-desc">{servicioModal.descripcion}</div>
+            <div className="serv-modal-meta">
+              <div className="serv-modal-pill">
+                {servicioModal.tipo_servicio === 'entrega' ? `📦 Entrega en ${servicioModal.plazo_horas}hs` : `⏱ ${servicioModal.duracion_estimada} min`}
+              </div>
+            </div>
+            <div className="serv-modal-precio">${servicioModal.precio_base.toLocaleString()}</div>
+            <button className="serv-modal-btn" onClick={() => {
+              setServicioSel(servicioModal)
+              setFechaSel(''); setHoraSel(''); setMetodoPago(null)
+              setMpInitPoint(null); setReservaCreada(null)
+              cerrarModal()
+              if (servicioModal.tipo_servicio === 'entrega') {
+                setFechaSel(new Date().toISOString().split('T')[0])
+                setHoraSel('00:00'); setPaso(3)
+                setTimeout(() => formularioRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 150)
+              } else {
+                setPaso(2)
+                setTimeout(() => horariosRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 150)
+              }
+            }}>
+              {t.deco} {servicioModal.tipo_servicio === 'entrega' ? 'Solicitar ahora' : 'Reservar sesión'}
+            </button>
+          </div>
+        </div>
       )}
 
       <footer className="footer">
