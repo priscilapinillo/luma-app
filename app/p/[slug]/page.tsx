@@ -138,7 +138,10 @@ async function buscarOCrearPaciente(
       contexto_general: '',
     }).select('id').single()
 
-    if (errPac) console.error('Error creando paciente:', JSON.stringify(errPac))
+    if (errPac) {
+      console.error('Error creando paciente:', JSON.stringify(errPac))
+      throw new Error('Error creando paciente: ' + JSON.stringify(errPac))
+    }
     return np?.id ?? null
   } catch(e) {
     console.error('Error en buscarOCrearPaciente:', e)
@@ -162,7 +165,7 @@ async function crearSesionYBooking(
 ) {
   if (!opts.pacienteId) {
     console.error('pacienteId es null — no se puede crear la sesión')
-    return null
+    throw new Error('No se pudo crear o encontrar el paciente')
   }
 
   const { data: sesion, error } = await supabase.from('sessions').insert({
@@ -382,7 +385,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   // TRANSFERENCIA
   async function confirmarTransferencia() {
-    if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) return
+    if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) {
+      setErrorMsg(`Faltan datos: t=${!!terapeuta} s=${!!servicioSel} f=${fechaSel} h=${horaSel} n=${form.nombre} w=${form.whatsapp}`)
+      return
+    }
     setEnviandoTransferencia(true)
     setErrorMsg('')
     try {
@@ -941,12 +947,16 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 : <>Tu sesión de <em>{servicioSel?.nombre}</em> quedó agendada. {terapeuta.nombre_profesional} se va a contactar con vos pronto.</>}
             </p>
             {metodoPago === 'transferencia' && terapeuta.whatsapp && (
-              <a className="wsp-btn" style={{marginBottom:'12px'}}
-                href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Te envío el comprobante de pago por mi reserva de ${servicioSel?.nombre} el ${fechaSel} a las ${horaSel}hs. 🧾`)}`}
-                target="_blank" rel="noopener noreferrer">
-                📎 Enviar comprobante por WhatsApp
-              </a>
-            )}
+  <a className="wsp-btn" style={{marginBottom:'12px'}}
+    href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(
+      servicioSel?.tipo_servicio === 'entrega'
+        ? `Hola! Te envío el comprobante de pago por mi pedido de ${servicioSel?.nombre}. 🧾`
+        : `Hola! Te envío el comprobante de pago por mi reserva de ${servicioSel?.nombre} el ${fechaSel} a las ${horaSel}hs. 🧾`
+    )}`}
+    target="_blank" rel="noopener noreferrer">
+    📎 Enviar comprobante por WhatsApp
+  </a>
+)}
             {terapeuta.whatsapp && (
               <a className="wsp-btn" href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}`} target="_blank" rel="noopener noreferrer">
                 💬 Escribir por WhatsApp
