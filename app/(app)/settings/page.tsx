@@ -418,48 +418,6 @@ export default function AjustesPage() {
     💡 Este número aparece en tu página pública para que las consultantes puedan contactarte por WhatsApp.
   </div>
 
-  <div style={{height:'0.5px',background:'var(--border)',margin:'8px 0'}}/>
-<div style={{fontSize:'11px',fontWeight:700,color:'var(--text-primary)',marginBottom:'8px',letterSpacing:'0.5px',textTransform:'uppercase'}}>
-  Datos para transferencia bancaria
-</div>
-<div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
-  <input type="checkbox" id="acepta_transferencia"
-    checked={perfil.acepta_transferencia || false}
-    onChange={e => setPerfil({...perfil, acepta_transferencia: e.target.checked})}
-    style={{width:'16px',height:'16px',cursor:'pointer'}}/>
-  <label htmlFor="acepta_transferencia" style={{fontSize:'13px',color:'var(--text-primary)',cursor:'pointer'}}>
-    Aceptar pagos por transferencia bancaria
-  </label>
-</div>
-{perfil.acepta_transferencia && (<>
-  <div className="field">
-    <label>Alias (requerido)</label>
-    <input placeholder="Ej: mi.alias.mp" value={perfil.alias_pago || ''}
-      onChange={e => setPerfil({...perfil, alias_pago: e.target.value})}/>
-  </div>
-  <div className="field">
-    <label>CBU (opcional)</label>
-    <input placeholder="22 dígitos" value={perfil.cbu || ''}
-      onChange={e => setPerfil({...perfil, cbu: e.target.value})}/>
-  </div>
-  <div className="field">
-    <label>Titular de la cuenta</label>
-    <input placeholder="Nombre y apellido" value={perfil.titular_cuenta || ''}
-      onChange={e => setPerfil({...perfil, titular_cuenta: e.target.value})}/>
-  </div>
-  <div className="field">
-    <label>Banco (opcional)</label>
-    <input placeholder="Ej: Banco Galicia" value={perfil.banco || ''}
-      onChange={e => setPerfil({...perfil, banco: e.target.value})}/>
-  </div>
-  <div className="field">
-    <label>Instrucciones adicionales (opcional)</label>
-    <textarea placeholder="Ej: Enviame el comprobante por WhatsApp una vez que transferiste."
-      value={perfil.instrucciones_pago || ''}
-      onChange={e => setPerfil({...perfil, instrucciones_pago: e.target.value})}
-      style={{minHeight:'70px',resize:'none'}}/>
-  </div>
-</>)}
 
 </div>
                 <div className="field full">
@@ -813,6 +771,54 @@ export default function AjustesPage() {
         <div className="field-hint">Se guarda cifrado. Nunca lo compartás con nadie.</div>
       </div>
     )}
+  </div>
+
+  {/* TRANSFERENCIA BANCARIA */}
+  <div className="s-card">
+    <div className="s-card-title">🏦 Transferencia bancaria</div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Aceptar transferencias</div>
+        <div className="pref-sub">Tus consultantes podrán elegir pagar por transferencia</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.acepta_transferencia || false}
+          onChange={e => setPerfil({...perfil, acepta_transferencia: e.target.checked})}/>
+        <span style={{position:'absolute',inset:0,background:perfil.acepta_transferencia?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.acepta_transferencia?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+        </span>
+      </label>
+    </div>
+    {perfil.acepta_transferencia && (<>
+      <div className="field" style={{marginTop:'12px'}}>
+        <label>Alias (requerido)</label>
+        <input placeholder="Ej: mi.alias.mp" value={perfil.alias_pago || ''}
+          onChange={e => setPerfil({...perfil, alias_pago: e.target.value})}/>
+      </div>
+      <div className="field">
+        <label>CBU (opcional)</label>
+        <input placeholder="22 dígitos" value={perfil.cbu || ''}
+          onChange={e => setPerfil({...perfil, cbu: e.target.value})}/>
+      </div>
+      <div className="field">
+        <label>Titular de la cuenta</label>
+        <input placeholder="Nombre y apellido" value={perfil.titular_cuenta || ''}
+          onChange={e => setPerfil({...perfil, titular_cuenta: e.target.value})}/>
+      </div>
+      <div className="field">
+        <label>Banco (opcional)</label>
+        <input placeholder="Ej: Banco Galicia" value={perfil.banco || ''}
+          onChange={e => setPerfil({...perfil, banco: e.target.value})}/>
+      </div>
+      <div className="field">
+        <label>Instrucciones adicionales (opcional)</label>
+        <textarea placeholder="Ej: Enviame el comprobante por WhatsApp una vez que transferiste."
+          value={perfil.instrucciones_pago || ''}
+          onChange={e => setPerfil({...perfil, instrucciones_pago: e.target.value})}
+          style={{minHeight:'70px',resize:'none'}}/>
+      </div>
+    </>)}
   </div>
 
   <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'24px'}}>
