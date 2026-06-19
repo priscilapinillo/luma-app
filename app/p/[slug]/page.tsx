@@ -14,7 +14,7 @@ type Terapeuta = {
   valores?: { icon: string; name: string; desc: string }[]
   testimonios?: { texto: string; nombre: string }[]
   whatsapp?: string
-  alias?: string; cbu?: string; titular_cuenta?: string; banco?: string
+  alias_pago?: string; cbu?: string; titular_cuenta?: string; banco?: string
   instrucciones_pago?: string; acepta_transferencia?: boolean
 }
 type Servicio = { id: string; nombre: string; descripcion: string; duracion_estimada: number; precio_base: number; color: string; tipo_servicio?: string; plazo_horas?: number }
@@ -430,7 +430,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const secciones = terapeuta?.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true }
   const faqItems = terapeuta?.faq || []
   const isLuna = (terapeuta?.template || 'luna') === 'luna'
-  const mostrarTransferencia = terapeuta?.acepta_transferencia && terapeuta?.alias
+  const mostrarTransferencia = terapeuta?.acepta_transferencia && terapeuta?.alias_pago
 
   if (loading) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:TEMPLATES.luna.bg,color:TEMPLATES.luna.primary,fontFamily:'serif',fontSize:'14px',letterSpacing:'2px'}}>
@@ -854,7 +854,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {metodoPago === 'transferencia' && (<>
                   <div className="transferencia-datos">
                     <div className="transferencia-titulo">Datos para transferir</div>
-                    {terapeuta.alias && <div className="transferencia-row"><span className="transferencia-lbl">Alias</span><span className="transferencia-val">{terapeuta.alias}</span></div>}
+                    {terapeuta.alias_pago && <div className="transferencia-row"><span className="transferencia-lbl">Alias</span><span className="transferencia-val">{terapeuta.alias_pago}</span></div>}
                     {terapeuta.cbu && <div className="transferencia-row"><span className="transferencia-lbl">CBU</span><span className="transferencia-val" style={{fontSize:'12px'}}>{terapeuta.cbu}</span></div>}
                     {terapeuta.titular_cuenta && <div className="transferencia-row"><span className="transferencia-lbl">Titular</span><span className="transferencia-val">{terapeuta.titular_cuenta}</span></div>}
                     {terapeuta.banco && <div className="transferencia-row"><span className="transferencia-lbl">Banco</span><span className="transferencia-val">{terapeuta.banco}</span></div>}
@@ -872,7 +872,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                     </a>
                   ) : (
                     <button className="confirmar-btn" disabled style={{opacity:0.6}}>
-                      {preparandoMP ? `${t.deco} preparando pago...` : `${t.deco} Confirmar reserva`}
+                      {preparandoMP ? `${t.deco} Preparando pago...` : `${t.deco} Completá tus datos para continuar`}
                     </button>
                   )
                 )}
