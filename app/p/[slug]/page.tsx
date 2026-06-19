@@ -122,21 +122,28 @@ async function buscarOCrearPaciente(
   nombre: string,
   whatsapp: string,
 ) {
-  const { data: pacEx } = await supabase
-    .from('patients').select('id')
-    .eq('user_id', terapeutaId).eq('celular', whatsapp).maybeSingle()
-  if (pacEx) return pacEx.id
+  try {
+    const { data: pacEx } = await supabase
+      .from('patients').select('id')
+      .eq('user_id', terapeutaId).eq('celular', whatsapp).maybeSingle()
+    if (pacEx?.id) return pacEx.id
 
-  const partes = nombre.trim().split(' ')
-  const { data: np } = await supabase.from('patients').insert({
-    user_id: terapeutaId,
-    nombre: partes[0],
-    apellido: partes.slice(1).join(' '),
-    celular: whatsapp,
-    alias: whatsapp.slice(-4),
-    contexto_general: '',
-  }).select().single()
-  return np?.id ?? null
+    const partes = nombre.trim().split(' ')
+    const { data: np, error: errPac } = await supabase.from('patients').insert({
+      user_id: terapeutaId,
+      nombre: partes[0],
+      apellido: partes.slice(1).join(' ') || '',
+      celular: whatsapp,
+      alias: whatsapp.slice(-4),
+      contexto_general: '',
+    }).select('id').single()
+
+    if (errPac) console.error('Error creando paciente:', JSON.stringify(errPac))
+    return np?.id ?? null
+  } catch(e) {
+    console.error('Error en buscarOCrearPaciente:', e)
+    return null
+  }
 }
 
 async function crearSesionYBooking(
@@ -153,6 +160,11 @@ async function crearSesionYBooking(
     metodoPago: string
   }
 ) {
+  if (!opts.pacienteId) {
+    console.error('pacienteId es null — no se puede crear la sesión')
+    return null
+  }
+
   const { data: sesion, error } = await supabase.from('sessions').insert({
     user_id: opts.terapeutaId,
     patient_id: opts.pacienteId,
@@ -169,7 +181,7 @@ async function crearSesionYBooking(
   }).select().single()
 
   if (error || !sesion) {
-    console.error('Error creando sesión:', error)
+    console.error('Error creando sesión:', JSON.stringify(error))
     return null
   }
 
@@ -1028,7 +1040,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               if (servicioModal.tipo_servicio === 'entrega') {
                 // entrega: no necesita fecha/hora del calendario
                 setFechaSel(new Date().toISOString().split('T')[0])
-                setHoraSel('00:00')
+setHoraSel('12:00')
                 setPaso(3)
                 setTimeout(() => formularioRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 150)
               } else {
