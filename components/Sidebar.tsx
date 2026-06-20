@@ -89,7 +89,7 @@ export default function Sidebar() {
             transform: translateX(-50%);
             width: calc(100% - 24px);
             max-width: 420px;
-            z-index: 200;
+            z-index: 50;
             backdrop-filter: blur(16px) saturate(200%) contrast(180%);
             -webkit-backdrop-filter: blur(16px) saturate(200%) contrast(180%);
             background: rgba(139,92,246,0.25);
