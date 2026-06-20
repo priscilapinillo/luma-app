@@ -1046,6 +1046,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               setMpInitPoint(null)
               setMpError('')
               setErrorMsg('')
+              setEnviado(false)
+              setEnviando(false)
+              setEnviandoTransferencia(false)
+              setForm({ nombre: '', whatsapp: '', mensaje: '' })
+              setPaso(0)
               cerrarModal()
               if (servicioModal.tipo_servicio === 'entrega') {
                 // entrega: no necesita fecha/hora del calendario
