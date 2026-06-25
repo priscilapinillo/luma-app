@@ -143,3 +143,9 @@ html[data-page="public"].dark body * {
     max-width: 100% !important;
   }
 }
+body.modal-open .sb-mobile {
+  display: none !important;
+}
+body.modal-open .sb-float-btn {
+  display: none !important;
+}
