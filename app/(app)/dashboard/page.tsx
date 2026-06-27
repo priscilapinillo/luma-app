@@ -69,6 +69,7 @@ export default function DashboardPage() {
   const [nuevaTask, setNuevaTask] = useState('')
   const [loading, setLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [trialVencido, setTrialVencido] = useState(false)
 const [onboardingChecks, setOnboardingChecks] = useState({
   servicio: false,
   disponibilidad: false,
@@ -180,6 +181,16 @@ const [contextoLocal, setContextoLocal] = useState('')
         if (avail) setDisponibilidad(avail)
         if (prof?.nombre_profesional) setNombreTerapeuta(prof.nombre_profesional)
         else setNombreTerapeuta(user.email?.split('@')[0] || '')
+        const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('status, trial_ends_at, current_period_ends_at')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      
+      const ahora = new Date()
+      const trialVence = sub?.trial_ends_at && new Date(sub.trial_ends_at) < ahora
+      const pagoActivo = sub?.status === 'active' && sub?.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
+      if (trialVence && !pagoActivo) setTrialVencido(true)
 
         if (sesiones) {
           const cobrado = sesiones
@@ -1629,6 +1640,24 @@ setTabDetalle('contexto')
       })}
       <button className="save-btn" style={{marginTop:'8px'}} onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}>
         Entendido, empezar
+      </button>
+    </div>
+  </div>
+)}
+{/* MODAL TRIAL VENCIDO */}
+{trialVencido && (
+  <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)'}}>
+    <div style={{background:'var(--bg-card)',borderRadius:'24px',padding:'36px 28px',maxWidth:'400px',width:'100%',textAlign:'center',border:'0.5px solid var(--border-light)',boxShadow:'0 40px 80px rgba(0,0,0,0.5)'}}>
+      <div style={{fontSize:'44px',marginBottom:'16px'}}>✦</div>
+      <div style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800,color:'var(--text-primary)',marginBottom:'10px',letterSpacing:'-0.5px'}}>Tu período de prueba terminó</div>
+      <p style={{fontSize:'14px',color:'var(--text-secondary)',lineHeight:1.7,marginBottom:'28px'}}>Para seguir usando Luma activá tu suscripción. Son $9.900 ARS por mes y podés cancelar cuando querás.</p>
+      <button onClick={() => window.location.href='/suscripcion'}
+        style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'12px',fontSize:'14px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'10px',boxShadow:'0 4px 20px rgba(139,92,246,0.3)'}}>
+        ✦ Activar suscripción — $9.900/mes
+      </button>
+      <button onClick={async () => { const supabase = createClient(); await supabase.auth.signOut(); window.location.href='/auth/login' }}
+        style={{width:'100%',padding:'12px',background:'transparent',color:'var(--text-muted)',border:'0.5px solid var(--border)',borderRadius:'12px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
+        Cerrar sesión
       </button>
     </div>
   </div>
