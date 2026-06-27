@@ -427,9 +427,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       })
       if (!sesion) { setMpError('Error al crear la reserva. Intentá de nuevo.'); return }
 
-      const monto = terapeuta.tipo_pago === 'completo'
-        ? servicioSel.precio_base
-        : Math.round(servicioSel.precio_base * 0.3)
+      const monto = servicioSel.precio_base
       const origin = window.location.origin
       const res = await fetch('/api/mp/create-preference', {
         method: 'POST',

@@ -651,7 +651,7 @@ export default function AjustesPage() {
       </div>
       <select className="pref-select" value={perfil.tipo_pago} onChange={e => setPerfil({...perfil, tipo_pago: e.target.value})}>
         <option value="libre">Sin pago — reserva directa</option>
-        <option value="sena">Requiere seña</option>
+        
         <option value="completo">Pago completo</option>
       </select>
     </div>
