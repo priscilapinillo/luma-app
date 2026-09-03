@@ -344,7 +344,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       const conflictoBloqueo = bloqueos.some(b => {
         const bInicio = new Date(b.fecha_inicio)
         const bFin = new Date(b.fecha_fin)
-        const slotInicio = new Date(`${fecha}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00`)
+        const slotInicio = new Date(`${fecha}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00-03:00`)
         const slotFin = new Date(slotInicio.getTime() + dur * 60000)
         return slotInicio < bFin && slotFin > bInicio
       })
