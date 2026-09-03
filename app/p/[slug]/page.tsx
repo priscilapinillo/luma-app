@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
+import { horaAMin, slotConflictsWithBlock } from '@/lib/datetime'
 import { ChevronLeft, ChevronRight, Check, Clock, Shield, ChevronDown } from 'lucide-react'
 
 type Terapeuta = {
@@ -30,10 +31,6 @@ const DIAS_CORTO = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
 
 function formatDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-}
-function horaAMin(h: string) {
-  const [hh, mm] = h.split(':').map(Number)
-  return hh * 60 + (mm || 0)
 }
 
 const TEMPLATES = {
@@ -341,14 +338,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         const sI = horaAMin(s.hora), sF = sI + s.duracion
         return min < sF && min + dur > sI
       })
-      console.log('BLOQUEOS:', bloqueos, 'FECHA:', fecha, 'MIN:', min)
-      const conflictoBloqueo = bloqueos.some(b => {
-        const bInicio = new Date(b.fecha_inicio)
-        const bFin = new Date(b.fecha_fin)
-        const slotInicio = new Date(`${fecha}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00-03:00`)
-        const slotFin = new Date(slotInicio.getTime() + dur * 60000)
-        return slotInicio < bFin && slotFin > bInicio
-      })
+      const conflictoBloqueo = bloqueos.some(b =>
+        slotConflictsWithBlock(fecha, min, dur, b)
+      )
       const conflicto = conflictoSesion || conflictoBloqueo
       if (!conflicto) horarios.push(horaStr)
     }

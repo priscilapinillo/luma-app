@@ -3,6 +3,12 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, X, Move, Lock, BarChart2, XCircle, Settings } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import {
+  horaAMin,
+  localDateTimeToStorageIso,
+  utcTimestampToLocalDate,
+  utcTimestampToLocalTime,
+} from '@/lib/datetime'
 
 const HORAS = Array.from({length: 14}, (_, i) => i + 7)
 const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
@@ -56,11 +62,6 @@ const COLORES_SERVICIO: Record<string, { bg: string; text: string }> = {
 function formatDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
-function horaAMin(hora: string) {
-  const [h, m] = hora.split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
 export default function AgendaPage() {
   const hoy = new Date()
   const [vista, setVista] = useState<Vista>('semana')
@@ -126,27 +127,13 @@ export default function AgendaPage() {
       }
 
       if (blocks) {
-        setBloqueos(blocks.map(b => {
-          const parseHora = (ts: string) => {
-            if (!ts) return '00:00'
-            const normalizado = ts.replace(' ', 'T')
-            const fecha = new Date(normalizado)
-            return `${String(fecha.getHours()).padStart(2,'0')}:${String(fecha.getMinutes()).padStart(2,'0')}`
-          }
-          const parseFecha = (ts: string) => {
-            if (!ts) return ''
-            const normalizado = ts.replace(' ', 'T')
-            const fecha = new Date(normalizado)
-            return formatDate(fecha)
-          }
-          return {
-            ...b,
-            fecha_inicio: parseFecha(b.fecha_inicio),
-            fecha_fin: parseFecha(b.fecha_fin),
-            hora_inicio_solo: parseHora(b.fecha_inicio),
-            hora_fin_solo: parseHora(b.fecha_fin),
-          }
-        }))
+        setBloqueos(blocks.map(b => ({
+          ...b,
+          fecha_inicio: utcTimestampToLocalDate(b.fecha_inicio),
+          fecha_fin: utcTimestampToLocalDate(b.fecha_fin),
+          hora_inicio_solo: utcTimestampToLocalTime(b.fecha_inicio),
+          hora_fin_solo: utcTimestampToLocalTime(b.fecha_fin),
+        })))
       }
 
       if (avail && avail.length > 0) {
@@ -264,18 +251,21 @@ export default function AgendaPage() {
       if (!user) return
       const { data } = await supabase.from('calendar_blocks').insert({
         user_id: user.id, titulo: formBloqueo.titulo,
-        fecha_inicio: formBloqueo.fecha_inicio + 'T' + formBloqueo.hora_inicio + ':00',
-        fecha_fin: (formBloqueo.fecha_fin || formBloqueo.fecha_inicio) + 'T' + formBloqueo.hora_fin + ':00',
+        fecha_inicio: localDateTimeToStorageIso(formBloqueo.fecha_inicio, formBloqueo.hora_inicio),
+        fecha_fin: localDateTimeToStorageIso(
+          formBloqueo.fecha_fin || formBloqueo.fecha_inicio,
+          formBloqueo.hora_fin
+        ),
         tipo: formBloqueo.tipo,
         color: COLORES_TIPO[formBloqueo.tipo]?.bg || '#F1F5F9',
       }).select().single()
       if (data) {
         setBloqueos(prev => [...prev, {
           ...data,
-          fecha_inicio: formBloqueo.fecha_inicio,
-          fecha_fin: formBloqueo.fecha_fin || formBloqueo.fecha_inicio,
-          hora_inicio_solo: formBloqueo.hora_inicio,
-          hora_fin_solo: formBloqueo.hora_fin,
+          fecha_inicio: utcTimestampToLocalDate(data.fecha_inicio),
+          fecha_fin: utcTimestampToLocalDate(data.fecha_fin),
+          hora_inicio_solo: utcTimestampToLocalTime(data.fecha_inicio),
+          hora_fin_solo: utcTimestampToLocalTime(data.fecha_fin),
         }])
       }
       setModalBloqueo(false)

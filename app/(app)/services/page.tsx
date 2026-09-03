@@ -482,7 +482,7 @@ export default function ServiciosPage() {
                     onChange={e => setForm({...form, duracion_estimada: Number(e.target.value)})}/>
                 </div>
                 <div className="field">
-                  <label>Precio base ARS ($)</label>
+                  <label>Precio en ARS — sin puntos ni comas (ej: 9900)</label>
                   <input type="number" min="0" value={form.precio_base || ''}
                     onChange={e => setForm({...form, precio_base: Math.round(Number(e.target.value))})}/>
                 </div>
@@ -510,13 +510,8 @@ export default function ServiciosPage() {
                   </div>
                 </div>
                 <div className="field">
-                <label>Precio base ($)</label>
-                  <input type="text" inputMode="numeric" value={form.precio_base ? form.precio_base.toLocaleString('es-AR') : ''}
-                    onChange={e => {
-                      const limpio = e.target.value.replace(/\./g,'').replace(/,/g,'').replace(/[^0-9]/g,'')
-                      setForm({...form, precio_base: limpio ? Number(limpio) : 0})
-                    }}/>
-                  <input type="number" min="0" value={form.precio_base || ''}
+                <label>Precio en ARS — sin puntos ni comas (ej: 9900)</label>
+                <input type="number" min="0" value={form.precio_base || ''}
                     onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
                 </div>
                 <div className="field">
