@@ -341,6 +341,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         const sI = horaAMin(s.hora), sF = sI + s.duracion
         return min < sF && min + dur > sI
       })
+      console.log('BLOQUEOS:', bloqueos, 'FECHA:', fecha, 'MIN:', min)
       const conflictoBloqueo = bloqueos.some(b => {
         const bInicio = new Date(b.fecha_inicio)
         const bFin = new Date(b.fecha_fin)
