@@ -670,36 +670,51 @@ export default function AjustesPage() {
     </div>
     <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'10px'}}>Tus valores</div>
     {perfil.valores.map((v, i) => (
-      <div key={i} style={{display:'flex',flexDirection:'column',gap:'6px',marginBottom:'12px'}}>
+      <div key={i} style={{background:'var(--bg-input)',borderRadius:'14px',padding:'14px',border:'0.5px solid var(--border-light)',marginBottom:'12px',display:'flex',flexDirection:'column',gap:'10px'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'1px'}}>Emoji</span>
         <input
-          style={{padding:'9px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'18px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',textAlign:'center'}}
+          style={{padding:'9px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'22px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',textAlign:'center',width:'60px'}}
           value={v.icon}
+          maxLength={2}
+          placeholder="👁"
           onChange={e => {
             const nuevo = [...perfil.valores]
             nuevo[i] = {...nuevo[i], icon: e.target.value}
             setPerfil({...perfil, valores: nuevo})
           }}/>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'1px'}}>Título <span style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>({v.name.length}/19)</span></span>
         <input
-          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
-          placeholder="Nombre"
+          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',width:'100%'}}
+          placeholder="Ej: Escucha"
+          maxLength={19}
           value={v.name}
           onChange={e => {
             const nuevo = [...perfil.valores]
             nuevo[i] = {...nuevo[i], name: e.target.value}
             setPerfil({...perfil, valores: nuevo})
           }}/>
-        <input
-          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
-          placeholder="Descripción"
+        <span style={{fontSize:'10px',color:'var(--text-muted)'}}>Una o dos palabras máximo.</span>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'1px'}}>Descripción <span style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>({v.desc.length}/60)</span></span>
+        <textarea
+          style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',width:'100%',minHeight:'70px',resize:'none'}}
+          placeholder="Ej: Te acompaño en cada paso de tu proceso."
+          maxLength={60}
           value={v.desc}
           onChange={e => {
             const nuevo = [...perfil.valores]
             nuevo[i] = {...nuevo[i], desc: e.target.value}
             setPerfil({...perfil, valores: nuevo})
           }}/>
+                   </div>
       </div>
     ))}
-  </div>
+    </div>
+
 
   {/* TESTIMONIOS */}
   <div className="s-card">

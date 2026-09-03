@@ -21,7 +21,7 @@ type Terapeuta = {
 type Servicio = {
   id: string; nombre: string; descripcion: string
   duracion_estimada: number; precio_base: number; color: string
-  tipo_servicio?: string; plazo_horas?: number
+  tipo_servicio?: string; plazo_horas?: number; precio_usd?: number | null
 }
 type Disponibilidad = { dia_semana: number; hora_inicio: string; hora_fin: string; activo: boolean }
 
@@ -213,6 +213,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
   const [sesionesOcupadas, setSesionesOcupadas] = useState<{fecha:string;hora:string;duracion:number}[]>([])
+  const [bloqueos, setBloqueos] = useState<{fecha_inicio:string;fecha_fin:string}[]>([])
   const [loading, setLoading] = useState(true)
 
   // flujo de reserva
@@ -242,6 +243,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [faqAbierto, setFaqAbierto] = useState<number | null>(null)
   const [testiIdx, setTestiIdx] = useState(0)
   const [servicioModal, setServicioModal] = useState<Servicio | null>(null)
+  const [monedaSel, setMonedaSel] = useState<'ars'|'usd'>('ars')
 
   const reservaRef = useRef<HTMLDivElement>(null)
   const horariosRef = useRef<HTMLDivElement>(null)
@@ -249,7 +251,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   // ── efectos ──────────────────────────────────────────────────────────────
 
-  function abrirModal(s: Servicio) { setServicioModal(s); document.body.style.overflow = 'hidden' }
+  function abrirModal(s: Servicio) { setServicioModal(s); setMonedaSel('ars'); document.body.style.overflow = 'hidden' }
   function cerrarModal() { setServicioModal(null); document.body.style.overflow = '' }
 
   useEffect(() => { cargarDatos() }, [])
@@ -302,18 +304,20 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
       setTerapeuta(perfil)
-      const [{ data: servs }, { data: disp }, { data: sess }] = await Promise.all([
+      const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
         supabase.from('availability').select('*').eq('user_id', perfil.user_id),
         supabase.from('sessions').select('fecha,hora,duracion').eq('user_id', perfil.user_id),
+        supabase.from('calendar_blocks').select('fecha_inicio,fecha_fin').eq('user_id', perfil.user_id),
       ])
       if (servs) setServicios(servs)
       if (disp) setDisponibilidad(disp)
-      if (sess) setSesionesOcupadas(sess.map(s => ({
-        fecha: s.fecha?.split('T')[0] || '',
-        hora: s.hora || '',
-        duracion: s.duracion || 60,
-      })))
+        if (sess) setSesionesOcupadas(sess.map(s => ({
+          fecha: s.fecha?.split('T')[0] || '',
+          hora: s.hora || '',
+          duracion: s.duracion || 60,
+        })))
+        if (blocks) setBloqueos(blocks)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -332,11 +336,19 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     for (let min = inicio; min + dur <= fin; min += 30) {
       const h = Math.floor(min / 60), m = min % 60
       const horaStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
-      const conflicto = sesionesOcupadas.some(s => {
+      const conflictoSesion = sesionesOcupadas.some(s => {
         if (s.fecha !== fecha) return false
         const sI = horaAMin(s.hora), sF = sI + s.duracion
         return min < sF && min + dur > sI
       })
+      const conflictoBloqueo = bloqueos.some(b => {
+        const bInicio = new Date(b.fecha_inicio)
+        const bFin = new Date(b.fecha_fin)
+        const slotInicio = new Date(`${fecha}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00`)
+        const slotFin = new Date(slotInicio.getTime() + dur * 60000)
+        return slotInicio < bFin && slotFin > bInicio
+      })
+      const conflicto = conflictoSesion || conflictoBloqueo
       if (!conflicto) horarios.push(horaStr)
     }
     return horarios
@@ -504,7 +516,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         html.dark body{background:${t.bg} !important;color:${t.text} !important}
 
         .nav{position:fixed;top:0;left:0;right:0;width:100%;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${t.navBg};${!t.dark?'border-bottom:0.5px solid var(--border);backdrop-filter:blur(12px);':''}}
-        .nav-logo{font-family:var(--font-title);font-size:20px;font-weight:600;color:var(--primary);letter-spacing:3px}
+        .nav-logo{font-family:var(--font-title);font-size:clamp(11px,2.5vw,20px);font-weight:600;color:var(--primary);letter-spacing:1px;overflow:hidden;max-width:55vw;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
 
         .hero{position:relative;min-height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
@@ -516,7 +528,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .carta-frame{position:absolute;inset:8px;border:0.5px solid var(--primary-dim);border-radius:10px;pointer-events:none}
         .carta-roman{position:absolute;top:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary);letter-spacing:4px}
         .carta-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary-light);letter-spacing:3px;text-transform:uppercase}
-        .hero-nombre{font-family:var(--font-title);font-size:clamp(42px,8vw,64px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1;margin-bottom:8px}
+        .hero-nombre{font-family:var(--font-title);font-size:clamp(24px,5vw,64px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1.15;margin-bottom:8px;word-break:break-word;overflow-wrap:break-word}
         .hero-esp{font-size:13px;font-weight:600;color:var(--primary);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;font-family:var(--font-subtitle)}
         .hero-bio{font-size:17px;line-height:1.8;color:var(--text);max-width:340px;font-weight:400;margin-bottom:32px;font-family:var(--font-subtitle)}
         .hero-cta{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;margin-bottom:16px}
@@ -763,7 +775,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 <div className="serv-desc">{s.descripcion?.slice(0,120)}{(s.descripcion?.length ?? 0) > 120 ? '...' : ''}</div>
                 <div className="serv-footer">
                   <div>
-                    <div className="serv-precio">${s.precio_base.toLocaleString()}</div>
+                  <div className="serv-precio">ARS ${s.precio_base.toLocaleString()}</div>
+                    {s.precio_usd && (
+                      <div style={{fontSize:'12px',color:'var(--text-dim)',fontFamily:'var(--font-subtitle)',marginTop:'2px'}}>
+                        USD {s.precio_usd}
+                      </div>
+                    )}
                     {s.tipo_servicio === 'entrega'
                       ? <div className="serv-meta">📦 Recibís en {s.plazo_horas}hs</div>
                       : <div className="serv-meta"><Clock size={10}/>{s.duracion_estimada} min</div>}
@@ -1035,8 +1052,32 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {servicioModal.tipo_servicio === 'entrega' ? `📦 Entrega en ${servicioModal.plazo_horas}hs` : `⏱ ${servicioModal.duracion_estimada} min`}
               </div>
             </div>
-            <div className="serv-modal-precio">${servicioModal.precio_base.toLocaleString()}</div>
-            <button className="serv-modal-btn" onClick={() => {
+            {servicioModal.precio_usd && (
+  <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+    <button onClick={() => setMonedaSel('ars')}
+      style={{flex:1,padding:'10px',borderRadius:'10px',border:`1.5px solid ${monedaSel==='ars'?'var(--primary)':'var(--border)'}`,background:monedaSel==='ars'?'var(--primary-dim)':'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'var(--font-subtitle)',transition:'all 0.15s'}}>
+      ARS
+    </button>
+    <button onClick={() => setMonedaSel('usd')}
+      style={{flex:1,padding:'10px',borderRadius:'10px',border:`1.5px solid ${monedaSel==='usd'?'var(--primary)':'var(--border)'}`,background:monedaSel==='usd'?'var(--primary-dim)':'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'var(--font-subtitle)',transition:'all 0.15s'}}>
+      USD
+    </button>
+  </div>
+)}
+<div className="serv-modal-precio">
+  {monedaSel === 'usd' && servicioModal.precio_usd
+    ? `USD ${servicioModal.precio_usd}`
+    : `$${servicioModal.precio_base.toLocaleString()}`}
+</div>
+{monedaSel === 'usd' && servicioModal.precio_usd ? (
+  <a className="serv-modal-btn"
+    href={`https://wa.me/${terapeuta.whatsapp?.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero abonar ${servicioModal.nombre} en dólares (USD ${servicioModal.precio_usd}).`)}`}
+    target="_blank" rel="noopener noreferrer"
+    style={{display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none'}}>
+    {t.deco} Continuar por WhatsApp
+  </a>
+) : (
+  <button className="serv-modal-btn" onClick={() => {
               setServicioSel(servicioModal)
               setFechaSel('')
               setHoraSel('')
@@ -1064,6 +1105,7 @@ setHoraSel('12:00')
             }}>
               {t.deco} {servicioModal.tipo_servicio === 'entrega' ? 'Solicitar ahora' : 'Reservar sesión'}
             </button>
+)}
           </div>
         </div>
       )}

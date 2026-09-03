@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 type Servicio = {
   id: string; nombre: string; descripcion: string
   duracion_estimada: number; precio_base: number
-  color: string; activo: boolean
+  color: string; activo: boolean; precio_usd?: number | null
   tipo_servicio: 'vivo' | 'entrega'
   plazo_horas: number
 }
@@ -50,6 +50,7 @@ export default function ServiciosPage() {
     precio_base: 0, color: '#8B5CF6', activo: true,
     tipo_servicio: 'vivo' as 'vivo' | 'entrega',
     plazo_horas: 24,
+    precio_usd: null as number | null,
   })
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function ServiciosPage() {
   }
 
   function abrirNuevo() {
-    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: '#8B5CF6', activo: true, tipo_servicio: 'vivo', plazo_horas: 24 })
+    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: '#8B5CF6', activo: true, tipo_servicio: 'vivo', plazo_horas: 24, precio_usd: null })
     setEditando(null)
     setModalOpen(true)
   }
@@ -115,6 +116,7 @@ export default function ServiciosPage() {
       activo: s.activo,
       tipo_servicio: s.tipo_servicio || 'vivo',
       plazo_horas: s.plazo_horas || 24,
+      precio_usd: s.precio_usd || null,
     })
     setEditando(s)
     setModalOpen(true)
@@ -133,6 +135,7 @@ export default function ServiciosPage() {
         precio_base: form.precio_base, color: form.color, activo: form.activo,
         tipo_servicio: form.tipo_servicio,
         plazo_horas: form.tipo_servicio === 'entrega' ? form.plazo_horas : null,
+        precio_usd: form.precio_usd || null,
       }
       if (editando) {
         const { data } = await supabase.from('services').update(datos).eq('id', editando.id).select().single()
@@ -347,7 +350,10 @@ export default function ServiciosPage() {
                   <div className="sc-footer">
                     <div>
                       <div className="sc-precio">${(s.precio_base || 0).toLocaleString()}</div>
-                      <div className="sc-precio-label">precio base</div>
+                      <div className="sc-precio-label">ARS</div>
+                      {s.precio_usd && (
+                        <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px',fontWeight:600}}>USD {s.precio_usd}</div>
+                      )}
                     </div>
                     <button className="sc-toggle on" onClick={() => toggleActivo(s)}>Activo</button>
                   </div>
@@ -378,8 +384,11 @@ export default function ServiciosPage() {
                   </div>
                   <div className="sc-footer">
                     <div>
-                      <div className="sc-precio">${(s.precio_base || 0).toLocaleString()}</div>
+                    <div className="sc-precio">${(s.precio_base || 0).toLocaleString()}</div>
                       <div className="sc-precio-label">precio base</div>
+                      {s.precio_usd && (
+                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>USD {s.precio_usd}</div>
+                      )}
                     </div>
                     <button className="sc-toggle off" onClick={() => toggleActivo(s)}>Inactivo</button>
                   </div>
@@ -473,9 +482,18 @@ export default function ServiciosPage() {
                     onChange={e => setForm({...form, duracion_estimada: Number(e.target.value)})}/>
                 </div>
                 <div className="field">
-                  <label>Precio base ($)</label>
+                  <label>Precio base ARS ($)</label>
                   <input type="number" min="0" value={form.precio_base || ''}
                     onChange={e => setForm({...form, precio_base: Math.round(Number(e.target.value))})}/>
+                </div>
+                <div className="field">
+                  <label>Precio en USD (opcional)</label>
+                  <input type="text" inputMode="numeric" placeholder="Ej: 20" value={form.precio_usd ? form.precio_usd.toLocaleString('es-AR') : ''}
+                    onChange={e => {
+                      const limpio = e.target.value.replace(/\./g,'').replace(/,/g,'').replace(/[^0-9]/g,'')
+                      setForm({...form, precio_usd: limpio ? Number(limpio) : null})
+                    }}/>
+                  <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'4px'}}>Si lo completás, aparece en tu página pública como referencia para pago en dólares.</div>
                 </div>
               </div>
             ) : (
@@ -492,9 +510,20 @@ export default function ServiciosPage() {
                   </div>
                 </div>
                 <div className="field">
-                  <label>Precio base ($)</label>
+                <label>Precio base ($)</label>
+                  <input type="text" inputMode="numeric" value={form.precio_base ? form.precio_base.toLocaleString('es-AR') : ''}
+                    onChange={e => {
+                      const limpio = e.target.value.replace(/\./g,'').replace(/,/g,'').replace(/[^0-9]/g,'')
+                      setForm({...form, precio_base: limpio ? Number(limpio) : 0})
+                    }}/>
                   <input type="number" min="0" value={form.precio_base || ''}
                     onChange={e => setForm({...form, precio_base: Number(e.target.value)})}/>
+                </div>
+                <div className="field">
+                  <label>Precio en USD (opcional)</label>
+                  <input type="number" min="0" placeholder="Ej: 20" value={form.precio_usd || ''}
+                    onChange={e => setForm({...form, precio_usd: e.target.value ? Number(e.target.value) : null})}/>
+                  <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'4px'}}>Si lo completás, aparece en tu página pública como referencia para pago en dólares.</div>
                 </div>
               </>
             )}
