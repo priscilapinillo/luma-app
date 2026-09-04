@@ -18,6 +18,8 @@ type Terapeuta = {
   alias_pago?: string; cbu?: string; titular_cuenta?: string; banco?: string
   instrucciones_pago?: string; acepta_transferencia?: boolean
   mp_activo?: boolean
+  max_entregas_activas?: number | null
+  pausa_entre_turnos?: number | null
 }
 type Servicio = {
   id: string; nombre: string; descripcion: string
@@ -178,6 +180,7 @@ async function crearSesionYBooking(
     realizado: false,
     contexto_sesion: opts.mensaje,
     metodo_pago: opts.metodoPago,
+    tipo_servicio: opts.servicio.tipo_servicio || 'vivo',
   }).select().single()
 
   if (error || !sesion) {
@@ -211,6 +214,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
   const [sesionesOcupadas, setSesionesOcupadas] = useState<{fecha:string;hora:string;duracion:number}[]>([])
   const [bloqueos, setBloqueos] = useState<{fecha_inicio:string;fecha_fin:string}[]>([])
+  const [entregasLlenas, setEntregasLlenas] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // flujo de reserva
@@ -315,6 +319,22 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           duracion: s.duracion || 60,
         })))
         if (blocks) setBloqueos(blocks)
+
+        // Verificar límite de entregas
+      if (perfil.max_entregas_activas) {
+        const { data: entregasPendientes } = await supabase
+          .from('sessions')
+          .select('id')
+          .eq('user_id', perfil.user_id)
+          .eq('realizado', false)
+          .eq('tipo_servicio', 'entrega')
+        
+        
+        
+        if (entregasPendientes && entregasPendientes.length >= perfil.max_entregas_activas) {
+          setEntregasLlenas(true)
+        }
+      }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -333,9 +353,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     for (let min = inicio; min + dur <= fin; min += 30) {
       const h = Math.floor(min / 60), m = min % 60
       const horaStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+      const pausa = terapeuta?.pausa_entre_turnos || 0
       const conflictoSesion = sesionesOcupadas.some(s => {
         if (s.fecha !== fecha) return false
-        const sI = horaAMin(s.hora), sF = sI + s.duracion
+        const sI = horaAMin(s.hora), sF = sI + s.duracion + pausa
         return min < sF && min + dur > sI
       })
       const conflictoBloqueo = bloqueos.some(b =>
@@ -762,7 +783,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         ) : (
           <div className="serv-list">
             {servicios.map(s => (
-              <div key={s.id} className={`serv-card${servicioSel?.id===s.id?' sel':''}`} onClick={() => abrirModal(s)}>
+              <div key={s.id} className={`serv-card${servicioSel?.id===s.id?' sel':''}`} 
+              onClick={() => entregasLlenas && s.tipo_servicio === 'entrega' ? null : abrirModal(s)}
+              style={{cursor: entregasLlenas && s.tipo_servicio === 'entrega' ? 'default' : 'pointer'}}>
                 <div className="serv-tipo">{s.tipo_servicio === 'entrega' ? `⏳ Entrega en ${s.plazo_horas}hs` : '🔴 Sesión en vivo'}</div>
                 <div className="serv-nombre">{s.nombre}</div>
                 <div className="serv-desc">{s.descripcion?.slice(0,120)}{(s.descripcion?.length ?? 0) > 120 ? '...' : ''}</div>
@@ -778,7 +801,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                       ? <div className="serv-meta">📦 Recibís en {s.plazo_horas}hs</div>
                       : <div className="serv-meta"><Clock size={10}/>{s.duracion_estimada} min</div>}
                   </div>
-                  <button className="serv-btn">Ver detalles</button>
+                  {entregasLlenas && s.tipo_servicio === 'entrega'
+  ? <span style={{fontSize:'11px',color:'var(--text-dim)',fontFamily:'var(--font-subtitle)',fontWeight:600,letterSpacing:'1px'}}>Sin disponibilidad</span>
+  : <button className="serv-btn">Ver detalles</button>}
                 </div>
               </div>
             ))}

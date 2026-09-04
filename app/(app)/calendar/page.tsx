@@ -70,6 +70,14 @@ export default function AgendaPage() {
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>(DISPONIBILIDAD_DEFAULT)
   const [loading, setLoading] = useState(true)
+  const [toastMsg, setToastMsg] = useState('')
+const [toastVisible, setToastVisible] = useState(false)
+
+function toast(msg: string) {
+  setToastMsg(msg)
+  setToastVisible(true)
+  setTimeout(() => setToastVisible(false), 3000)
+}
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null)
   const [vistaTab, setVistaTab] = useState<'calendario'|'carga'|'cancelados'>('calendario')
   const [modalBloqueo, setModalBloqueo] = useState(false)
@@ -270,6 +278,7 @@ export default function AgendaPage() {
       }
       setModalBloqueo(false)
       setFormBloqueo({ titulo: '', fecha_inicio: '', hora_inicio: '09:00', fecha_fin: '', hora_fin: '10:00', tipo: 'bloqueo' })
+      toast('Bloqueo guardado')
     } catch (err) {
       console.error('Error guardando bloqueo:', err)
     } finally {
@@ -821,6 +830,11 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
               {guardandoDisp ? 'Guardando...' : 'Guardar disponibilidad'}
             </button>
           </div>
+        </div>
+      )}
+          {toastVisible && (
+        <div style={{position:'fixed',bottom:'100px',left:'50%',transform:'translateX(-50%)',background:'#10B981',color:'white',padding:'12px 24px',borderRadius:'50px',fontSize:'13px',fontWeight:600,fontFamily:'inherit',boxShadow:'0 4px 20px rgba(16,185,129,0.4)',zIndex:9999,whiteSpace:'nowrap'}}>
+          ✓ {toastMsg}
         </div>
       )}
     </>

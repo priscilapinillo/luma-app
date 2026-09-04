@@ -44,6 +44,9 @@ export default function ServiciosPage() {
   const [guardando, setGuardando] = useState(false)
   const [confirmBorrar, setConfirmBorrar] = useState<Servicio | null>(null)
   const [isDark, setIsDark] = useState(false)
+  const [configAgenda, setConfigAgenda] = useState({ pausa_entre_turnos: null as number | null, max_entregas_activas: null as number | null })
+  const [guardandoConfig, setGuardandoConfig] = useState(false)
+  const [msgConfig, setMsgConfig] = useState('')
 
   const [form, setForm] = useState({
     nombre: '', descripcion: '', duracion_estimada: 60,
@@ -80,10 +83,15 @@ export default function ServiciosPage() {
         window.location.href = '/auth/login'
         return
       }
-      const [{ data: servs }, { data: sess }] = await Promise.all([
+      const [{ data: servs }, { data: sess }, { data: prof }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', user.id).order('created_at'),
         supabase.from('sessions').select('servicio_nombre,precio,estado_pago').eq('user_id', user.id),
+        supabase.from('therapist_profiles').select('pausa_entre_turnos,max_entregas_activas').eq('user_id', user.id).maybeSingle(),
       ])
+      if (prof) setConfigAgenda({
+        pausa_entre_turnos: prof.pausa_entre_turnos || null,
+        max_entregas_activas: prof.max_entregas_activas || null,
+      })
       if (servs) setServicios(servs)
       if (servs && sess) {
         const stats: EstadServicio[] = servs.map(s => {
@@ -122,6 +130,27 @@ export default function ServiciosPage() {
     setModalOpen(true)
   }
 
+
+  async function guardarConfigAgenda() {
+    setGuardandoConfig(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('therapist_profiles').update({
+        pausa_entre_turnos: configAgenda.pausa_entre_turnos,
+        max_entregas_activas: configAgenda.max_entregas_activas,
+      }).eq('user_id', user.id)
+      setMsgConfig('Guardado')
+      setTimeout(() => setMsgConfig(''), 2000)
+    } catch(err) {
+      console.error(err)
+    } finally {
+      setGuardandoConfig(false)
+    }
+  }
+
+
   async function guardar() {
     if (!form.nombre) { alert('El nombre es obligatorio'); return }
     setGuardando(true)
@@ -152,6 +181,8 @@ export default function ServiciosPage() {
       setGuardando(false)
     }
   }
+
+  
 
   async function toggleActivo(s: Servicio) {
     const supabase = createClient()
@@ -321,6 +352,58 @@ export default function ServiciosPage() {
             <Plus size={14}/> Nuevo servicio
           </button>
         </div>
+
+
+
+
+      {/* CONFIGURACIÓN AVANZADA */}
+<div style={{background:'var(--bg-card)',borderRadius:'16px',padding:'20px 20px 16px',border:'0.5px solid var(--border-light)',marginBottom:'20px'}}>
+  <div style={{fontSize:'12px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'16px'}}>Configuración de agenda</div>
+  
+  <div style={{marginBottom:'16px'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+      <div>
+        <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)'}}>Pausa entre turnos</div>
+        <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.5'}}>Tiempo libre después de cada sesión para prepararte.</div>
+      </div>
+      <div style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',minWidth:'40px',textAlign:'right'}}>
+      {configAgenda.pausa_entre_turnos ? `${configAgenda.pausa_entre_turnos} min` : 'Sin pausa'}
+      </div>
+    </div>
+    <input type="range" min="0" max="30" step="5"
+      value={configAgenda.pausa_entre_turnos || 0}
+      onChange={e => setConfigAgenda({...configAgenda, pausa_entre_turnos: Number(e.target.value) || null})}
+      style={{width:'100%',accentColor:'var(--accent)'}}/>
+    <div style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>
+      <span>Sin pausa</span><span>30 min</span>
+    </div>
+  </div>
+
+  <div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+      <div>
+        <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)'}}>Máximo de entregas pendientes</div>
+        <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.5'}}>Aplica solo a los servicios que no tienen fecha y hora fija de entrega. Cuando llegás a este número, tu página deja de aceptar nuevos pedidos hasta que proceses alguno.</div>
+      </div>
+      <div style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',minWidth:'40px',textAlign:'right'}}>
+      {configAgenda.max_entregas_activas ? configAgenda.max_entregas_activas : 'Sin límite'}
+      </div>
+    </div>
+    <input type="range" min="0" max="30" step="1"
+      value={configAgenda.max_entregas_activas || 0}
+      onChange={e => setConfigAgenda({...configAgenda, max_entregas_activas: Number(e.target.value) || null})}
+      style={{width:'100%',accentColor:'var(--accent)'}}/>
+    <div style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>
+      <span>Sin límite</span><span>30</span>
+    </div>
+  </div>
+
+  <button onClick={guardarConfigAgenda} disabled={guardandoConfig}
+    style={{marginTop:'14px',padding:'8px 16px',background:'var(--accent)',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+    {guardandoConfig ? 'Guardando...' : 'Guardar configuración'}
+    </button>
+    {msgConfig && <span style={{fontSize:'12px',color:'#10B981',marginLeft:'8px'}}>✓ {msgConfig}</span>}
+</div>  
 
         {activos.length > 0 && (<>
           <div className="s-section-label">Activos</div>
