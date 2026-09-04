@@ -619,6 +619,7 @@ metodo_pago: s.metodo_pago || 'mercadopago',
       servicio_nombre: nuevoTurno.servicio, precio: nuevoTurno.precio,
       sena: nuevoTurno.pago === 'señado' ? nuevoTurno.sena : 0,
       estado_pago: nuevoTurno.pago, estado: 'programada', realizado: false,
+      tipo_servicio: servicios.find(s => s.id === nuevoTurno.servicioId)?.tipo_servicio || 'vivo',
     }).select().single()
 
     if (error) { console.error(error); setGuardando(false); return }
@@ -913,13 +914,26 @@ metodo_pago: s.metodo_pago || 'mercadopago',
             </div>
           ) : (
             <div style={{display:'flex',flexDirection:'column',gap:'10px',flexShrink:0}}>
-              <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden'}}>
+            <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden'}}>
                 <div style={{position:'absolute',borderRadius:'50%',background:'#3B82F6',opacity:0.2,width:'60px',height:'60px',top:'-12px',right:'-12px',pointerEvents:'none'}}/>
                 <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px'}}>📦 Entregas pendientes</div>
-                {entregasPendientes.slice(0,3).map((t,i) => {
+                {entregasPendientes.slice(0,10).sort((a, b) => {
+                  const sA = servicios.find(sv => sv.nombre === a.servicio) as any
+                  const sB = servicios.find(sv => sv.nombre === b.servicio) as any
+                  const plazoA = sA?.plazo_horas || 48
+                  const plazoB = sB?.plazo_horas || 48
+                  const venceA = new Date((a.created_at ? new Date(a.created_at) : new Date()).getTime() + plazoA * 3600000)
+                  const venceB = new Date((b.created_at ? new Date(b.created_at) : new Date()).getTime() + plazoB * 3600000)
+                  return venceA.getTime() - venceB.getTime()
+                }).map((t,i) => {
                   const s = servicios.find(sv => sv.nombre === t.servicio) as any
                   const plazoHoras = s?.plazo_horas || 48
-                  const creadoEn = new Date(t.created_at || t.fecha+'T'+t.hora+':00')
+                 
+                  const createdStr = t.created_at || ''
+const rawCreated = createdStr.includes('+') || createdStr.includes('Z')
+  ? createdStr
+  : createdStr + '+00:00'
+const creadoEn = createdStr ? new Date(rawCreated) : new Date()
                   const venceEn = new Date(creadoEn.getTime() + plazoHoras * 60 * 60 * 1000)
                   const restanMs = venceEn.getTime() - new Date().getTime()
                   const restanHoras = Math.floor(restanMs / (1000 * 60 * 60))
@@ -938,6 +952,8 @@ metodo_pago: s.metodo_pago || 'mercadopago',
                     </div>
                   )
                 })}
+              
+                
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
                 {widgetFinanzas}
