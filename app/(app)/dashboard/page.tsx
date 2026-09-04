@@ -914,9 +914,10 @@ metodo_pago: s.metodo_pago || 'mercadopago',
             </div>
           ) : (
             <div style={{display:'flex',flexDirection:'column',gap:'10px',flexShrink:0}}>
-            <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',overflow:'hidden'}}>
+           <div style={{background:'#EFF6FF',borderRadius:'20px',padding:'14px 16px',border:'0.5px solid #BFDBFE',position:'relative',display:'flex',flexDirection:'column',maxHeight:'160px'}}>
                 <div style={{position:'absolute',borderRadius:'50%',background:'#3B82F6',opacity:0.2,width:'60px',height:'60px',top:'-12px',right:'-12px',pointerEvents:'none'}}/>
-                <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px'}}>📦 Entregas pendientes</div>
+                <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1.2px',textTransform:'uppercase',color:'#1D4ED8',marginBottom:'10px',flexShrink:0}}>📦 Entregas pendientes</div>
+                <div style={{overflowY:'auto',flex:1}}>
                 {entregasPendientes.slice(0,10).sort((a, b) => {
                   const sA = servicios.find(sv => sv.nombre === a.servicio) as any
                   const sB = servicios.find(sv => sv.nombre === b.servicio) as any
@@ -941,17 +942,18 @@ const creadoEn = createdStr ? new Date(rawCreated) : new Date()
                   const vencido = restanMs < 0
                   const urgente = restanHoras < 6 && !vencido
                   return (
-                    <div key={i} style={{background:'rgba(255,255,255,0.6)',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${vencido?'#FECACA':urgente?'#FDE68A':'#BFDBFE'}`}}>
+                    <div key={i} style={{background:'rgba(255,255,255,0.6)',borderRadius:'10px',padding:'5px 8px',marginBottom:'4px',border:`0.5px solid ${vencido?'#FECACA':urgente?'#FDE68A':'#BFDBFE'}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'2px'}}>
-                        <span style={{fontSize:'12px',fontWeight:600,color:'#1E40AF'}}>{t.pacienteNombre}</span>
-                        <span style={{fontSize:'10px',fontWeight:700,color:vencido?'#EF4444':urgente?'#D97706':'#2563EB'}}>
+                        <span style={{fontSize:'11px',fontWeight:600,color:'#1E40AF'}}>{t.pacienteNombre}</span>
+                        <span style={{fontSize:'9px',fontWeight:700,color:vencido?'#EF4444':urgente?'#D97706':'#2563EB'}}>
                           {vencido ? '⚠️ Vencido' : urgente ? `⚡ ${restanHoras}h ${restanMin}m` : `${restanHoras}h restantes`}
                         </span>
                       </div>
-                      <div style={{fontSize:'10px',color:'#60A5FA'}}>{t.servicio}</div>
+                      <div style={{fontSize:'9px',color:'#60A5FA'}}>{t.servicio}</div>
                     </div>
-                  )
-                })}
+                                    )
+                                  })}
+                                </div>
               
                 
               </div>
