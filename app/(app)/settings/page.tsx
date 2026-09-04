@@ -37,7 +37,49 @@ export default function AjustesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [tab, setTab] = useState<Tab>('perfil')
   const [loading, setLoading] = useState(true)
+  useEffect(() => { cargarDatos() }, [])
   const [guardando, setGuardando] = useState(false)
+  const [notificacionesActivas, setNotificacionesActivas] = useState(false)
+  
+  const [loadingNoti, setLoadingNoti] = useState(false)
+
+  async function toggleNotificaciones() {
+    setLoadingNoti(true)
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      alert('Tu navegador no soporta notificaciones. Agregá Luma a tu pantalla de inicio primero.')
+      return
+    }
+    if (notificacionesActivas) {
+      setNotificacionesActivas(false)
+      return
+    }
+    try {
+      const permiso = await Notification.requestPermission()
+      if (permiso !== 'granted') {
+        alert('Permiso denegado. Habilitá las notificaciones desde la configuración de tu celular.')
+        return
+      }
+      const registration = await navigator.serviceWorker.ready
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      })
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub, userId: user.id }),
+      })
+      setNotificacionesActivas(true)
+    } catch(err) {
+      console.error('Error activando notificaciones:', err)
+      alert('Hubo un error al activar las notificaciones.')
+    } finally {
+      setLoadingNoti(false)
+    }
+  }
   const [subiendoAvatar, setSubiendoAvatar] = useState(false)
   const [email, setEmail] = useState('')
   const [ultimoAcceso, setUltimoAcceso] = useState('')
@@ -69,12 +111,15 @@ export default function AjustesPage() {
   const [passError, setPassError] = useState('')
   const [passExito, setPassExito] = useState(false)
 
-  useEffect(() => { cargarDatos() }, [])
+  
 
   async function cargarDatos() {
+    console.log('cargarDatos inicio')
     try {
       const supabase = createClient()
+      console.log('supabase creado')
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('user:', user?.email)
       if (!user || !user.email) {
         window.location.href = '/auth/login'
         return
@@ -82,8 +127,8 @@ export default function AjustesPage() {
       setEmail(user.email || '')
       setUltimoAcceso(user.last_sign_in_at || '')
       const [{ data: prof }, { data: subs }] = await Promise.all([
-        supabase.from('therapist_profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('subscriptions').select('*').eq('user_id', user.id).single(),
+        supabase.from('therapist_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
       ])
       if (prof) setPerfil({
         id: prof.id,
@@ -105,6 +150,12 @@ export default function AjustesPage() {
         faq: prof.faq || [],
         mp_access_token: prof.mp_access_token || '',
         mp_activo: prof.mp_activo || false,
+        acepta_transferencia: prof.acepta_transferencia || false,
+        alias_pago: prof.alias_pago || '',
+        cbu: prof.cbu || '',
+        titular_cuenta: prof.titular_cuenta || '',
+        banco: prof.banco || '',
+        instrucciones_pago: prof.instrucciones_pago || '',
         valores: prof.valores || [
           {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
           {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
@@ -113,13 +164,23 @@ export default function AjustesPage() {
         testimonios: prof.testimonios || [],
       })
       if (subs) setSuscripcion(subs)
-    } catch (err) {
-      console.error('Error cargando:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
+        // Verificar si ya tiene notificaciones activas
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          const { data: pushSub } = await supabase
+            .from('push_subscriptions')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          if (pushSub) setNotificacionesActivas(true)
+        }
+  
+      } catch (err) {
+        console.error('Error cargando:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
   async function guardarPerfil() {
     setGuardando(true)
     try {
@@ -551,6 +612,29 @@ export default function AjustesPage() {
       </a>
     )}
   </div>
+
+  {/* NOTIFICACIONES */}
+<div className="s-card">
+  <div className="s-card-title"><Settings size={14}/>Notificaciones</div>
+  <div className="pref-row">
+    <div>
+      <div className="pref-label">Recibir notificaciones de nuevas reservas</div>
+      <div className="pref-sub">Agregá Luma a tu pantalla de inicio para recibirlas</div>
+      <a href="/ayuda#notificaciones" style={{fontSize:'11px',color:'var(--accent)',textDecoration:'underline',marginTop:'4px',display:'inline-block'}}>
+        Ver tutorial
+      </a>
+    </div>
+    <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block',flexShrink:0}}>
+      <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+       checked={notificacionesActivas}
+       onChange={toggleNotificaciones}
+       disabled={loadingNoti}/>
+      <span style={{position:'absolute',inset:0,background:notificacionesActivas?'#8B5CF6':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+        <span style={{position:'absolute',width:'16px',height:'16px',left:notificacionesActivas?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+      </span>
+    </label>
+  </div>
+</div>
 
   {/* SECCIONES */}
   <div className="s-card">

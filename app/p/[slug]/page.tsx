@@ -203,9 +203,20 @@ async function crearSesionYBooking(
     session_id: sesion.id,
   })
 
+  try {
+    await fetch('/api/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: opts.terapeutaId,
+        titulo: '✦ Nueva reserva en Luma',
+        cuerpo: `${opts.nombre} agendó ${opts.servicio.nombre}${opts.hora !== '00:00' ? ` para el ${opts.fecha} a las ${opts.hora}hs` : ''}`,
+      }),
+    })
+  } catch(e) { console.error('Error notificación:', e) }
+
   return sesion
 }
-
 // ─── componente principal ───────────────────────────────────────────────────
 
 export default function PaginaPublica({ params }: { params: Promise<{ slug: string }> }) {

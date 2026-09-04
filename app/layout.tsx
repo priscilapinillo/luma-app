@@ -24,7 +24,17 @@ export default function RootLayout({
     } catch(e) {}
   `}}/>
 </head>
-      <body>{children}</body>
+<body>
+        {children}
+        <script dangerouslySetInnerHTML={{__html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js')
+                .catch(function(err) { console.log('SW error:', err) })
+            })
+          }
+        `}}/>
+      </body>
     </html>
   );
 }

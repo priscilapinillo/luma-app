@@ -115,6 +115,30 @@ export default function AyudaPage() {
                 q: '¿Cómo muevo un turno a otra fecha?',
                 a: 'Abrí el turno en el dashboard y hacé click en el ícono de lápiz. Podés cambiar la fecha y hora. El sistema te avisa si hay conflicto con otro turno.'
               },
+              {
+                q: '¿Y si ya no quiero recibir turnos?',
+                a: 'Tenés dos opciones. La más rápida es ir a Agenda → Bloquear, elegir fecha de inicio y fin, y ese período deja de aparecer como disponible en tu página pública. Si querés pausar un servicio específico, andá a Servicios, editalo y desactivalo — va a desaparecer de tu página hasta que lo vuelvas a activar.'
+              },
+              {
+                q: '¿Cómo activo las notificaciones de nuevas reservas?',
+                a: `Para recibir una notificación en tu celular cada vez que alguien reserve, seguí estos pasos:
+
+iOS (iPhone):
+1. Abrí Luma en Safari
+2. Tocá el ícono de compartir (el cuadrado con la flecha)
+3. Elegí "Agregar a pantalla de inicio"
+4. Abrí Luma desde el ícono que apareció en tu pantalla de inicio
+5. Andá a Ajustes → activá "Recibir notificaciones de nuevas reservas"
+6. Aceptá el permiso que aparece en pantalla
+
+Android:
+1. Abrí Luma en Chrome
+2. Tocá los tres puntos del menú
+3. Elegí "Agregar a pantalla de inicio" o "Instalar app"
+4. Abrí Luma desde el ícono que apareció en tu pantalla de inicio
+5. Andá a Ajustes → activá "Recibir notificaciones de nuevas reservas"
+6. Aceptá el permiso que aparece en pantalla`
+              },
             ]
           },
           {
@@ -170,7 +194,7 @@ Para gestionar los medios de pago y las comisiones, andá en Mercado Pago a Nego
             ]
           },
         ].map((seccion, si) => (
-          <div key={si} className="ay-section">
+          <div key={si} className="ay-section" id={seccion.categoria === 'Agenda y turnos' ? 'notificaciones' : undefined}>
             <div className="ay-section-title">{seccion.categoria}</div>
             {seccion.faqs.map((faq, fi) => (
               <details key={fi} className="ay-faq">
