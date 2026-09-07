@@ -29,7 +29,21 @@ instrucciones_pago?: string
 
 
 const ZONAS = ['America/Argentina/Buenos_Aires','America/Santiago','America/Lima','America/Bogota','America/Mexico_City','America/Montevideo','Europe/Madrid']
-const MONEDAS = ['ARS','USD','EUR','CLP','PEN','COP','MXN','UYU']
+const MONEDAS = [
+  { codigo: 'ARS', simbolo: '$', nombre: 'Peso argentino' },
+  { codigo: 'MXN', simbolo: 'MX$', nombre: 'Peso mexicano' },
+  { codigo: 'COP', simbolo: 'COL$', nombre: 'Peso colombiano' },
+  { codigo: 'CLP', simbolo: 'CL$', nombre: 'Peso chileno' },
+  { codigo: 'PEN', simbolo: 'S/', nombre: 'Sol peruano' },
+  { codigo: 'UYU', simbolo: '$U', nombre: 'Peso uruguayo' },
+  { codigo: 'BOB', simbolo: 'Bs.', nombre: 'Boliviano' },
+  { codigo: 'PYG', simbolo: '₲', nombre: 'Guaraní paraguayo' },
+  { codigo: 'VES', simbolo: 'Bs.S', nombre: 'Bolívar venezolano' },
+  { codigo: 'BRL', simbolo: 'R$', nombre: 'Real brasileño' },
+  { codigo: 'USD', simbolo: 'USD', nombre: 'Dólar estadounidense' },
+]
+
+const SIMBOLOS_MONEDA: Record<string, string> = Object.fromEntries(MONEDAS.map(m => [m.codigo, m.simbolo]))
 type Tab = 'perfil' | 'pagina' | 'seguridad' | 'datos' | 'preferencias'
 
 export default function AjustesPage() {
@@ -1040,7 +1054,7 @@ export default function AjustesPage() {
                 </div>
                 <select className="pref-select" value={perfil.moneda}
                   onChange={e => setPerfil({...perfil, moneda: e.target.value})}>
-                  {MONEDAS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {MONEDAS.map(m => <option key={m.codigo} value={m.codigo}>{m.simbolo} — {m.nombre}</option>)}
                 </select>
               </div>
               <div className="pref-row">

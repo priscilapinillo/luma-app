@@ -20,11 +20,19 @@ type Terapeuta = {
   mp_activo?: boolean
   max_entregas_activas?: number | null
   pausa_entre_turnos?: number | null
+  moneda?: string
+  zona_horaria?: string
 }
+
 type Servicio = {
   id: string; nombre: string; descripcion: string
   duracion_estimada: number; precio_base: number; color: string
   tipo_servicio?: string; plazo_horas?: number; precio_usd?: number | null
+}
+const SIMBOLOS_MONEDA: Record<string, string> = {
+  ARS: '$', MXN: 'MX$', COP: 'COL$', CLP: 'CL$',
+  PEN: 'S/', UYU: '$U', BOB: 'Bs.', PYG: '₲',
+  VES: 'Bs.S', BRL: 'R$', USD: 'USD',
 }
 type Disponibilidad = { dia_semana: number; hora_inicio: string; hora_fin: string; activo: boolean }
 
@@ -786,6 +794,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <div className="section-label">Servicios</div>
         <h2 className="section-title">¿Cómo puedo acompañarte?</h2>
         <p className="section-sub">Elegí el servicio que resuene con lo que necesitás hoy</p>
+{(terapeuta.zona_horaria || terapeuta.moneda) && (
+  <div style={{fontSize:'11px',color:'var(--text-dim)',fontFamily:'var(--font-subtitle)',marginBottom:'16px',marginTop:'-8px',letterSpacing:'0.3px'}}>
+    Horarios y precios en zona horaria y moneda de {terapeuta.zona_horaria?.split('/')[1]?.replace(/_/g,' ') || 'Argentina'}
+  </div>
+)}
 
         {servicios.length === 0 ? (
           <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
@@ -802,7 +815,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 <div className="serv-desc">{s.descripcion?.slice(0,120)}{(s.descripcion?.length ?? 0) > 120 ? '...' : ''}</div>
                 <div className="serv-footer">
                   <div>
-                  <div className="serv-precio">ARS ${s.precio_base.toLocaleString()}</div>
+                  <div className="serv-precio">{SIMBOLOS_MONEDA[terapeuta.moneda || 'ARS'] || '$'} {s.precio_base.toLocaleString()}</div>
                     {s.precio_usd && (
                       <div style={{fontSize:'12px',color:'var(--text-dim)',fontFamily:'var(--font-subtitle)',marginTop:'2px'}}>
                         USD {s.precio_usd}
@@ -1085,8 +1098,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
     <button onClick={() => setMonedaSel('ars')}
       style={{flex:1,padding:'10px',borderRadius:'10px',border:`1.5px solid ${monedaSel==='ars'?'var(--primary)':'var(--border)'}`,background:monedaSel==='ars'?'var(--primary-dim)':'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'var(--font-subtitle)',transition:'all 0.15s'}}>
-      ARS
-    </button>
+            {terapeuta?.moneda || 'ARS'}
+            </button>
     <button onClick={() => setMonedaSel('usd')}
       style={{flex:1,padding:'10px',borderRadius:'10px',border:`1.5px solid ${monedaSel==='usd'?'var(--primary)':'var(--border)'}`,background:monedaSel==='usd'?'var(--primary-dim)':'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'var(--font-subtitle)',transition:'all 0.15s'}}>
       USD
@@ -1096,7 +1109,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 <div className="serv-modal-precio">
   {monedaSel === 'usd' && servicioModal.precio_usd
     ? `USD ${servicioModal.precio_usd}`
-    : `$${servicioModal.precio_base.toLocaleString()}`}
+    : `${SIMBOLOS_MONEDA[terapeuta.moneda || 'ARS'] || '$'} ${servicioModal.precio_base.toLocaleString()}`}
 </div>
 {monedaSel === 'usd' && servicioModal.precio_usd ? (
   <a className="serv-modal-btn"
@@ -1139,8 +1152,16 @@ setHoraSel('12:00')
         </div>
       )}
 
-      <footer className="footer">
-        © 2025 {terapeuta.nombre_profesional} · Powered by <span>Luma</span>
+<footer className="footer">
+        © 2025 {terapeuta.nombre_profesional}
+        <div style={{marginTop:'8px',fontSize:'10px',opacity:0.5}}>
+          Creado con{' '}
+          <a href="https://lumaapp.lat" target="_blank" rel="noopener noreferrer"
+            style={{color:'var(--primary)',textDecoration:'none',fontWeight:600}}>
+            Luma
+          </a>
+          {' '}· La plataforma para terapeutas holísticas
+        </div>
       </footer>
     </div>
   )
