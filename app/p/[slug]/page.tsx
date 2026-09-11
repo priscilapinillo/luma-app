@@ -577,7 +577,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .sobre-values{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
         .sobre-val{text-align:center;padding:12px 8px;background:var(--primary-dim);border-radius:12px;border:0.5px solid var(--border)}
         .sobre-val-icon{font-size:20px;margin-bottom:6px}
-        .sobre-val-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:4px;font-family:var(--font-subtitle);font-weight:700}
+        .sobre-val-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:4px;font-family:var(--font-subtitle);font-weight:700;word-break:break-word;overflow-wrap:break-word;hyphens:auto}
         .sobre-val-desc{font-size:12px;color:var(--text-dim);line-height:1.4;font-family:var(--font-subtitle)}
 
         .serv-list{display:flex;flex-direction:column;gap:12px;width:100%}
@@ -1023,6 +1023,38 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         )}
       </section>
 
+      {secciones.testimonios && (<>
+        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+        <section className="section">
+          <div className="section-label">Testimonios</div>
+          <h2 className="section-title">Lo que dicen</h2>
+          <div className="testi-card">
+            <div className="testi-quote">"</div>
+            <p className="testi-texto">{(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.texto}</p>
+            <div className="testi-nombre">— {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.nombre}</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',marginTop:'16px'}}>
+            <button
+              onClick={() => setTestiIdx(i => Math.max(0, i-1))}
+              disabled={testiIdx === 0}
+              style={{width:'32px',height:'32px',borderRadius:'50%',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===0?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
+              ‹
+            </button>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
+                <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
+              ))}
+            </div>
+            <button
+              onClick={() => setTestiIdx(i => Math.min((terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1, i+1))}
+              disabled={testiIdx === (terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1}
+              style={{width:'32px',height:'32px',borderRadius:'50%',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length-1?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
+              ›
+            </button>
+          </div>
+        </section>
+      </>)}
+
       {secciones.faq && faqItems.length > 0 && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
@@ -1040,23 +1072,25 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </section>
       </>)}
 
-      {secciones.testimonios && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
-        <section className="section">
-          <div className="section-label">Testimonios</div>
-          <h2 className="section-title">Lo que dicen</h2>
-          <div className="testi-card">
-            <div className="testi-quote">"</div>
-            <p className="testi-texto">{(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.texto}</p>
-            <div className="testi-nombre">— {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.nombre}</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',marginTop:'16px'}}>
+            <button
+              onClick={() => setTestiIdx(i => Math.max(0, i-1))}
+              disabled={testiIdx === 0}
+              style={{width:'32px',height:'32px',borderRadius:'50%',border:`0.5px solid var(--border)`,background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===0?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
+              ‹
+            </button>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
+                <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
+              ))}
+            </div>
+            <button
+              onClick={() => setTestiIdx(i => Math.min((terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1, i+1))}
+              disabled={testiIdx === (terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1}
+              style={{width:'32px',height:'32px',borderRadius:'50%',border:`0.5px solid var(--border)`,background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length-1?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
+              ›
+            </button>
           </div>
-          <div className="testi-dots">
-            {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
-              <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
-            ))}
-          </div>
-        </section>
-      </>)}
 
       <section className="section">
         <div className="cta-final">
