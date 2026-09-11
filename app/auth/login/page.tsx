@@ -63,7 +63,7 @@ export default function AuthPage() {
         trial_ends_at: trialEnds.toISOString(),
       })
     }
-    setEnviado(true)
+    router.push('/dashboard')
     setRegLoading(false)
   }
 
@@ -419,26 +419,8 @@ export default function AuthPage() {
 
                 {/* DORSO — REGISTER */}
                 <div className="flip-face back">
-                  {enviado ? (
-                    <div className="exito">
-                      <span className="exito-icon">📬</span>
-                      <div className="exito-title">Revisá tu email</div>
-                      <p className="exito-sub">
-                        Te enviamos un link a{' '}
-                        <span className="exito-email">{regEmail}</span>.
-                        Hacé click para activar tu cuenta.
-                      </p>
-                      <div className="exito-hint">
-                        ¿No lo encontrás? Revisá la carpeta de spam o no deseados.
-                      </div>
-                      <button className="exito-back"
-                        onClick={() => { setFlipped(false); setEnviado(false) }}>
-                        ← Volver al login
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="form-title">Empezá gratis</div>
+                <>
+                <div className="form-title">Empezá gratis</div>
                       <div className="form-trial">
                         <div className="form-trial-dot"/>
                         <span><strong>7 días gratis</strong> · Después ARS $9.900/mes · Cancelás cuando querés</span>
@@ -473,9 +455,9 @@ export default function AuthPage() {
                           Iniciá sesión
                         </button>
                       </div>
-                    </>
-                  )}
-                </div>
+                    
+                      </>
+                      </div>
 
               </div>
             </div>
