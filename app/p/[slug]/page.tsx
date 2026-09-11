@@ -1072,25 +1072,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </section>
       </>)}
 
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',marginTop:'16px'}}>
-            <button
-              onClick={() => setTestiIdx(i => Math.max(0, i-1))}
-              disabled={testiIdx === 0}
-              style={{width:'32px',height:'32px',borderRadius:'50%',border:`0.5px solid var(--border)`,background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===0?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
-              ‹
-            </button>
-            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-              {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
-                <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
-              ))}
-            </div>
-            <button
-              onClick={() => setTestiIdx(i => Math.min((terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1, i+1))}
-              disabled={testiIdx === (terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1}
-              style={{width:'32px',height:'32px',borderRadius:'50%',border:`0.5px solid var(--border)`,background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length-1?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
-              ›
-            </button>
-          </div>
+      
 
       <section className="section">
         <div className="cta-final">
