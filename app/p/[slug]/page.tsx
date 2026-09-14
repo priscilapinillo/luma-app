@@ -363,13 +363,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   function horariosDisponibles(fecha: string): string[] {
     if (!servicioSel) return []
     const diaSemana = new Date(fecha + 'T12:00:00').getDay()
-    const franjas = disponibilidad.filter(d => d.dia_semana === diaSemana && d.activo)
-    if (franjas.length === 0) return []
+    const disp = disponibilidad.find(d => d.dia_semana === diaSemana)
+    if (!disp?.activo) return []
+    const inicio = horaAMin(disp.hora_inicio)
+    const fin = horaAMin(disp.hora_fin)
     const dur = servicioSel.duracion_estimada || 60
     const horarios: string[] = []
-    for (const franja of franjas) {
-    const inicio = horaAMin(franja.hora_inicio)
-    const fin = horaAMin(franja.hora_fin)
     for (let min = inicio; min + dur <= fin; min += 30) {
       const h = Math.floor(min / 60), m = min % 60
       const horaStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
@@ -385,8 +384,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       const conflicto = conflictoSesion || conflictoBloqueo
       if (!conflicto) horarios.push(horaStr)
     }
-    }
-    return [...new Set(horarios)].sort()
+    return horarios
   }
 
   function diasDelMes() {

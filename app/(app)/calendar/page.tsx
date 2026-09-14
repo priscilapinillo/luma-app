@@ -10,7 +10,7 @@ import {
   utcTimestampToLocalTime,
 } from '@/lib/datetime'
 
-const HORAS = Array.from({length: 17}, (_, i) => i + 7)
+const HORAS = Array.from({length: 14}, (_, i) => i + 7)
 const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
 const DIAS_COMPLETO = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -809,60 +809,20 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
               Definí tus días y horarios laborales. Las horas fuera de tu disponibilidad aparecen sombreadas en el calendario.
             </p>
             {[1,2,3,4,5,6,0].map(dia => {
-              const franjasDia = dispLocal.filter(x => x.dia_semana === dia)
-              const estaActivo = franjasDia.some(x => x.activo)
-              const primeraFranja = franjasDia[0] || DISPONIBILIDAD_DEFAULT.find(x => x.dia_semana === dia)!
+              const d = dispLocal.find(x => x.dia_semana === dia) || DISPONIBILIDAD_DEFAULT.find(x => x.dia_semana === dia)!
               return (
-                <div key={dia} style={{marginBottom:'12px',borderBottom:'0.5px solid var(--border-light)',paddingBottom:'12px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
-                    <div className="disp-dia-nombre">{DIAS_COMPLETO[dia]}</div>
-                    <label className="disp-switch">
-                      <input type="checkbox" checked={estaActivo}
-                        onChange={e => {
-                          if (franjasDia.length === 0) {
-                            setDispLocal(prev => [...prev, {...primeraFranja, activo: e.target.checked}])
-                          } else {
-                            setDispLocal(prev => prev.map(x => x.dia_semana===dia ? {...x, activo: e.target.checked} : x))
-                          }
-                        }}/>
-                      <span className="disp-slider"/>
-                    </label>
-                  </div>
-                  {franjasDia.map((franja, fi) => (
-                    <div key={fi} className="disp-dia-row" style={{marginBottom:'6px'}}>
-                      <input type="time" className="disp-hora" value={franja.hora_inicio} disabled={!estaActivo}
-                        onChange={e => {
-                          const franjasDiaActual = dispLocal.filter(p => p.dia_semana===dia)
-                          const franjaTarget = franjasDiaActual[fi]
-                          setDispLocal(prev => prev.map(x => x === franjaTarget ? {...x, hora_inicio: e.target.value} : x))
-                        }}/>
-                      <span className="disp-sep">a</span>
-                      <input type="time" className="disp-hora" value={franja.hora_fin} disabled={!estaActivo}
-                        onChange={e => {
-                          const franjasDiaActual = dispLocal.filter(p => p.dia_semana===dia)
-                          const franjaTarget = franjasDiaActual[fi]
-                          setDispLocal(prev => prev.map(x => x === franjaTarget ? {...x, hora_fin: e.target.value} : x))
-                        }}/>
-                      {franjasDia.length > 1 && (
-                        <button onClick={() => setDispLocal(prev => {
-                          const franjasDiaActual = prev.filter(p => p.dia_semana===dia)
-                          const franjaABorrar = franjasDiaActual[fi]
-                          return prev.filter(x => x !== franjaABorrar)
-                        })}
-                          style={{width:'20px',height:'20px',borderRadius:'50%',border:'none',background:'#FEE2E2',color:'#EF4444',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',flexShrink:0}}>
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {estaActivo && (
-                    <button onClick={() => setDispLocal(prev => [...prev, {
-                      dia_semana: dia, hora_inicio: '09:00', hora_fin: '18:00', activo: true
-                    }])}
-                      style={{fontSize:'11px',color:'var(--accent)',background:'transparent',border:'0.5px solid var(--accent)',borderRadius:'8px',padding:'4px 10px',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
-                      + Agregar franja
-                    </button>
-                  )}
+                <div key={dia} className="disp-dia-row">
+                  <div className="disp-dia-nombre">{DIAS_COMPLETO[dia]}</div>
+                  <label className="disp-switch">
+                    <input type="checkbox" checked={d.activo}
+                      onChange={e => setDispLocal(prev => prev.map(x => x.dia_semana===dia ? {...x,activo:e.target.checked} : x))}/>
+                    <span className="disp-slider"/>
+                  </label>
+                  <input type="time" className="disp-hora" value={d.hora_inicio} disabled={!d.activo}
+                    onChange={e => setDispLocal(prev => prev.map(x => x.dia_semana===dia ? {...x,hora_inicio:e.target.value} : x))}/>
+                  <span className="disp-sep">a</span>
+                  <input type="time" className="disp-hora" value={d.hora_fin} disabled={!d.activo}
+                    onChange={e => setDispLocal(prev => prev.map(x => x.dia_semana===dia ? {...x,hora_fin:e.target.value} : x))}/>
                 </div>
               )
             })}
