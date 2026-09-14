@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen } from 'lucide-react'
+// import LumaChat from './LumaChat'
 import { createClient } from '@/lib/supabase'
 
 export default function Sidebar() {
@@ -70,6 +71,7 @@ export default function Sidebar() {
     { href: '/calendar', icon: CalendarDays, label: 'Agenda' },
     { href: '/patients', icon: Users, label: 'Pacientes' },
     { href: '/services', icon: Sparkles, label: 'Servicios' },
+    { href: '/courses', icon: BookOpen, label: 'Cursos' },
     { href: '/finances', icon: TrendingUp, label: 'Finanzas' },
     { href: '/settings', icon: Settings, label: 'Ajustes' },
   ]
@@ -308,6 +310,12 @@ html.dark .sb-mobile {
           ))}
         </nav>
 
+        {/* BOLA DE CRISTAL IA — TEMPORALMENTE OCULTA
+        <div style={{position:'fixed',bottom:'calc(140px + env(safe-area-inset-bottom))',right:'16px',zIndex:301}}>
+          <LumaChat isMobile={true}/>
+        </div>
+        */}
+
         {/* BOTÓN FLOTANTE */}
         <button className="sb-float-btn" onClick={() => setMenuMobile(!menuMobile)}>
   <Settings size={18}/>
@@ -365,6 +373,7 @@ html.dark .sb-mobile {
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
         .sb{
           width:200px;height:100vh;
+          position:fixed;top:0;left:0;
           background:linear-gradient(160deg,#F8F0FF 0%,#EEE8FF 40%,#F5E8FF 70%,#FFE8F5 100%);
           border-right:0.5px solid rgba(139,92,246,0.15);
           display:flex;flex-direction:column;
@@ -445,6 +454,7 @@ html.dark .sb-mobile {
         </Link>
 
         <div className="sb-spacer"/>
+        {/* <LumaChat isMobile={false}/> */}
 
         <button className="sb-theme" onClick={toggleTheme}>
           <span className="sb-theme-left">

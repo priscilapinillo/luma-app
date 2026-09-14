@@ -7,7 +7,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AppProvider>
       <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
         <Sidebar />
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)' }}>
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', marginLeft: '200px' }}>
           {children}
         </main>
       </div>
