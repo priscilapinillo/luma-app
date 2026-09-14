@@ -303,7 +303,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     const hoy = new Date()
     let d = new Date(hoy)
     let count = 0
-    while (proximos.length < 7 && count < 30) {
+    while (proximos.length < 14 && count < 60) {
       const disp = disponibilidad.find(x => x.dia_semana === d.getDay())
       if (disp?.activo) proximos.push(new Date(d))
       d.setDate(d.getDate() + 1)
@@ -880,7 +880,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                     const pas = dia < new Date(new Date().setHours(0,0,0,0))
                     return (
                       <div key={i} className={`cal-dia${f===fechaSel?' sel-d':disp&&!pas?' disp':pas?' pasado':''}`}
-                        onClick={() => { if(!disp||pas) return; setFechaSel(f); setHoraSel(''); setMostrarCalFull(false) }}>
+                        onClick={() => { if(!disp||pas) return;setFechaSel(f); setHoraSel(''); setMostrarCalFull(false);
+                          const idx = diasSel.findIndex(d => formatDate(d) === f);
+                          if (idx >= 0) setDiaActivoIdx(idx);}}>
                         {dia.getDate()}
                       </div>
                     )
