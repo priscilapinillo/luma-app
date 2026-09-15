@@ -30,7 +30,7 @@ type Bloqueo = {
 }
 type Disponibilidad = {
   id?: string; dia_semana: number
-  hora_inicio: string; hora_fin: string; activo: boolean
+  hora_inicio: string; hora_fin: string; activo: boolean; esNueva?: boolean
 }
 type Vista = 'semana' | 'mes'
 
@@ -145,10 +145,10 @@ function toast(msg: string) {
       }
 
       if (avail && avail.length > 0) {
-        const dispCompleta = DISPONIBILIDAD_DEFAULT.map(def => {
-          const guardada = avail.find(a => a.dia_semana === def.dia_semana)
-          return guardada ? { ...guardada } : def
-        })
+        // Verificar que todos los días tengan al menos una franja
+        const diasConFranja = new Set(avail.map((a: any) => a.dia_semana))
+        const franjasDefault = DISPONIBILIDAD_DEFAULT.filter(def => !diasConFranja.has(def.dia_semana))
+        const dispCompleta = [...avail, ...franjasDefault]
         setDisponibilidad(dispCompleta)
         setDispLocal(dispCompleta)
       } else {
@@ -299,8 +299,9 @@ function toast(msg: string) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       await supabase.from('availability').delete().eq('user_id', user.id)
+      const franjasAGuardar = dispLocal.filter(d => d.hora_inicio && d.hora_fin && (d.id || d.esNueva))
       await supabase.from('availability').insert(
-        dispLocal.map(d => ({
+        franjasAGuardar.map(d => ({
           user_id: user.id, dia_semana: d.dia_semana,
           hora_inicio: d.hora_inicio, hora_fin: d.hora_fin, activo: d.activo,
         }))
@@ -857,7 +858,7 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
                   ))}
                   {estaActivo && (
                     <button onClick={() => setDispLocal(prev => [...prev, {
-                      dia_semana: dia, hora_inicio: '09:00', hora_fin: '18:00', activo: true
+                      dia_semana: dia, hora_inicio: '09:00', hora_fin: '18:00', activo: true, esNueva: true
                     }])}
                       style={{fontSize:'11px',color:'var(--accent)',background:'transparent',border:'0.5px solid var(--accent)',borderRadius:'8px',padding:'4px 10px',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
                       + Agregar franja
