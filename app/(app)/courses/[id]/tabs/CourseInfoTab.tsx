@@ -92,7 +92,7 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
         .btn-add{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--accent);background:transparent;border:0.5px solid var(--accent);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;margin-top:4px}
         .btn-remove{width:24px;height:24px;border-radius:6px;border:none;background:#FEE2E2;color:#EF4444;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .precio-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        .bottom-bar{position:fixed;bottom:0;left:200px;right:0;background:var(--bg-card);border-top:0.5px solid var(--border-light);padding:12px 20px;display:flex;gap:10px;justify-content:flex-end;align-items:center;z-index:100}
+        .bottom-bar{position:fixed;bottom:0;left:200px;right:0;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:var(--bg-card);border-top:0.5px solid var(--border-light);padding:12px 20px;display:flex;gap:10px;justify-content:flex-end;align-items:center;z-index:100}
       `}</style>
 
       <div className="section-title">Información básica</div>
