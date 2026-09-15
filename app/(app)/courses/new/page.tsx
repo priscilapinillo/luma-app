@@ -172,7 +172,7 @@ export default function NewCoursePage() {
             onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
         </div>
         <div className="field">
-          <label>Precio original (OFERTA)</label>
+        <label>Precio con oferta (el tachado que se muestra arriba)</label>
           <input type="number" min="0" value={form.precio_original} placeholder="Para mostrar tachado"
             onChange={e => setForm({...form, precio_original: e.target.value})}/>
         </div>

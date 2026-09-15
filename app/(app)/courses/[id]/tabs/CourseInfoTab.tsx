@@ -17,7 +17,8 @@ type Curso = {
 }
 
 export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
-  const [form, setForm] = useState({ ...curso,
+    console.log('CURSO ESTADO:', curso.estado)
+    const [form, setForm] = useState({ ...curso,
     para_quien: curso.para_quien || [''],
     que_aprenderas: curso.que_aprenderas || [''],
     requisitos: curso.requisitos || [''],
@@ -79,7 +80,7 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
   }
 
   return (
-    <div style={{padding:'20px',maxWidth:'720px',paddingBottom:'80px'}}>
+    <div style={{padding:'20px',maxWidth:'720px',paddingBottom:'160px'}}>
       <style>{`
         .field{display:flex;flex-direction:column;gap:4px;margin-bottom:16px}
         .field label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
@@ -92,7 +93,8 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
         .btn-add{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--accent);background:transparent;border:0.5px solid var(--accent);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;margin-top:4px}
         .btn-remove{width:24px;height:24px;border-radius:6px;border:none;background:#FEE2E2;color:#EF4444;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .precio-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        .bottom-bar{position:fixed;bottom:0;left:200px;right:0;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:var(--bg-card);border-top:0.5px solid var(--border-light);padding:12px 20px;display:flex;gap:10px;justify-content:flex-end;align-items:center;z-index:100}
+       .bottom-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:0;right:0;background:transparent;border-top:none;border-bottom:none;padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;align-items:center;z-index:201;flex-wrap:wrap}
+@media(min-width:768px){.bottom-bar{left:200px;bottom:0;border-bottom:none}}
       `}</style>
 
       <div className="section-title">Información básica</div>
@@ -134,12 +136,12 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
       <div className="section-title">Precio y modalidad</div>
       <div className="precio-row">
         <div className="field">
-          <label>Precio actual *</label>
+        <label>Precio base (sin puntos ni comas, ej: 15000) *</label>
           <input type="number" min="0" value={form.precio}
             onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
         </div>
         <div className="field">
-          <label>Precio original (OFERTA)</label>
+        <label>Precio con oferta (el tachado que se muestra arriba)</label>
           <input type="number" min="0" value={form.precio_original || ''}
             onChange={e => setForm({...form, precio_original: e.target.value ? Number(e.target.value) : null})}/>
         </div>

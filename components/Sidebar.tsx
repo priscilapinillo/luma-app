@@ -372,7 +372,9 @@ html.dark .sb-mobile {
           flex-shrink:0;overflow:hidden;
           transition:all 0.2s;
           font-family:'Inter',sans-serif;
+          position:fixed;top:0;left:0;z-index:200;
         }
+        @media(max-width:767px){.sb{display:none !important;}}
         html.dark .sb{
           background:linear-gradient(160deg,#1A1628 0%,#1E1A2E 40%,#211828 70%,#1E1520 100%);
           border-right-color:rgba(100,80,180,0.2);
@@ -411,6 +413,16 @@ html.dark .sb-mobile {
         .sb-user-plan{font-size:9px;color:var(--text-muted);margin-top:1px}
         .sb-logout{width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0;cursor:pointer;border-radius:5px;border:none;background:transparent;padding:0}
         .sb-logout:hover{color:#EF4444}
+        @media(max-width:767px){
+       .sb{ display:none !important; }
+}
+       @media(min-width:768px){
+  :root { --sidebar-width: 200px; }
+}
+@media(max-width:767px){
+  .sb { display: none; }
+  :root { --sidebar-width: 0px; }
+}
       `}</style>
 
       <aside className="sb">
