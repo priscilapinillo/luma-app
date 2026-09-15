@@ -30,6 +30,9 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
     descripcion: '', notas: '',
   })
   const [guardando, setGuardando] = useState(false)
+  const [subiendoAdjunto, setSubiendoAdjunto] = useState(false)
+  const [adjuntosNuevos, setAdjuntosNuevos] = useState<{nombre: string; url: string; tipo: string}[]>([])
+const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre: string; url: string; tipo: string}[]>([])
 
   useEffect(() => { cargarModulos() }, [cursoId])
 
@@ -74,6 +77,20 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
     await cargarModulos()
   }
 
+
+  async function subirAdjunto(file: File) {
+    setSubiendoAdjunto(true)
+    try {
+      const supabase = createClient()
+      const ext = file.name.split('.').pop()
+      const nombre = `${Date.now()}-${file.name}`
+      await supabase.storage.from('lesson-attachments').upload(nombre, file, { upsert: true })
+      const { data } = supabase.storage.from('lesson-attachments').getPublicUrl(nombre)
+      setAdjuntosNuevos(prev => [...prev, { nombre: file.name, url: data.publicUrl, tipo: ext || 'pdf' }])
+    } catch(err) { console.error(err) }
+    finally { setSubiendoAdjunto(false) }
+  } 
+
   async function guardarLeccion(moduleId: string) {
     if (!formLeccion.titulo) return
     setGuardando(true)
@@ -97,7 +114,17 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
       console.log('INSERT ERROR:', insertError)
       }
       await cargarModulos()
+      // Guardar adjuntos
+      if (adjuntosNuevos.length > 0) {
+        const leccionId = editandoLeccion?.id || (await supabase.from('lessons').select('id').eq('module_id', moduleId).order('created_at', { ascending: false }).limit(1).single()).data?.id
+        if (leccionId) {
+          await supabase.from('lesson_attachments').insert(
+            adjuntosNuevos.map(a => ({ lesson_id: leccionId, nombre: a.nombre, url: a.url, tipo: a.tipo }))
+          )
+        }
+      }
       setModalLeccion(null)
+      setAdjuntosNuevos([])
       setFormLeccion({ titulo: '', tipo: 'video', contenido_url: '', contenido_texto: '', duracion_min: '', es_preview: false, descripcion: '', notas: '' })
       setEditandoLeccion(null)
     } catch (err) { console.error(err) }
@@ -178,7 +205,15 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
                   {l.es_preview && <span style={{fontSize:'9px',background:'#DCFCE7',color:'#166534',padding:'2px 6px',borderRadius:'10px',fontWeight:700}}>PREVIEW</span>}
                   {l.duracion_min && <span style={{fontSize:'10px',color:'var(--text-muted)'}}>{l.duracion_min}min</span>}
                   <div className="mod-actions">
-                    <div className="icon-btn" onClick={() => { setEditandoLeccion(l); setFormLeccion({ titulo: l.titulo, tipo: l.tipo, contenido_url: l.contenido_url || '', contenido_texto: l.contenido_texto || '', duracion_min: l.duracion_min || '', es_preview: l.es_preview, descripcion: l.descripcion || '', notas: l.notas || '' }); setModalLeccion(m.id) }}>
+                    <div className="icon-btn" onClick={() => { setEditandoLeccion(l)
+setFormLeccion({ titulo: l.titulo, tipo: l.tipo, contenido_url: l.contenido_url || '', contenido_texto: l.contenido_texto || '', duracion_min: l.duracion_min || '', es_preview: l.es_preview, descripcion: l.descripcion || '', notas: l.notas || '' })
+setAdjuntosNuevos([])
+setAdjuntosExistentes([])
+setModalLeccion(m.id)
+const supabase = createClient()
+supabase.from('lesson_attachments').select('*').eq('lesson_id', l.id).then(({ data }) => {
+  setAdjuntosExistentes(data || [])
+})}}>
                       <Edit2 size={10} color="var(--text-muted)"/>
                     </div>
                     <div className="icon-btn" onClick={() => eliminarLeccion(l.id)}>
@@ -188,7 +223,11 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
                 </div>
               ))}
               <div style={{padding:'10px 16px',borderTop:'0.5px solid var(--border-light)'}}>
-                <button onClick={() => { setEditandoLeccion(null); setFormLeccion({ titulo: '', tipo: 'video', contenido_url: '', contenido_texto: '', duracion_min: '', es_preview: false, descripcion: '', notas: '' }); setModalLeccion(m.id) }}
+                <button onClick={() => { setEditandoLeccion(null)
+setFormLeccion({ titulo: '', tipo: 'video', contenido_url: '', contenido_texto: '', duracion_min: '', es_preview: false, descripcion: '', notas: '' })
+setAdjuntosNuevos([])
+setAdjuntosExistentes([])
+setModalLeccion(m.id) }}
                   style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'11px',color:'var(--accent)',background:'transparent',border:'0.5px solid var(--accent)',borderRadius:'8px',padding:'5px 10px',cursor:'pointer',fontFamily:'inherit'}}>
                   <Plus size={10}/>Agregar lección
                 </button>
@@ -295,6 +334,35 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
                 <div style={{fontSize:'12px',fontWeight:600,color:'var(--text-primary)'}}>Lección de preview</div>
                 <div style={{fontSize:'10px',color:'var(--text-muted)'}}>Las alumnas pueden ver esta lección sin comprar el curso</div>
               </div>
+            </div>
+            <div className="field">
+              <label>Archivos descargables</label>
+              <div style={{border:'0.5px dashed var(--border)',borderRadius:'10px',padding:'14px',textAlign:'center',background:'var(--bg-input)',cursor:'pointer'}}
+                onClick={() => document.getElementById('adj-upload')?.click()}>
+                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>
+                  {subiendoAdjunto ? 'Subiendo...' : '📎 Subir PDF, audio u otro archivo'}
+                </div>
+                <input id="adj-upload" type="file" accept=".pdf,.mp3,.mp4,.doc,.docx,.zip" style={{display:'none'}}
+                  onChange={e => e.target.files?.[0] && subirAdjunto(e.target.files[0])}/>
+              </div>
+              {adjuntosExistentes.map((a, i) => (
+                <div key={i} style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'6px',padding:'6px 10px',background:'var(--bg-input)',borderRadius:'8px',border:'0.5px solid var(--border)'}}>
+                  <span style={{fontSize:'12px',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>📎 {a.nombre}</span>
+                  <a href={a.url} target="_blank" rel="noopener noreferrer" style={{fontSize:'10px',color:'var(--accent)',textDecoration:'none'}}>Ver</a>
+                  <button onClick={async () => {
+                    const supabase = createClient()
+                    await supabase.from('lesson_attachments').delete().eq('id', a.id)
+                    setAdjuntosExistentes(prev => prev.filter((_,j) => j !== i))
+                  }} style={{background:'transparent',border:'none',cursor:'pointer',color:'#EF4444',fontSize:'16px',flexShrink:0}}>×</button>
+                </div>
+              ))}
+              {adjuntosNuevos.map((a, i) => (
+                <div key={i} style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'6px',padding:'6px 10px',background:'var(--bg-input)',borderRadius:'8px',border:'0.5px solid var(--border)'}}>
+                  <span style={{fontSize:'12px',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nombre}</span>
+                  <button onClick={() => setAdjuntosNuevos(prev => prev.filter((_,j) => j !== i))}
+                    style={{background:'transparent',border:'none',cursor:'pointer',color:'#EF4444',fontSize:'16px',flexShrink:0}}>×</button>
+                </div>
+              ))}
             </div>
             <button onClick={() => guardarLeccion(modalLeccion)} disabled={guardando}
               style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
