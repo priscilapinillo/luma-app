@@ -34,7 +34,7 @@ type Modulo = {
 }
 
 type Testimonio = {
-  id: string; titulo?: string; texto: string; avatar_url?: string; orden: number
+  id: string; nombre?: string; texto: string; avatar_url?: string; orden: number
 }
 
 const TEMPLATES = {
@@ -108,7 +108,6 @@ const ESTRELLAS_CTA = [
   { top: '18%', left: '85%' }, { top: '75%', left: '12%' },
 ]
 
-// decoración esotérica del hero — puramente visual, no afecta datos ni lógica
 const ZODIACOS_HERO = [
   { simbolo: '♈', top: '6%', left: '4%', size: '20px', rot: '-8deg' },
   { simbolo: '♌', top: '10%', left: '92%', size: '17px', rot: '10deg' },
@@ -152,6 +151,7 @@ export default function CursoPublicoPage() {
   const [moduloAbierto, setModuloAbierto] = useState<string | null>(null)
   const [testiIdx, setTestiIdx] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [debugInfo, setDebugInfo] = useState('')
 
   const touchStartX = useRef(0)
   const touchEndX = useRef(0)
@@ -161,19 +161,25 @@ export default function CursoPublicoPage() {
   async function cargarDatos() {
     try {
       const supabase = createClient()
-      const { data: perfil } = await supabase
+      const { data: perfil, error: errorPerfil } = await supabase
         .from('therapist_profiles').select('*')
         .eq('slug', slug).maybeSingle()
-      if (!perfil) { setLoading(false); return }
+      if (!perfil) {
+        setDebugInfo(`No encontró la terapeuta con slug "${slug}". Error: ${errorPerfil ? JSON.stringify(errorPerfil) : 'ninguno (simplemente no vino nada)'}`)
+        setLoading(false); return
+      }
       setTerapeuta(perfil)
 
-      const { data: cursoData } = await supabase
+      const { data: cursoData, error: errorCurso } = await supabase
         .from('courses').select('*')
         .eq('slug', slugCurso)
         .eq('user_id', perfil.user_id)
         .eq('estado', 'publicado')
         .maybeSingle()
-      if (!cursoData) { setLoading(false); return }
+      if (!cursoData) {
+        setDebugInfo(`Encontró a la terapeuta (user_id: ${perfil.user_id}) pero no el curso con slug "${slugCurso}". Error: ${errorCurso ? JSON.stringify(errorCurso) : 'ninguno (simplemente no vino nada)'}`)
+        setLoading(false); return
+      }
       setCurso(cursoData)
 
       const { data: mods } = await supabase
@@ -195,8 +201,10 @@ export default function CursoPublicoPage() {
         .from('course_testimonials').select('*')
         .eq('course_id', cursoData.id).order('orden')
       if (testis) setTestimonios(testis)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      console.error(e)
+      setDebugInfo(`Error inesperado: ${e?.message || JSON.stringify(e)}`)
+    } finally { setLoading(false) }
   }
 
   const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
@@ -231,8 +239,9 @@ export default function CursoPublicoPage() {
   )
 
   if (!curso || !terapeuta) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280',fontFamily:'sans-serif'}}>
-      Curso no encontrado
+    <div style={{padding:'40px',fontSize:'13px',color:'#374151',fontFamily:'sans-serif',lineHeight:1.6,maxWidth:'700px',margin:'0 auto'}}>
+      <div style={{fontWeight:700,fontSize:'16px',marginBottom:'12px'}}>Curso no encontrado</div>
+      <div style={{background:'#FEF3C7',padding:'16px',borderRadius:'8px',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{debugInfo || 'Sin información adicional'}</div>
     </div>
   )
 
@@ -461,7 +470,7 @@ export default function CursoPublicoPage() {
         </div>
       )}
 
-      {/* TESTIMONIOS — plano, entre "qué vas a aprender" y "para quién es" para no amontonar texto */}
+      {/* TESTIMONIOS — plano */}
       {testimonios.length > 0 && (
         <div className="seccion testi-sec">
           <h2 className="seccion-titulo">Testimonios</h2>
@@ -469,7 +478,7 @@ export default function CursoPublicoPage() {
             <div className="testi-card">
               <div className="testi-quote">"</div>
               <p className="testi-texto">{testimonios[testiIdx].texto}</p>
-              <div className="testi-nombre">— {testimonios[testiIdx].titulo || 'Alumna'}</div>
+              <div className="testi-nombre">— {testimonios[testiIdx].nombre || 'Alumna'}</div>
             </div>
             {testimonios.length > 1 && (
               <div className="testi-nav">
