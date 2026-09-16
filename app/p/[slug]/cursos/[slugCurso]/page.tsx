@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Check, Shield, Play, Sparkles, Star, Moon } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Check, Shield, Play, Sparkles, Star, Moon, Clock, BarChart3, Globe, BookOpen, Infinity as InfinityIcon, FileText, Music, StickyNote, Tag, MessageCircle } from 'lucide-react'
 
 type Terapeuta = {
   user_id: string; nombre_profesional: string; especialidad: string
@@ -112,19 +112,31 @@ const ESTRELLAS_CTA = [
 const ZODIACOS_HERO = [
   { simbolo: '♈', top: '6%', left: '4%', size: '20px', rot: '-8deg' },
   { simbolo: '♌', top: '10%', left: '92%', size: '17px', rot: '10deg' },
-  { simbolo: '♎', top: '88%', left: '8%', size: '18px', rot: '6deg' },
+  { simbolo: '♎', top: '66%', left: '6%', size: '18px', rot: '6deg' },
   { simbolo: '♓', top: '4%', left: '62%', size: '15px', rot: '-4deg' },
-  { simbolo: '♊', top: '92%', left: '85%', size: '16px', rot: '12deg' },
+  { simbolo: '♊', top: '70%', left: '93%', size: '16px', rot: '12deg' },
+  { simbolo: '♑', top: '24%', left: '3%', size: '14px', rot: '9deg' },
+  { simbolo: '♐', top: '30%', left: '95%', size: '15px', rot: '-11deg' },
+  { simbolo: '♋', top: '46%', left: '4%', size: '13px', rot: '5deg' },
 ]
 const ZODIACOS_CTA = [
   { simbolo: '♍', top: '8%', left: '6%', size: '16px', rot: '-6deg' },
   { simbolo: '♏', top: '85%', left: '90%', size: '18px', rot: '8deg' },
+  { simbolo: '♒', top: '40%', left: '4%', size: '14px', rot: '7deg' },
+  { simbolo: '♉', top: '55%', left: '93%', size: '15px', rot: '-9deg' },
 ]
 const DESTELLOS_HERO = [
   { top: '20%', left: '8%', size: 12, delay: '0s' },
-  { top: '80%', left: '18%', size: 9, delay: '0.9s' },
+  { top: '58%', left: '15%', size: 9, delay: '0.9s' },
   { top: '10%', left: '82%', size: 10, delay: '1.6s' },
-  { top: '68%', left: '92%', size: 8, delay: '0.4s' },
+  { top: '60%', left: '90%', size: 8, delay: '0.4s' },
+  { top: '48%', left: '3%', size: 8, delay: '2.1s' },
+  { top: '35%', left: '96%', size: 7, delay: '1.2s' },
+]
+const DESTELLOS_CTA = [
+  { top: '15%', left: '18%', size: 9, delay: '0.3s' },
+  { top: '70%', left: '80%', size: 8, delay: '1.4s' },
+  { top: '92%', left: '30%', size: 7, delay: '0.8s' },
 ]
 
 export default function CursoPublicoPage() {
@@ -280,11 +292,11 @@ export default function CursoPublicoPage() {
         .hero-foto{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:27px;display:block}
         .hero-sticker{position:absolute;top:-14px;right:-10px;z-index:3;width:54px;height:54px;border-radius:50%;background:var(--card-bg);border:2px dashed var(--primary);display:flex;align-items:center;justify-content:center;transform:rotate(-12deg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.5:0.18});backdrop-filter:blur(6px)}
         .hero-sub{font-size:15px;color:var(--text-dim);line-height:1.5;max-width:420px}
-        .hero-btn{padding:15px 34px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
+        .hero-btn{display:inline-flex;align-items:center;gap:8px;padding:15px 34px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
         .wave{position:relative;width:100%;line-height:0;z-index:2}
 
-        .chips-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 20px 8px;max-width:640px;margin:0 auto}
-        .chip{padding:9px 16px;border-radius:50px;background:linear-gradient(135deg,var(--primary-dim),var(--accent-dim));color:var(--cream);font-size:12px;font-weight:700;border:1px solid var(--border);box-shadow:0 6px 16px rgba(0,0,0,${t.dark?0.3:0.06})}
+        .chips-row{position:relative;z-index:2;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:640px;margin:40px auto 0}
+        .chip{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:50px;background:linear-gradient(135deg,var(--primary-dim),var(--accent-dim));color:var(--cream);font-size:12px;font-weight:700;border:1px solid var(--border);box-shadow:0 6px 16px rgba(0,0,0,${t.dark?0.3:0.06})}
 
         .seccion{padding:52px 20px;position:relative}
         .seccion-titulo{font-family:var(--font-title);font-weight:800;font-size:clamp(22px,4.5vw,32px);color:var(--cream);text-align:center;margin-bottom:28px}
@@ -345,10 +357,10 @@ export default function CursoPublicoPage() {
         .cta-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(24px,5vw,36px);margin-bottom:20px}
         .cta-beneficios{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:24px}
         .cta-beneficio{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,0.85)}
-        .oferta-badge{display:inline-block;background:#FB923C;color:#1A1A2E;font-size:11px;font-weight:800;padding:5px 12px;border-radius:50px;margin-bottom:10px;border:1.5px dashed rgba(26,26,46,0.35);transform:rotate(-4deg);box-shadow:0 6px 14px rgba(0,0,0,0.25)}
+        .oferta-badge{display:inline-flex;align-items:center;gap:6px;background:#FB923C;color:#1A1A2E;font-size:11px;font-weight:800;padding:5px 12px;border-radius:50px;margin-bottom:10px;border:1.5px dashed rgba(26,26,46,0.35);transform:rotate(-4deg);box-shadow:0 6px 14px rgba(0,0,0,0.25)}
         .cta-precio-original{font-size:15px;color:rgba(255,255,255,0.4);text-decoration:line-through}
         .cta-precio{font-family:var(--font-title);font-weight:900;font-size:44px;color:var(--primary-light);margin-bottom:20px;text-shadow:0 0 24px var(--primary-dim)}
-        .btn-comprar{width:100%;padding:17px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
+        .btn-comprar{width:100%;padding:17px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim);display:flex;align-items:center;justify-content:center;gap:8px}
         .btn-wsp{width:100%;padding:17px;background:#25D366;color:white;border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
         .garantia-card{margin-top:20px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:18px;padding:18px;text-align:center}
 
@@ -386,7 +398,7 @@ export default function CursoPublicoPage() {
         <svg className="hero-shape" style={{top:'14%',right:'8%',width:'30px'}} viewBox="0 0 24 24" fill="none">
           <path d="M20 12.5A8.5 8.5 0 1111.5 4 6.8 6.8 0 0020 12.5z" fill="var(--accent-light)"/>
         </svg>
-        <Moon size={22} className="hero-shape" style={{top:'80%',right:'12%',color:'var(--primary-light)',opacity:t.dark?0.5:0.3}}/>
+        <Moon size={22} className="hero-shape" style={{top:'55%',right:'10%',color:'var(--primary-light)',opacity:t.dark?0.5:0.3}}/>
 
         <div className="hero-grid">
           <h1 className="hero-titulo ga-titulo">{curso.titulo}</h1>
@@ -406,22 +418,18 @@ export default function CursoPublicoPage() {
           <p className="hero-sub ga-subtitulo">{curso.descripcion_corta}</p>
 
           <div className="ga-boton">
-            <button className="hero-btn" onClick={irACheckout}>✦ Comprar ahora — ${curso.precio.toLocaleString()}</button>
+            <button className="hero-btn" onClick={irACheckout}><Sparkles size={16}/> Comprar ahora</button>
           </div>
         </div>
 
-        <svg className="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" style={{height:'46px',marginTop:'40px'}}>
-          <path d="M0,32 C240,60 480,0 720,20 C960,40 1200,10 1440,30 L1440,60 L0,60 Z" fill="var(--bg)"/>
-        </svg>
-      </div>
-
-      {/* METADATA — plano */}
-      <div className="chips-row">
-        {curso.duracion_estimada_horas && <div className="chip">⏱ {curso.duracion_estimada_horas}hs de curso</div>}
-        {curso.nivel && <div className="chip">📊 Nivel {curso.nivel}</div>}
-        {curso.idioma && <div className="chip">🌐 {curso.idioma}</div>}
-        {modulos.length > 0 && <div className="chip">📚 {modulos.length} módulos</div>}
-        {curso.modalidad === 'unico' && <div className="chip">✦ Acceso de por vida</div>}
+        {/* METADATA — dentro del hero, sobre el fondo del template */}
+        <div className="chips-row">
+          {curso.duracion_estimada_horas && <div className="chip"><Clock size={13}/> {curso.duracion_estimada_horas}hs de curso</div>}
+          {curso.nivel && <div className="chip"><BarChart3 size={13}/> Nivel {curso.nivel}</div>}
+          {curso.idioma && <div className="chip"><Globe size={13}/> {curso.idioma}</div>}
+          {modulos.length > 0 && <div className="chip"><BookOpen size={13}/> {modulos.length} módulos</div>}
+          {curso.modalidad === 'unico' && <div className="chip"><InfinityIcon size={13}/> Acceso de por vida</div>}
+        </div>
       </div>
 
       {/* SOBRE ESTE CURSO — plano */}
@@ -442,7 +450,7 @@ export default function CursoPublicoPage() {
           <div className="bullets-grid">
             {curso.que_aprenderas.filter(x => x.trim()).map((item, i) => (
               <div key={i} className="bullet-card">
-                <div className="bullet-icon">✦</div>
+                <div className="bullet-icon"><Sparkles size={16}/></div>
                 <div className="bullet-texto">{item}</div>
               </div>
             ))}
@@ -453,26 +461,7 @@ export default function CursoPublicoPage() {
         </div>
       )}
 
-      {/* PARA QUIÉN ES — plano */}
-      {curso.para_quien?.filter(x => x.trim()).length > 0 && (
-        <div className="seccion">
-          <h2 className="seccion-titulo">¿Para quién es este curso?</h2>
-          <div className="bullets-grid">
-            {curso.para_quien.filter(x => x.trim()).map((item, i) => (
-              <div key={i} className="bullet-card">
-                <div className="bullet-icon"><Check size={16}/></div>
-                <div className="bullet-texto">{item}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {testimonios.length > 0 && (curso.para_quien?.filter(x => x.trim()).length > 0) && (
-        <div className="orn-divider"><span className="linea"/><Sparkles size={16}/><span className="linea"/></div>
-      )}
-
-      {/* TESTIMONIOS — plano */}
+      {/* TESTIMONIOS — plano, entre "qué vas a aprender" y "para quién es" para no amontonar texto */}
       {testimonios.length > 0 && (
         <div className="seccion testi-sec">
           <h2 className="seccion-titulo">Testimonios</h2>
@@ -497,7 +486,26 @@ export default function CursoPublicoPage() {
         </div>
       )}
 
-      {modulos.length > 0 && testimonios.length > 0 && (
+      {testimonios.length > 0 && (curso.para_quien?.filter(x => x.trim()).length > 0) && (
+        <div className="orn-divider"><span className="linea"/><Sparkles size={16}/><span className="linea"/></div>
+      )}
+
+      {/* PARA QUIÉN ES — plano */}
+      {curso.para_quien?.filter(x => x.trim()).length > 0 && (
+        <div className="seccion">
+          <h2 className="seccion-titulo">¿Para quién es este curso?</h2>
+          <div className="bullets-grid">
+            {curso.para_quien.filter(x => x.trim()).map((item, i) => (
+              <div key={i} className="bullet-card">
+                <div className="bullet-icon"><Check size={16}/></div>
+                <div className="bullet-texto">{item}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {modulos.length > 0 && (curso.para_quien?.filter(x => x.trim()).length > 0) && (
         <div className="orn-divider"><span className="linea"/><Sparkles size={16}/><span className="linea"/></div>
       )}
 
@@ -517,7 +525,7 @@ export default function CursoPublicoPage() {
                 {moduloAbierto === m.id && m.lecciones?.map(l => (
                   <div key={l.id} className="leccion-item">
                     <div className="tipo-icon">
-                      {l.tipo === 'video' ? <Play size={11} color="var(--primary)"/> : l.tipo === 'pdf' ? '📄' : l.tipo === 'audio' ? '🎵' : '📝'}
+                      {l.tipo === 'video' ? <Play size={11} color="var(--primary)"/> : l.tipo === 'pdf' ? <FileText size={11} color="var(--primary)"/> : l.tipo === 'audio' ? <Music size={11} color="var(--primary)"/> : <StickyNote size={11} color="var(--primary)"/>}
                     </div>
                     <div style={{flex:1,fontSize:'13px',color:'var(--text)'}}>{l.titulo}</div>
                     {l.es_preview && <span className="preview-badge">GRATIS</span>}
@@ -572,6 +580,9 @@ export default function CursoPublicoPage() {
         {ZODIACOS_CTA.map((z, i) => (
           <div key={i} className="zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot,color:'var(--primary-light)'} as React.CSSProperties}>{z.simbolo}</div>
         ))}
+        {DESTELLOS_CTA.map((d, i) => (
+          <Sparkles key={i} size={d.size} className="destello" style={{top:d.top,left:d.left,animationDelay:d.delay}}/>
+        ))}
         <div className="cta-inner">
           {curso.imagen_url && (
             <div className="cta-foto-frame"><img src={curso.imagen_url} alt={curso.titulo} className="cta-foto"/></div>
@@ -587,7 +598,7 @@ export default function CursoPublicoPage() {
             {curso.dias_garantia && <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> {curso.dias_garantia} días de garantía</div>}
           </div>
 
-          {esOferta && <div className="oferta-badge">🏷️ OFERTA</div>}
+          {esOferta && <div className="oferta-badge"><Tag size={12}/> OFERTA</div>}
           {curso.precio_original && esOferta && <div className="cta-precio-original">${curso.precio_original.toLocaleString()}</div>}
           <div className="cta-precio">${curso.precio.toLocaleString()}</div>
 
@@ -595,10 +606,10 @@ export default function CursoPublicoPage() {
             <a className="btn-wsp"
               href={`https://wa.me/${terapeuta.whatsapp?.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero inscribirme al curso ${curso.titulo}, ¿cómo pago?`)}`}
               target="_blank" rel="noopener noreferrer">
-              💬 Quiero inscribirme
+              <MessageCircle size={18}/> Quiero inscribirme
             </a>
           ) : (
-            <button className="btn-comprar" onClick={irACheckout}>✦ Comprar curso</button>
+            <button className="btn-comprar" onClick={irACheckout}><Sparkles size={16}/> Comprar curso</button>
           )}
 
           {curso.dias_garantia && (
