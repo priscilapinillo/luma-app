@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Check, Shield, Play } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Check, Shield, Play, Sparkles, Star, Moon } from 'lucide-react'
 
 type Terapeuta = {
   user_id: string; nombre_profesional: string; especialidad: string
@@ -106,6 +106,25 @@ const ESTRELLAS_HERO = [
 ]
 const ESTRELLAS_CTA = [
   { top: '18%', left: '85%' }, { top: '75%', left: '12%' },
+]
+
+// decoración esotérica del hero — puramente visual, no afecta datos ni lógica
+const ZODIACOS_HERO = [
+  { simbolo: '♈', top: '6%', left: '4%', size: '20px', rot: '-8deg' },
+  { simbolo: '♌', top: '10%', left: '92%', size: '17px', rot: '10deg' },
+  { simbolo: '♎', top: '88%', left: '8%', size: '18px', rot: '6deg' },
+  { simbolo: '♓', top: '4%', left: '62%', size: '15px', rot: '-4deg' },
+  { simbolo: '♊', top: '92%', left: '85%', size: '16px', rot: '12deg' },
+]
+const ZODIACOS_CTA = [
+  { simbolo: '♍', top: '8%', left: '6%', size: '16px', rot: '-6deg' },
+  { simbolo: '♏', top: '85%', left: '90%', size: '18px', rot: '8deg' },
+]
+const DESTELLOS_HERO = [
+  { top: '20%', left: '8%', size: 12, delay: '0s' },
+  { top: '80%', left: '18%', size: 9, delay: '0.9s' },
+  { top: '10%', left: '82%', size: 10, delay: '1.6s' },
+  { top: '68%', left: '92%', size: 8, delay: '0.4s' },
 ]
 
 export default function CursoPublicoPage() {
@@ -226,13 +245,24 @@ export default function CursoPublicoPage() {
           background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
         .estrella-fija{position:absolute;width:2px;height:2px;background:var(--primary-light);border-radius:50%;opacity:.7;z-index:0;animation:titilar 3.5s ease-in-out infinite}
         @keyframes titilar{0%,100%{opacity:.15}50%{opacity:.8}}
+        .zodiaco{position:absolute;z-index:1;color:var(--primary-light);opacity:.28;font-family:serif;pointer-events:none;user-select:none;text-shadow:0 0 10px var(--primary-dim);animation:zodiflotar 7s ease-in-out infinite}
+        @keyframes zodiflotar{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}50%{transform:translateY(-8px) rotate(var(--rot,0deg))}}
+        .destello{position:absolute;z-index:1;color:var(--accent-light);opacity:0;pointer-events:none;animation:destellar 2.8s ease-in-out infinite}
+        @keyframes destellar{0%,100%{opacity:0;transform:scale(.6) rotate(0deg)}50%{opacity:.85;transform:scale(1) rotate(90deg)}}
+        .mandala{position:absolute;z-index:0;pointer-events:none;opacity:${t.dark ? 0.14 : 0.09};}
 
         .nav{position:sticky;top:0;z-index:100;background:${t.navBg};backdrop-filter:blur(10px);padding:14px 20px;border-bottom:1px solid var(--border)}
         .nav-inner{max-width:1040px;margin:0 auto;width:100%;display:flex;justify-content:space-between;align-items:center}
         .nav-nombre{font-family:var(--font-title);font-size:15px;font-weight:800;color:var(--primary)}
         .nav-btn{padding:9px 18px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-body)}
 
-        .hero{position:relative;overflow:hidden;background:linear-gradient(160deg,var(--bg2),var(--bg));padding:48px 20px 60px}
+        .hero{position:relative;overflow:hidden;padding:48px 20px 60px;
+          background:
+            radial-gradient(circle at 14% 18%, var(--accent-dim) 0%, transparent 42%),
+            radial-gradient(circle at 88% 8%, var(--primary-dim) 0%, transparent 38%),
+            radial-gradient(circle at 78% 92%, var(--accent-dim) 0%, transparent 46%),
+            linear-gradient(160deg,var(--bg2),var(--bg) 72%);
+        }
         .hero-shape{position:absolute;pointer-events:none;opacity:${t.dark ? 0.5 : 0.35};z-index:1}
         .hero-grid{position:relative;z-index:2;max-width:1040px;margin:0 auto;display:grid;grid-template-areas:"titulo" "foto" "subtitulo" "boton";gap:22px;justify-items:center;text-align:center}
         @media(min-width:860px){
@@ -242,33 +272,40 @@ export default function CursoPublicoPage() {
         .ga-foto{grid-area:foto;width:100%;display:flex;justify-content:center}
         .ga-subtitulo{grid-area:subtitulo}
         .ga-boton{grid-area:boton}
-        .hero-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(28px,5vw,46px);line-height:1.12;color:var(--cream)}
+        .hero-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(28px,5vw,46px);line-height:1.12;color:var(--cream);text-shadow:${t.dark ? '0 4px 24px rgba(0,0,0,0.4)' : 'none'}}
         .hero-foto-wrap{position:relative;width:100%;max-width:380px;animation:float 5s ease-in-out infinite}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
         .hero-blob{position:absolute;border-radius:50%;filter:blur(6px);z-index:0}
-        .hero-foto{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:28px;box-shadow:0 30px 60px rgba(0,0,0,${t.dark?0.55:0.2});position:relative;z-index:2;display:block}
+        .hero-foto-frame{position:relative;z-index:2;padding:5px;border-radius:32px;background:var(--btn-bg);box-shadow:0 30px 60px rgba(0,0,0,${t.dark?0.55:0.2}),0 0 0 1px var(--border)}
+        .hero-foto{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:27px;display:block}
+        .hero-sticker{position:absolute;top:-14px;right:-10px;z-index:3;width:54px;height:54px;border-radius:50%;background:var(--card-bg);border:2px dashed var(--primary);display:flex;align-items:center;justify-content:center;transform:rotate(-12deg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.5:0.18});backdrop-filter:blur(6px)}
         .hero-sub{font-size:15px;color:var(--text-dim);line-height:1.5;max-width:420px}
         .hero-btn{padding:15px 34px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
         .wave{position:relative;width:100%;line-height:0;z-index:2}
 
         .chips-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 20px 8px;max-width:640px;margin:0 auto}
-        .chip{padding:9px 16px;border-radius:50px;background:var(--primary-dim);color:var(--cream);font-size:12px;font-weight:700;border:1px solid var(--border)}
+        .chip{padding:9px 16px;border-radius:50px;background:linear-gradient(135deg,var(--primary-dim),var(--accent-dim));color:var(--cream);font-size:12px;font-weight:700;border:1px solid var(--border);box-shadow:0 6px 16px rgba(0,0,0,${t.dark?0.3:0.06})}
 
         .seccion{padding:52px 20px;position:relative}
         .seccion-titulo{font-family:var(--font-title);font-weight:800;font-size:clamp(22px,4.5vw,32px);color:var(--cream);text-align:center;margin-bottom:28px}
 
         .desc-larga{max-width:680px;margin:0 auto;font-size:15px;line-height:1.55;color:var(--text);white-space:pre-line;text-align:center}
 
+        .orn-divider{display:flex;align-items:center;justify-content:center;gap:14px;max-width:280px;margin:0 auto 8px;color:var(--primary)}
+        .orn-divider .linea{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--primary-dim),transparent)}
+
         .bullets-sec{background:var(--bg2)}
-        .bullets-grid{display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto}
+        .bullets-grid{display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;position:relative;z-index:1}
         @media(min-width:768px){ .bullets-grid{display:grid;grid-template-columns:1fr 1fr} }
-        .bullet-card{display:flex;align-items:center;gap:16px;background:${t.dark?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.75)'};border-radius:22px;padding:18px 20px;box-shadow:0 12px 30px rgba(0,0,0,${t.dark?0.35:0.08})}
+        .bullet-card{display:flex;align-items:center;gap:16px;background:${t.dark?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.75)'};border-radius:22px;padding:18px 20px;box-shadow:0 12px 30px rgba(0,0,0,${t.dark?0.35:0.08});position:relative;overflow:hidden}
+        .bullet-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--btn-bg)}
         .bullet-icon{width:40px;height:40px;border-radius:50%;background:var(--btn-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 8px 18px var(--accent-dim);color:var(--btn-color);font-size:16px}
         .bullet-texto{font-size:14px;font-weight:700;color:var(--cream);line-height:1.4}
 
-        .testi-sec{text-align:center}
-        .testi-carousel{max-width:480px;margin:0 auto;position:relative}
-        .testi-card{background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:32px 26px;box-shadow:0 16px 40px rgba(0,0,0,${t.dark?0.4:0.1})}
+        .testi-sec{text-align:center;position:relative}
+        .testi-carousel{max-width:480px;margin:0 auto;position:relative;z-index:1}
+        .testi-card{background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:32px 26px;box-shadow:0 16px 40px rgba(0,0,0,${t.dark?0.4:0.1});position:relative;overflow:hidden}
+        .testi-card::after{content:'';position:absolute;width:140px;height:140px;background:var(--accent-dim);border-radius:50%;filter:blur(30px);top:-50px;right:-50px;z-index:-1}
         .testi-quote{font-size:52px;color:var(--primary-dim);font-family:serif;line-height:0.6;margin-bottom:10px}
         .testi-texto{font-size:16px;color:var(--cream);line-height:1.5;margin-bottom:16px}
         .testi-nombre{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);font-weight:700}
@@ -278,7 +315,8 @@ export default function CursoPublicoPage() {
         .testi-dot{width:6px;height:6px;border-radius:50%;background:var(--border);cursor:pointer}
         .testi-dot.act{width:18px;border-radius:3px;background:var(--primary)}
 
-        .modulo-card{border:1px solid var(--border);border-radius:20px;margin-bottom:12px;overflow:hidden;background:var(--card-bg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.35:0.06})}
+        .modulo-card{border:1px solid var(--border);border-radius:20px;margin-bottom:12px;overflow:hidden;background:var(--card-bg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.35:0.06});position:relative}
+        .modulo-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--btn-bg)}
         .modulo-header{display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer}
         .modulo-num{width:38px;height:38px;border-radius:50%;background:var(--btn-bg);color:var(--btn-color);display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-weight:800;font-size:14px;flex-shrink:0}
         .modulo-titulo{flex:1;font-size:14px;font-weight:700;color:var(--cream)}
@@ -288,22 +326,28 @@ export default function CursoPublicoPage() {
         .preview-badge{font-size:9px;background:#DCFCE7;color:#166534;padding:2px 7px;border-radius:10px;font-weight:800}
 
         .video-sec{background:var(--bg2);text-align:center}
-        .video-wrap{max-width:680px;margin:0 auto;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,${t.dark?0.45:0.15});position:relative;padding-bottom:56.25%;height:0}
+        .video-wrap-frame{max-width:696px;margin:0 auto;position:relative;z-index:1;border-radius:24px;padding:6px;background:var(--btn-bg);box-shadow:0 20px 50px rgba(0,0,0,${t.dark?0.45:0.15})}
+        .video-wrap{border-radius:18px;overflow:hidden;position:relative;padding-bottom:56.25%;height:0;background:#000}
         .video-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
 
         .requisitos-sec{max-width:560px;margin:0 auto;text-align:center}
         .requisitos-lista{display:inline-flex;flex-direction:column;gap:8px;text-align:left;margin:0 auto}
         .requisito-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)}
 
-        .cta-sec{position:relative;background:linear-gradient(160deg,var(--cta-bg),#000);color:#F5F5F5;padding:60px 20px;overflow:hidden}
+        .cta-sec{position:relative;background:
+            radial-gradient(circle at 12% 15%, var(--accent-dim) 0%, transparent 45%),
+            radial-gradient(circle at 90% 85%, var(--accent-dim) 0%, transparent 45%),
+            linear-gradient(160deg,var(--cta-bg),#000);
+          color:#F5F5F5;padding:60px 20px;overflow:hidden}
         .cta-inner{max-width:420px;margin:0 auto;position:relative;z-index:2;text-align:center}
-        .cta-foto{width:88px;height:88px;border-radius:22px;object-fit:cover;margin:0 auto 18px;box-shadow:0 10px 30px rgba(0,0,0,0.4)}
+        .cta-foto-frame{width:88px;height:88px;border-radius:24px;margin:0 auto 18px;padding:3px;background:var(--btn-bg);box-shadow:0 10px 30px rgba(0,0,0,0.4)}
+        .cta-foto{width:100%;height:100%;border-radius:21px;object-fit:cover;display:block}
         .cta-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(24px,5vw,36px);margin-bottom:20px}
         .cta-beneficios{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:24px}
         .cta-beneficio{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,0.85)}
-        .oferta-badge{display:inline-block;background:#FB923C;color:#1A1A2E;font-size:11px;font-weight:800;padding:5px 12px;border-radius:50px;margin-bottom:10px}
+        .oferta-badge{display:inline-block;background:#FB923C;color:#1A1A2E;font-size:11px;font-weight:800;padding:5px 12px;border-radius:50px;margin-bottom:10px;border:1.5px dashed rgba(26,26,46,0.35);transform:rotate(-4deg);box-shadow:0 6px 14px rgba(0,0,0,0.25)}
         .cta-precio-original{font-size:15px;color:rgba(255,255,255,0.4);text-decoration:line-through}
-        .cta-precio{font-family:var(--font-title);font-weight:900;font-size:44px;color:var(--primary-light);margin-bottom:20px}
+        .cta-precio{font-family:var(--font-title);font-weight:900;font-size:44px;color:var(--primary-light);margin-bottom:20px;text-shadow:0 0 24px var(--primary-dim)}
         .btn-comprar{width:100%;padding:17px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
         .btn-wsp{width:100%;padding:17px;background:#25D366;color:white;border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
         .garantia-card{margin-top:20px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:18px;padding:18px;text-align:center}
@@ -319,10 +363,22 @@ export default function CursoPublicoPage() {
         </div>
       </nav>
 
-      {/* HERO — fuerte: blobs + estrellas (si el template es oscuro) + grano */}
+      {/* HERO — gradientes en capas + blobs + esoterismo (estrellas, zodiaco, destellos, mandala) + grano */}
       <div className="hero grano">
+        <svg className="mandala" style={{top:'50%',left:'50%',width:'620px',height:'620px',transform:'translate(-50%,-50%)'}} viewBox="0 0 200 200" fill="none">
+          <circle cx="100" cy="100" r="98" stroke="var(--primary)" strokeWidth="0.5"/>
+          <circle cx="100" cy="100" r="76" stroke="var(--accent-light)" strokeWidth="0.5"/>
+          <circle cx="100" cy="100" r="54" stroke="var(--primary)" strokeWidth="0.5"/>
+        </svg>
+
         {t.dark && ESTRELLAS_HERO.map((s, i) => (
           <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.6}s`}}/>
+        ))}
+        {ZODIACOS_HERO.map((z, i) => (
+          <div key={i} className="zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot} as React.CSSProperties}>{z.simbolo}</div>
+        ))}
+        {DESTELLOS_HERO.map((d, i) => (
+          <Sparkles key={i} size={d.size} className="destello" style={{top:d.top,left:d.left,animationDelay:d.delay}}/>
         ))}
         <svg className="hero-shape" style={{top:'8%',left:'6%',width:'46px'}} viewBox="0 0 24 24" fill="none">
           <path d="M12 2l2.2 6.8H21l-5.6 4.1 2.2 6.9L12 15.7 6.4 19.8l2.2-6.9L3 8.8h6.8z" fill="var(--primary)"/>
@@ -330,15 +386,20 @@ export default function CursoPublicoPage() {
         <svg className="hero-shape" style={{top:'14%',right:'8%',width:'30px'}} viewBox="0 0 24 24" fill="none">
           <path d="M20 12.5A8.5 8.5 0 1111.5 4 6.8 6.8 0 0020 12.5z" fill="var(--accent-light)"/>
         </svg>
+        <Moon size={22} className="hero-shape" style={{top:'80%',right:'12%',color:'var(--primary-light)',opacity:t.dark?0.5:0.3}}/>
 
         <div className="hero-grid">
           <h1 className="hero-titulo ga-titulo">{curso.titulo}</h1>
 
           <div className="ga-foto">
             <div className="hero-foto-wrap">
-              <div className="hero-blob" style={{width:'160px',height:'160px',background:'var(--accent-dim)',top:'-20px',left:'-24px'}}/>
-              <div className="hero-blob" style={{width:'120px',height:'120px',background:'var(--primary-dim)',bottom:'-14px',right:'-18px'}}/>
-              {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} className="hero-foto"/>}
+              <div className="hero-blob" style={{width:'170px',height:'170px',background:'var(--accent-dim)',top:'-24px',left:'-28px',opacity:0.9}}/>
+              <div className="hero-blob" style={{width:'130px',height:'130px',background:'var(--primary-dim)',bottom:'-16px',right:'-20px',opacity:0.9}}/>
+              <div className="hero-blob" style={{width:'90px',height:'90px',background:'var(--accent-dim)',bottom:'40%',left:'-14px',filter:'blur(10px)',opacity:0.6}}/>
+              <div className="hero-foto-frame">
+                {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} className="hero-foto"/>}
+              </div>
+              <div className="hero-sticker"><Star size={20} color="var(--primary)" fill="var(--primary)"/></div>
             </div>
           </div>
 
@@ -407,6 +468,10 @@ export default function CursoPublicoPage() {
         </div>
       )}
 
+      {testimonios.length > 0 && (curso.para_quien?.filter(x => x.trim()).length > 0) && (
+        <div className="orn-divider"><span className="linea"/><Sparkles size={16}/><span className="linea"/></div>
+      )}
+
       {/* TESTIMONIOS — plano */}
       {testimonios.length > 0 && (
         <div className="seccion testi-sec">
@@ -430,6 +495,10 @@ export default function CursoPublicoPage() {
             )}
           </div>
         </div>
+      )}
+
+      {modulos.length > 0 && testimonios.length > 0 && (
+        <div className="orn-divider"><span className="linea"/><Sparkles size={16}/><span className="linea"/></div>
       )}
 
       {/* TEMARIO — plano */}
@@ -468,9 +537,14 @@ export default function CursoPublicoPage() {
             <path d="M0,20 C360,0 1080,40 1440,10 L1440,0 L0,0 Z" fill="var(--bg2)"/>
           </svg>
           <h2 className="seccion-titulo">{tituloVideo}</h2>
-          <div className="video-wrap">
-            <iframe src={videoUrl.replace('watch?v=', 'embed/')} allowFullScreen/>
+          <div className="video-wrap-frame">
+            <div className="video-wrap">
+              <iframe src={videoUrl.replace('watch?v=', 'embed/')} allowFullScreen/>
+            </div>
           </div>
+          <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',position:'absolute',bottom:'-1px',left:0}}>
+            <path d="M0,20 C360,40 1080,0 1440,30 L1440,40 L0,40 Z" fill="var(--bg)"/>
+          </svg>
         </div>
       )}
 
@@ -486,13 +560,22 @@ export default function CursoPublicoPage() {
         </div>
       )}
 
-      {/* CTA FINAL — fuerte: estrellas + grano */}
+      <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',display:'block'}}>
+        <path d="M0,10 C360,40 1080,0 1440,20 L1440,40 L0,40 Z" fill="var(--cta-bg)"/>
+      </svg>
+
+      {/* CTA FINAL — fuerte: estrellas + zodiaco + grano */}
       <div className="cta-sec grano">
         {t.dark && ESTRELLAS_CTA.map((s, i) => (
           <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.8}s`}}/>
         ))}
+        {ZODIACOS_CTA.map((z, i) => (
+          <div key={i} className="zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot,color:'var(--primary-light)'} as React.CSSProperties}>{z.simbolo}</div>
+        ))}
         <div className="cta-inner">
-          {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} className="cta-foto"/>}
+          {curso.imagen_url && (
+            <div className="cta-foto-frame"><img src={curso.imagen_url} alt={curso.titulo} className="cta-foto"/></div>
+          )}
           <h2 className="cta-titulo">Accedé ahora</h2>
 
           <div className="cta-beneficios">
