@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronDown, ChevronUp, Check, Clock, BookOpen, Award } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Check, Shield, Play } from 'lucide-react'
 
 type Terapeuta = {
   user_id: string; nombre_profesional: string; especialidad: string
-  bio: string; avatar_url: string; slug: string
+  bio: string; avatar_url: string; slug: string; template?: string
+  whatsapp?: string; mp_activo?: boolean; acepta_transferencia?: boolean; alias_pago?: string
 }
 
 type Curso = {
@@ -22,10 +23,90 @@ type Curso = {
   estado: string; user_id: string
 }
 
+type Leccion = {
+  id: string; titulo: string; tipo: string; duracion_min: number | null
+  es_preview: boolean; contenido_url?: string | null
+}
+
 type Modulo = {
   id: string; titulo: string; descripcion: string; orden: number
-  lecciones?: { id: string; titulo: string; tipo: string; duracion_min: number | null; es_preview: boolean }[]
+  lecciones?: Leccion[]
 }
+
+type Testimonio = {
+  id: string; titulo?: string; texto: string; avatar_url?: string; orden: number
+}
+
+const TEMPLATES = {
+  luna: {
+    bg: '#0D0B14', bg2: '#12101C', bg3: '#1A1628',
+    primary: '#C9A84C', primaryLight: '#E8D5A3', primaryDim: 'rgba(201,168,76,0.3)',
+    accent: '#6B3FA0', accentLight: '#9B6DD0', accentDim: 'rgba(107,63,160,0.2)',
+    text: '#D4C5A9', textDim: '#7A6B8A', cream: '#F0E8D5', border: 'rgba(201,168,76,0.2)',
+    fontBody: "'Jost', sans-serif", googleFonts: 'Jost:wght@300;400;500;600',
+    dark: true, ctaBg: '#0D0B14',
+    cardBg: 'rgba(26,22,40,0.6)', navBg: 'rgba(13,11,20,0.85)',
+    btnBg: 'linear-gradient(135deg,#6B3FA0,#8B5CF6)', btnColor: '#E8D5A3',
+  },
+  aura: {
+    bg: '#F8F4FF', bg2: '#F0EBFF', bg3: '#E8E0FF',
+    primary: '#7C3AED', primaryLight: '#A78BFA', primaryDim: 'rgba(124,58,237,0.2)',
+    accent: '#EC4899', accentLight: '#F9A8D4', accentDim: 'rgba(236,72,153,0.15)',
+    text: '#4B5563', textDim: '#9CA3AF', cream: '#1F2937', border: 'rgba(124,58,237,0.15)',
+    fontBody: "'DM Sans', sans-serif", googleFonts: 'DM+Sans:wght@300;400;500;600',
+    dark: false, ctaBg: '#1A1A2E',
+    cardBg: 'rgba(255,255,255,0.85)', navBg: 'rgba(248,244,255,0.85)',
+    btnBg: 'linear-gradient(135deg,#7C3AED,#EC4899)', btnColor: 'white',
+  },
+  tierra: {
+    bg: '#FAF7F0', bg2: '#F5F0E8', bg3: '#EDE8DC',
+    primary: '#92400E', primaryLight: '#D97706', primaryDim: 'rgba(146,64,14,0.2)',
+    accent: '#065F46', accentLight: '#10B981', accentDim: 'rgba(6,95,70,0.15)',
+    text: '#44403C', textDim: '#A8A29E', cream: '#1C1917', border: 'rgba(146,64,14,0.15)',
+    fontBody: "'Nunito', sans-serif", googleFonts: 'Nunito:wght@300;400;500;600',
+    dark: false, ctaBg: '#1A1A2E',
+    cardBg: 'rgba(255,255,255,0.8)', navBg: 'rgba(250,247,240,0.85)',
+    btnBg: 'linear-gradient(135deg,#92400E,#D97706)', btnColor: 'white',
+  },
+  rosa: {
+    bg: '#FFF0F6', bg2: '#FFE4F0', bg3: '#FFD6E8',
+    primary: '#BE185D', primaryLight: '#F472B6', primaryDim: 'rgba(190,24,93,0.2)',
+    accent: '#9D174D', accentLight: '#EC4899', accentDim: 'rgba(157,23,77,0.15)',
+    text: '#4A1942', textDim: '#9D7A95', cream: '#2D0A25', border: 'rgba(190,24,93,0.15)',
+    fontBody: "'DM Sans', sans-serif", googleFonts: 'DM+Sans:wght@300;400;500;600',
+    dark: false, ctaBg: '#1A1A2E',
+    cardBg: 'rgba(255,255,255,0.9)', navBg: 'rgba(255,240,246,0.85)',
+    btnBg: 'linear-gradient(135deg,#BE185D,#EC4899)', btnColor: 'white',
+  },
+  violeta: {
+    bg: '#1E0A3C', bg2: '#2D1058', bg3: '#3D1570',
+    primary: '#C084FC', primaryLight: '#E9D5FF', primaryDim: 'rgba(192,132,252,0.3)',
+    accent: '#A855F7', accentLight: '#D8B4FE', accentDim: 'rgba(168,85,247,0.2)',
+    text: '#DDD6FE', textDim: '#8B5CF6', cream: '#FAF5FF', border: 'rgba(192,132,252,0.25)',
+    fontBody: "'Jost', sans-serif", googleFonts: 'Jost:wght@300;400;500;600',
+    dark: true, ctaBg: '#1E0A3C',
+    cardBg: 'rgba(61,21,112,0.5)', navBg: 'rgba(30,10,60,0.85)',
+    btnBg: 'linear-gradient(135deg,#7C3AED,#C084FC)', btnColor: 'white',
+  },
+  verde: {
+    bg: '#F0FDF4', bg2: '#DCFCE7', bg3: '#BBF7D0',
+    primary: '#065F46', primaryLight: '#10B981', primaryDim: 'rgba(6,95,70,0.2)',
+    accent: '#047857', accentLight: '#34D399', accentDim: 'rgba(4,120,87,0.15)',
+    text: '#1C4532', textDim: '#6B7280', cream: '#022C22', border: 'rgba(6,95,70,0.15)',
+    fontBody: "'Nunito', sans-serif", googleFonts: 'Nunito:wght@300;400;500;600',
+    dark: false, ctaBg: '#1A1A2E',
+    cardBg: 'rgba(255,255,255,0.85)', navBg: 'rgba(240,253,244,0.85)',
+    btnBg: 'linear-gradient(135deg,#065F46,#10B981)', btnColor: 'white',
+  },
+}
+
+const ESTRELLAS_HERO = [
+  { top: '14%', left: '22%' }, { top: '72%', left: '88%' },
+  { top: '42%', left: '78%' }, { top: '86%', left: '28%' },
+]
+const ESTRELLAS_CTA = [
+  { top: '18%', left: '85%' }, { top: '75%', left: '12%' },
+]
 
 export default function CursoPublicoPage() {
   const params = useParams()
@@ -36,8 +117,13 @@ export default function CursoPublicoPage() {
   const [terapeuta, setTerapeuta] = useState<Terapeuta | null>(null)
   const [curso, setCurso] = useState<Curso | null>(null)
   const [modulos, setModulos] = useState<Modulo[]>([])
+  const [testimonios, setTestimonios] = useState<Testimonio[]>([])
   const [moduloAbierto, setModuloAbierto] = useState<string | null>(null)
+  const [testiIdx, setTestiIdx] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -64,7 +150,8 @@ export default function CursoPublicoPage() {
         .eq('course_id', cursoData.id).order('orden')
       if (mods) {
         const { data: lecs } = await supabase
-          .from('lessons').select('id,titulo,tipo,duracion_min,es_preview,module_id')
+          .from('lessons')
+          .select('id,titulo,tipo,duracion_min,es_preview,contenido_url,module_id')
           .in('module_id', mods.map(m => m.id)).order('orden')
         setModulos(mods.map(m => ({
           ...m,
@@ -72,265 +159,379 @@ export default function CursoPublicoPage() {
         })))
         if (mods.length > 0) setModuloAbierto(mods[0].id)
       }
-    } catch(e) { console.error(e) }
+
+      const { data: testis } = await supabase
+        .from('course_testimonials').select('*')
+        .eq('course_id', cursoData.id).order('orden')
+      if (testis) setTestimonios(testis)
+    } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
 
+  const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
   const totalLecciones = modulos.reduce((acc, m) => acc + (m.lecciones?.length || 0), 0)
+  const esOferta = curso?.precio_original && curso.precio_original > curso.precio
+  const tieneMP = !!terapeuta?.mp_activo
+  const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
+  const sinMetodoPago = !tieneMP && !tieneTransferencia
+
+  const leccionPreview = modulos
+    .flatMap(m => m.lecciones || [])
+    .find(l => l.es_preview && l.tipo === 'video' && l.contenido_url)
+  const videoUrl = curso?.video_presentacion_url || leccionPreview?.contenido_url || null
+  const tituloVideo = curso?.video_presentacion_url
+    ? 'Mirá el video de presentación del curso'
+    : 'Mirá nuestra primera clase gratis y resolvé todas tus dudas'
+
+  function irACheckout() { router.push(`/p/${slug}/cursos/${slugCurso}/checkout`) }
+  function siguienteTesti() { setTestiIdx(i => (i + 1) % testimonios.length) }
+  function anteriorTesti() { setTestiIdx(i => (i - 1 + testimonios.length) % testimonios.length) }
+  function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0].clientX }
+  function onTouchMove(e: React.TouchEvent) { touchEndX.current = e.touches[0].clientX }
+  function onTouchEnd() {
+    const delta = touchStartX.current - touchEndX.current
+    if (Math.abs(delta) > 40) { delta > 0 ? siguienteTesti() : anteriorTesti() }
+  }
 
   if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280',fontFamily:'sans-serif'}}>
       Cargando...
     </div>
   )
 
   if (!curso || !terapeuta) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280',fontFamily:'sans-serif'}}>
       Curso no encontrado
     </div>
   )
 
-  const esOferta = curso.precio_original && curso.precio_original > curso.precio
-
   return (
-    <div style={{fontFamily:"'Inter',sans-serif",color:'#1A1A2E',background:'#FAFAFA',minHeight:'100vh'}}>
+    <div style={{fontFamily:'var(--font-body)',background:'var(--bg)',minHeight:'100vh',color:'var(--text)'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800;900&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        .curso-nav{position:sticky;top:0;z-index:100;background:white;border-bottom:1px solid #F0F0F0;padding:14px 24px;display:flex;justify-content:space-between;align-items:center}
-        .curso-nav-logo{font-family:'Manrope',sans-serif;font-size:18px;font-weight:800;color:#8B5CF6;cursor:pointer}
-        .btn-comprar{padding:10px 24px;background:linear-gradient(135deg,#8B5CF6,#7C3AED);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
-        .hero{background:linear-gradient(135deg,#1A0A3C 0%,#2D1060 100%);padding:48px 24px;color:white}
-        .hero-inner{max-width:860px;margin:0 auto;display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:start}
-        .hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.3);color:#C4A8FF;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:16px}
-        .hero-titulo{font-family:'Manrope',sans-serif;font-size:clamp(28px,4vw,42px);font-weight:900;line-height:1.1;margin-bottom:16px}
-        .hero-desc{font-size:16px;color:rgba(255,255,255,0.75);line-height:1.7;margin-bottom:24px}
-        .hero-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:rgba(255,255,255,0.6)}
-        .hero-meta-item{display:flex;align-items:center;gap:6px}
-        .precio-card{background:white;border-radius:20px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:sticky;top:80px}
-        .precio-original{font-size:14px;color:#9CA3AF;text-decoration:line-through;margin-bottom:4px}
-        .precio-actual{font-family:'Manrope',sans-serif;font-size:40px;font-weight:900;color:#8B5CF6;line-height:1;margin-bottom:4px}
-        .precio-periodo{font-size:12px;color:#6B7280;margin-bottom:20px}
-        .oferta-badge{display:inline-block;background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;margin-bottom:12px}
-        .btn-comprar-grande{width:100%;padding:16px;background:linear-gradient(135deg,#8B5CF6,#7C3AED);color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px;box-shadow:0 8px 24px rgba(139,92,246,0.4)}
-        .garantia-texto{text-align:center;font-size:11px;color:#6B7280;line-height:1.5}
-        .incluye-lista{margin-top:16px;display:flex;flex-direction:column;gap:8px}
-        .incluye-item{display:flex;align-items:center;gap:8px;font-size:12px;color:#374151}
-        .seccion{max-width:860px;margin:0 auto;padding:48px 24px}
-        .seccion-titulo{font-family:'Manrope',sans-serif;font-size:24px;font-weight:800;color:#1A1A2E;margin-bottom:24px}
-        .bullets-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .bullet-item{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#374151;line-height:1.5}
-        .bullet-check{width:20px;height:20px;border-radius:50%;background:#EDE8FF;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
-        .modulo-card{border:1px solid #E5E7EB;border-radius:12px;margin-bottom:8px;overflow:hidden}
-        .modulo-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;background:white;user-select:none}
-        .modulo-titulo{flex:1;font-size:14px;font-weight:600;color:#1A1A2E}
-        .leccion-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid #F3F4F6;background:#FAFAFA}
-        .tipo-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
-        .tipo-video{background:#EDE8FF}
-        .tipo-pdf{background:#FEF3C7}
-        .tipo-audio{background:#DCFCE7}
-        .tipo-texto{background:#DBEAFE}
-        .preview-badge{font-size:9px;background:#DCFCE7;color:#166534;padding:2px 6px;border-radius:10px;font-weight:700}
-        .terapeuta-card{background:white;border-radius:20px;padding:28px;border:1px solid #E5E7EB;display:flex;gap:20px;align-items:flex-start}
-        .terapeuta-avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#EDE8FF}
-        .garantia-card{background:#F0FDF4;border:1px solid #86EFAC;border-radius:16px;padding:24px;text-align:center}
-        .cta-final{background:linear-gradient(135deg,#1A0A3C,#2D1060);padding:64px 24px;text-align:center;color:white}
-        .footer-curso{text-align:center;padding:20px;font-size:11px;color:#9CA3AF}
-        @media(max-width:768px){
-          .hero-inner{grid-template-columns:1fr}
-          .precio-card{position:static;margin-top:24px}
-          .bullets-grid{grid-template-columns:1fr}
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=${t.googleFonts}&display=swap');
+        :root{
+          --bg:${t.bg};--bg2:${t.bg2};--bg3:${t.bg3};
+          --primary:${t.primary};--primary-light:${t.primaryLight};--primary-dim:${t.primaryDim};
+          --accent:${t.accent};--accent-light:${t.accentLight};--accent-dim:${t.accentDim};
+          --text:${t.text};--text-dim:${t.textDim};--cream:${t.cream};--border:${t.border};
+          --card-bg:${t.cardBg};--font-body:${t.fontBody};--font-title:'Montserrat',sans-serif;
+          --btn-bg:${t.btnBg};--btn-color:${t.btnColor};--cta-bg:${t.ctaBg};
         }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{background:var(--bg)}
+
+        .grano{position:relative}
+        .grano::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+          opacity:${t.dark ? 0.06 : 0.035};
+          background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+        .estrella-fija{position:absolute;width:2px;height:2px;background:var(--primary-light);border-radius:50%;opacity:.7;z-index:0;animation:titilar 3.5s ease-in-out infinite}
+        @keyframes titilar{0%,100%{opacity:.15}50%{opacity:.8}}
+
+        .nav{position:sticky;top:0;z-index:100;background:${t.navBg};backdrop-filter:blur(10px);padding:14px 20px;border-bottom:1px solid var(--border)}
+        .nav-inner{max-width:1040px;margin:0 auto;width:100%;display:flex;justify-content:space-between;align-items:center}
+        .nav-nombre{font-family:var(--font-title);font-size:15px;font-weight:800;color:var(--primary)}
+        .nav-btn{padding:9px 18px;border-radius:50px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-body)}
+
+        .hero{position:relative;overflow:hidden;background:linear-gradient(160deg,var(--bg2),var(--bg));padding:48px 20px 60px}
+        .hero-shape{position:absolute;pointer-events:none;opacity:${t.dark ? 0.5 : 0.35};z-index:1}
+        .hero-grid{position:relative;z-index:2;max-width:1040px;margin:0 auto;display:grid;grid-template-areas:"titulo" "foto" "subtitulo" "boton";gap:22px;justify-items:center;text-align:center}
+        @media(min-width:860px){
+          .hero-grid{grid-template-columns:1fr 1fr;grid-template-areas:"titulo foto" "subtitulo foto" "boton foto";align-items:center;justify-items:start;text-align:left;gap:24px 56px;min-height:70vh}
+        }
+        .ga-titulo{grid-area:titulo}
+        .ga-foto{grid-area:foto;width:100%;display:flex;justify-content:center}
+        .ga-subtitulo{grid-area:subtitulo}
+        .ga-boton{grid-area:boton}
+        .hero-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(28px,5vw,46px);line-height:1.12;color:var(--cream)}
+        .hero-foto-wrap{position:relative;width:100%;max-width:380px;animation:float 5s ease-in-out infinite}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        .hero-blob{position:absolute;border-radius:50%;filter:blur(6px);z-index:0}
+        .hero-foto{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:28px;box-shadow:0 30px 60px rgba(0,0,0,${t.dark?0.55:0.2});position:relative;z-index:2;display:block}
+        .hero-sub{font-size:15px;color:var(--text-dim);line-height:1.5;max-width:420px}
+        .hero-btn{padding:15px 34px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
+        .wave{position:relative;width:100%;line-height:0;z-index:2}
+
+        .chips-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 20px 8px;max-width:640px;margin:0 auto}
+        .chip{padding:9px 16px;border-radius:50px;background:var(--primary-dim);color:var(--cream);font-size:12px;font-weight:700;border:1px solid var(--border)}
+
+        .seccion{padding:52px 20px;position:relative}
+        .seccion-titulo{font-family:var(--font-title);font-weight:800;font-size:clamp(22px,4.5vw,32px);color:var(--cream);text-align:center;margin-bottom:28px}
+
+        .desc-larga{max-width:680px;margin:0 auto;font-size:15px;line-height:1.55;color:var(--text);white-space:pre-line;text-align:center}
+
+        .bullets-sec{background:var(--bg2)}
+        .bullets-grid{display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto}
+        @media(min-width:768px){ .bullets-grid{display:grid;grid-template-columns:1fr 1fr} }
+        .bullet-card{display:flex;align-items:center;gap:16px;background:${t.dark?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.75)'};border-radius:22px;padding:18px 20px;box-shadow:0 12px 30px rgba(0,0,0,${t.dark?0.35:0.08})}
+        .bullet-icon{width:40px;height:40px;border-radius:50%;background:var(--btn-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 8px 18px var(--accent-dim);color:var(--btn-color);font-size:16px}
+        .bullet-texto{font-size:14px;font-weight:700;color:var(--cream);line-height:1.4}
+
+        .testi-sec{text-align:center}
+        .testi-carousel{max-width:480px;margin:0 auto;position:relative}
+        .testi-card{background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:32px 26px;box-shadow:0 16px 40px rgba(0,0,0,${t.dark?0.4:0.1})}
+        .testi-quote{font-size:52px;color:var(--primary-dim);font-family:serif;line-height:0.6;margin-bottom:10px}
+        .testi-texto{font-size:16px;color:var(--cream);line-height:1.5;margin-bottom:16px}
+        .testi-nombre{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);font-weight:700}
+        .testi-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px}
+        .testi-arrow{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--card-bg);color:var(--primary);display:flex;align-items:center;justify-content:center;cursor:pointer}
+        .testi-dots{display:flex;gap:7px}
+        .testi-dot{width:6px;height:6px;border-radius:50%;background:var(--border);cursor:pointer}
+        .testi-dot.act{width:18px;border-radius:3px;background:var(--primary)}
+
+        .modulo-card{border:1px solid var(--border);border-radius:20px;margin-bottom:12px;overflow:hidden;background:var(--card-bg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.35:0.06})}
+        .modulo-header{display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer}
+        .modulo-num{width:38px;height:38px;border-radius:50%;background:var(--btn-bg);color:var(--btn-color);display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-weight:800;font-size:14px;flex-shrink:0}
+        .modulo-titulo{flex:1;font-size:14px;font-weight:700;color:var(--cream)}
+        .modulo-count{font-size:11px;color:var(--text-dim)}
+        .leccion-item{display:flex;align-items:center;gap:10px;padding:11px 18px 11px 62px;border-top:1px solid var(--border)}
+        .tipo-icon{width:26px;height:26px;border-radius:8px;background:var(--primary-dim);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+        .preview-badge{font-size:9px;background:#DCFCE7;color:#166534;padding:2px 7px;border-radius:10px;font-weight:800}
+
+        .video-sec{background:var(--bg2);text-align:center}
+        .video-wrap{max-width:680px;margin:0 auto;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,${t.dark?0.45:0.15});position:relative;padding-bottom:56.25%;height:0}
+        .video-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+
+        .requisitos-sec{max-width:560px;margin:0 auto;text-align:center}
+        .requisitos-lista{display:inline-flex;flex-direction:column;gap:8px;text-align:left;margin:0 auto}
+        .requisito-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)}
+
+        .cta-sec{position:relative;background:linear-gradient(160deg,var(--cta-bg),#000);color:#F5F5F5;padding:60px 20px;overflow:hidden}
+        .cta-inner{max-width:420px;margin:0 auto;position:relative;z-index:2;text-align:center}
+        .cta-foto{width:88px;height:88px;border-radius:22px;object-fit:cover;margin:0 auto 18px;box-shadow:0 10px 30px rgba(0,0,0,0.4)}
+        .cta-titulo{font-family:var(--font-title);font-weight:900;font-size:clamp(24px,5vw,36px);margin-bottom:20px}
+        .cta-beneficios{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:24px}
+        .cta-beneficio{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,0.85)}
+        .oferta-badge{display:inline-block;background:#FB923C;color:#1A1A2E;font-size:11px;font-weight:800;padding:5px 12px;border-radius:50px;margin-bottom:10px}
+        .cta-precio-original{font-size:15px;color:rgba(255,255,255,0.4);text-decoration:line-through}
+        .cta-precio{font-family:var(--font-title);font-weight:900;font-size:44px;color:var(--primary-light);margin-bottom:20px}
+        .btn-comprar{width:100%;padding:17px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
+        .btn-wsp{width:100%;padding:17px;background:#25D366;color:white;border:none;border-radius:50px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font-body);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+        .garantia-card{margin-top:20px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:18px;padding:18px;text-align:center}
+
+        .footer-curso{text-align:center;padding:24px;font-size:11px;color:var(--text-dim)}
       `}</style>
 
       {/* NAV */}
-      <nav className="curso-nav">
-        <div className="curso-nav-logo" onClick={() => router.push(`/p/${slug}`)}>
-          {terapeuta.nombre_profesional}
+      <nav className="nav">
+        <div className="nav-inner">
+          <div className="nav-nombre">{terapeuta.nombre_profesional}</div>
+          <button className="nav-btn" onClick={() => router.push('/auth/login')}>Iniciar sesión</button>
         </div>
-        <button className="btn-comprar" onClick={() => router.push(`/p/${slug}/cursos/${slugCurso}/checkout`)}>
-          Comprar curso
-        </button>
       </nav>
 
-      {/* HERO */}
-      <div className="hero">
-        <div className="hero-inner">
-          <div>
-            <div className="hero-badge">
-              <BookOpen size={10}/> Curso online
-            </div>
-            <h1 className="hero-titulo">{curso.titulo}</h1>
-            <p className="hero-desc">{curso.descripcion_corta}</p>
-            <div className="hero-meta">
-              {curso.nivel && <div className="hero-meta-item"><span>📊</span> {curso.nivel}</div>}
-              {curso.idioma && <div className="hero-meta-item"><span>🌐</span> {curso.idioma}</div>}
-              {totalLecciones > 0 && <div className="hero-meta-item"><BookOpen size={11}/> {totalLecciones} lecciones</div>}
-              {curso.duracion_estimada_horas && <div className="hero-meta-item"><Clock size={11}/> {curso.duracion_estimada_horas}hs de contenido</div>}
-              {curso.modalidad === 'unico' && <div className="hero-meta-item"><span>✦</span> Acceso de por vida</div>}
+      {/* HERO — fuerte: blobs + estrellas (si el template es oscuro) + grano */}
+      <div className="hero grano">
+        {t.dark && ESTRELLAS_HERO.map((s, i) => (
+          <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.6}s`}}/>
+        ))}
+        <svg className="hero-shape" style={{top:'8%',left:'6%',width:'46px'}} viewBox="0 0 24 24" fill="none">
+          <path d="M12 2l2.2 6.8H21l-5.6 4.1 2.2 6.9L12 15.7 6.4 19.8l2.2-6.9L3 8.8h6.8z" fill="var(--primary)"/>
+        </svg>
+        <svg className="hero-shape" style={{top:'14%',right:'8%',width:'30px'}} viewBox="0 0 24 24" fill="none">
+          <path d="M20 12.5A8.5 8.5 0 1111.5 4 6.8 6.8 0 0020 12.5z" fill="var(--accent-light)"/>
+        </svg>
+
+        <div className="hero-grid">
+          <h1 className="hero-titulo ga-titulo">{curso.titulo}</h1>
+
+          <div className="ga-foto">
+            <div className="hero-foto-wrap">
+              <div className="hero-blob" style={{width:'160px',height:'160px',background:'var(--accent-dim)',top:'-20px',left:'-24px'}}/>
+              <div className="hero-blob" style={{width:'120px',height:'120px',background:'var(--primary-dim)',bottom:'-14px',right:'-18px'}}/>
+              {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} className="hero-foto"/>}
             </div>
           </div>
 
-          {/* PRECIO CARD */}
-          <div className="precio-card">
-            {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} style={{width:'100%',height:'180px',objectFit:'cover',borderRadius:'12px',marginBottom:'20px'}}/>}
-            {esOferta && <div className="oferta-badge">🏷️ OFERTA</div>}
-            {curso.precio_original && <div className="precio-original">${curso.precio_original.toLocaleString()}</div>}
-            <div className="precio-actual">${curso.precio.toLocaleString()}</div>
-            <div className="precio-periodo">
-              {curso.modalidad === 'suscripcion' ? 'por mes' : 'pago único'}
-            </div>
-            <button className="btn-comprar-grande" onClick={() => router.push(`/p/${slug}/cursos/${slugCurso}/checkout`)}>
-              ✦ Comprar ahora
-            </button>
-            {curso.dias_garantia && (
-              <div className="garantia-texto">
-                🛡️ {curso.dias_garantia} días de garantía<br/>
-                {curso.politica_reembolso}
-              </div>
-            )}
-            <div className="incluye-lista">
-              {totalLecciones > 0 && <div className="incluye-item"><Check size={14} color="#8B5CF6"/>{totalLecciones} lecciones</div>}
-              {curso.duracion_estimada_horas && <div className="incluye-item"><Check size={14} color="#8B5CF6"/>{curso.duracion_estimada_horas}hs de contenido</div>}
-              {curso.modalidad === 'unico' && <div className="incluye-item"><Check size={14} color="#8B5CF6"/>Acceso de por vida</div>}
-              <div className="incluye-item"><Check size={14} color="#8B5CF6"/>Certificado de finalización</div>
-            </div>
+          <p className="hero-sub ga-subtitulo">{curso.descripcion_corta}</p>
+
+          <div className="ga-boton">
+            <button className="hero-btn" onClick={irACheckout}>✦ Comprar ahora — ${curso.precio.toLocaleString()}</button>
           </div>
         </div>
+
+        <svg className="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" style={{height:'46px',marginTop:'40px'}}>
+          <path d="M0,32 C240,60 480,0 720,20 C960,40 1200,10 1440,30 L1440,60 L0,60 Z" fill="var(--bg)"/>
+        </svg>
       </div>
 
-      {/* PARA QUIÉN ES */}
-      {curso.para_quien?.length > 0 && (
-        <div className="seccion" style={{background:'white',maxWidth:'100%',padding:'48px 24px'}}>
-          <div style={{maxWidth:'860px',margin:'0 auto'}}>
-            <h2 className="seccion-titulo">¿Para quién es este curso?</h2>
-            <div className="bullets-grid">
-              {curso.para_quien.filter(x => x.trim()).map((item, i) => (
-                <div key={i} className="bullet-item">
-                  <div className="bullet-check"><Check size={10} color="#8B5CF6"/></div>
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* METADATA — plano */}
+      <div className="chips-row">
+        {curso.duracion_estimada_horas && <div className="chip">⏱ {curso.duracion_estimada_horas}hs de curso</div>}
+        {curso.nivel && <div className="chip">📊 Nivel {curso.nivel}</div>}
+        {curso.idioma && <div className="chip">🌐 {curso.idioma}</div>}
+        {modulos.length > 0 && <div className="chip">📚 {modulos.length} módulos</div>}
+        {curso.modalidad === 'unico' && <div className="chip">✦ Acceso de por vida</div>}
+      </div>
+
+      {/* SOBRE ESTE CURSO — plano */}
+      {curso.descripcion_larga?.trim() && (
+        <div className="seccion">
+          <h2 className="seccion-titulo">Sobre este curso</h2>
+          <p className="desc-larga">{curso.descripcion_larga}</p>
         </div>
       )}
 
-      {/* QUÉ VAS A APRENDER */}
-      {curso.que_aprenderas?.length > 0 && (
-        <div className="seccion">
+      {/* QUÉ VAS A APRENDER — medio: grano */}
+      {curso.que_aprenderas?.filter(x => x.trim()).length > 0 && (
+        <div className="seccion bullets-sec grano">
+          <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',position:'absolute',top:'-1px',left:0}}>
+            <path d="M0,20 C360,0 1080,40 1440,10 L1440,0 L0,0 Z" fill="var(--bg2)"/>
+          </svg>
           <h2 className="seccion-titulo">Qué vas a aprender</h2>
           <div className="bullets-grid">
             {curso.que_aprenderas.filter(x => x.trim()).map((item, i) => (
-              <div key={i} className="bullet-item">
-                <div className="bullet-check"><Check size={10} color="#8B5CF6"/></div>
-                <span>{item}</span>
+              <div key={i} className="bullet-card">
+                <div className="bullet-icon">✦</div>
+                <div className="bullet-texto">{item}</div>
+              </div>
+            ))}
+          </div>
+          <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',position:'absolute',bottom:'-1px',left:0}}>
+            <path d="M0,20 C360,40 1080,0 1440,30 L1440,40 L0,40 Z" fill="var(--bg)"/>
+          </svg>
+        </div>
+      )}
+
+      {/* PARA QUIÉN ES — plano */}
+      {curso.para_quien?.filter(x => x.trim()).length > 0 && (
+        <div className="seccion">
+          <h2 className="seccion-titulo">¿Para quién es este curso?</h2>
+          <div className="bullets-grid">
+            {curso.para_quien.filter(x => x.trim()).map((item, i) => (
+              <div key={i} className="bullet-card">
+                <div className="bullet-icon"><Check size={16}/></div>
+                <div className="bullet-texto">{item}</div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* VIDEO DE PRESENTACIÓN */}
-      {curso.video_presentacion_url && (
-        <div style={{background:'white',padding:'48px 24px'}}>
-          <div style={{maxWidth:'860px',margin:'0 auto'}}>
-            <h2 className="seccion-titulo">Video de presentación</h2>
-            <div style={{position:'relative',paddingBottom:'56.25%',height:0,borderRadius:'16px',overflow:'hidden'}}>
-              <iframe
-                src={curso.video_presentacion_url.replace('watch?v=', 'embed/')}
-                style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}
-                allowFullScreen/>
+      {/* TESTIMONIOS — plano */}
+      {testimonios.length > 0 && (
+        <div className="seccion testi-sec">
+          <h2 className="seccion-titulo">Testimonios</h2>
+          <div className="testi-carousel" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+            <div className="testi-card">
+              <div className="testi-quote">"</div>
+              <p className="testi-texto">{testimonios[testiIdx].texto}</p>
+              <div className="testi-nombre">— {testimonios[testiIdx].titulo || 'Alumna'}</div>
             </div>
+            {testimonios.length > 1 && (
+              <div className="testi-nav">
+                <div className="testi-arrow" onClick={anteriorTesti}><ChevronLeft size={16}/></div>
+                <div className="testi-dots">
+                  {testimonios.map((_, i) => (
+                    <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
+                  ))}
+                </div>
+                <div className="testi-arrow" onClick={siguienteTesti}><ChevronRight size={16}/></div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* PROGRAMA */}
+      {/* TEMARIO — plano */}
       {modulos.length > 0 && (
         <div className="seccion">
           <h2 className="seccion-titulo">Programa del curso</h2>
-          <div style={{fontSize:'13px',color:'#6B7280',marginBottom:'20px'}}>
-            {modulos.length} módulo{modulos.length !== 1 ? 's' : ''} · {totalLecciones} lecciones
-          </div>
-          {modulos.map(m => (
-            <div key={m.id} className="modulo-card">
-              <div className="modulo-header" onClick={() => setModuloAbierto(moduloAbierto === m.id ? null : m.id)}>
-                {moduloAbierto === m.id ? <ChevronUp size={14} color="#6B7280"/> : <ChevronDown size={14} color="#6B7280"/>}
-                <div className="modulo-titulo">{m.titulo}</div>
-                <div style={{fontSize:'11px',color:'#9CA3AF'}}>{m.lecciones?.length || 0} lec.</div>
-              </div>
-              {moduloAbierto === m.id && m.lecciones?.map(l => (
-                <div key={l.id} className="leccion-item">
-                  <div className={`tipo-icon tipo-${l.tipo}`}>
-                    {l.tipo === 'video' ? '▶' : l.tipo === 'pdf' ? '📄' : l.tipo === 'audio' ? '🎵' : '📝'}
-                  </div>
-                  <div style={{flex:1,fontSize:'13px',color:'#374151'}}>{l.titulo}</div>
-                  {l.es_preview && <span className="preview-badge">GRATIS</span>}
-                  {l.duracion_min && <span style={{fontSize:'11px',color:'#9CA3AF'}}>{l.duracion_min}min</span>}
+          <div style={{maxWidth:'640px',margin:'0 auto'}}>
+            {modulos.map((m, idx) => (
+              <div key={m.id} className="modulo-card">
+                <div className="modulo-header" onClick={() => setModuloAbierto(moduloAbierto === m.id ? null : m.id)}>
+                  <div className="modulo-num">{idx + 1}</div>
+                  <div className="modulo-titulo">{m.titulo}</div>
+                  <div className="modulo-count">{m.lecciones?.length || 0} lec.</div>
+                  {moduloAbierto === m.id ? <ChevronUp size={16} color="var(--text-dim)"/> : <ChevronDown size={16} color="var(--text-dim)"/>}
                 </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* SOBRE LA TERAPEUTA */}
-      <div style={{background:'white',padding:'48px 24px'}}>
-        <div style={{maxWidth:'860px',margin:'0 auto'}}>
-          <h2 className="seccion-titulo">Tu instructora</h2>
-          <div className="terapeuta-card">
-            {terapeuta.avatar_url
-              ? <img src={terapeuta.avatar_url} alt={terapeuta.nombre_profesional} className="terapeuta-avatar"/>
-              : <div className="terapeuta-avatar" style={{display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px'}}>👤</div>
-            }
-            <div>
-              <div style={{fontSize:'18px',fontWeight:700,color:'#1A1A2E',marginBottom:'4px'}}>{terapeuta.nombre_profesional}</div>
-              <div style={{fontSize:'13px',color:'#8B5CF6',marginBottom:'12px'}}>{terapeuta.especialidad}</div>
-              <p style={{fontSize:'14px',color:'#374151',lineHeight:1.7}}>{terapeuta.bio}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* GARANTÍA */}
-      {curso.dias_garantia && (
-        <div className="seccion">
-          <div className="garantia-card">
-            <div style={{fontSize:'32px',marginBottom:'12px'}}>🛡️</div>
-            <div style={{fontSize:'18px',fontWeight:700,color:'#166534',marginBottom:'8px'}}>
-              Garantía de {curso.dias_garantia} días
-            </div>
-            <p style={{fontSize:'14px',color:'#374151',lineHeight:1.7}}>
-              {curso.politica_reembolso || `Si en ${curso.dias_garantia} días no estás conforme, te devolvemos el dinero. Sin preguntas.`}
-            </p>
+                {moduloAbierto === m.id && m.lecciones?.map(l => (
+                  <div key={l.id} className="leccion-item">
+                    <div className="tipo-icon">
+                      {l.tipo === 'video' ? <Play size={11} color="var(--primary)"/> : l.tipo === 'pdf' ? '📄' : l.tipo === 'audio' ? '🎵' : '📝'}
+                    </div>
+                    <div style={{flex:1,fontSize:'13px',color:'var(--text)'}}>{l.titulo}</div>
+                    {l.es_preview && <span className="preview-badge">GRATIS</span>}
+                    {l.duracion_min && <span style={{fontSize:'11px',color:'var(--text-dim)'}}>{l.duracion_min}min</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* CTA FINAL */}
-      <div className="cta-final">
-        <div style={{maxWidth:'560px',margin:'0 auto'}}>
-          <h2 style={{fontFamily:'Manrope,sans-serif',fontSize:'clamp(24px,4vw,36px)',fontWeight:900,marginBottom:'16px'}}>
-            ¿Lista para empezar?
-          </h2>
-          <p style={{fontSize:'15px',color:'rgba(255,255,255,0.7)',marginBottom:'32px',lineHeight:1.7}}>
-            {curso.descripcion_corta}
-          </p>
-          {esOferta && <div className="oferta-badge" style={{marginBottom:'12px'}}>🏷️ OFERTA ESPECIAL</div>}
-          {curso.precio_original && <div style={{fontSize:'16px',color:'rgba(255,255,255,0.5)',textDecoration:'line-through',marginBottom:'4px'}}>${curso.precio_original.toLocaleString()}</div>}
-          <div style={{fontFamily:'Manrope,sans-serif',fontSize:'48px',fontWeight:900,color:'#C4A8FF',marginBottom:'4px'}}>${curso.precio.toLocaleString()}</div>
-          <div style={{fontSize:'13px',color:'rgba(255,255,255,0.5)',marginBottom:'28px'}}>{curso.modalidad === 'suscripcion' ? 'por mes' : 'pago único'}</div>
-          <button className="btn-comprar-grande" style={{maxWidth:'320px',margin:'0 auto'}}
-            onClick={() => router.push(`/p/${slug}/cursos/${slugCurso}/checkout`)}>
-            ✦ Comprar ahora
-          </button>
+      {/* VIDEO — medio: grano */}
+      {videoUrl && (
+        <div className="seccion video-sec grano">
+          <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',position:'absolute',top:'-1px',left:0}}>
+            <path d="M0,20 C360,0 1080,40 1440,10 L1440,0 L0,0 Z" fill="var(--bg2)"/>
+          </svg>
+          <h2 className="seccion-titulo">{tituloVideo}</h2>
+          <div className="video-wrap">
+            <iframe src={videoUrl.replace('watch?v=', 'embed/')} allowFullScreen/>
+          </div>
+        </div>
+      )}
+
+      {/* REQUISITOS — plano */}
+      {curso.requisitos?.filter(x => x.trim()).length > 0 && (
+        <div className="seccion requisitos-sec">
+          <h2 className="seccion-titulo">Requisitos</h2>
+          <div className="requisitos-lista">
+            {curso.requisitos.filter(x => x.trim()).map((r, i) => (
+              <div key={i} className="requisito-item"><Check size={13} color="var(--primary)"/> {r}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CTA FINAL — fuerte: estrellas + grano */}
+      <div className="cta-sec grano">
+        {t.dark && ESTRELLAS_CTA.map((s, i) => (
+          <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.8}s`}}/>
+        ))}
+        <div className="cta-inner">
+          {curso.imagen_url && <img src={curso.imagen_url} alt={curso.titulo} className="cta-foto"/>}
+          <h2 className="cta-titulo">Accedé ahora</h2>
+
+          <div className="cta-beneficios">
+            <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> Acceso de por vida al contenido</div>
+            {modulos.length > 0 && <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> {modulos.length} módulos y {totalLecciones} lecciones en video</div>}
+            <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> Material descargable</div>
+            <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> Certificado de finalización verificable</div>
+            <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> Actualizaciones incluidas para siempre</div>
+            {curso.dias_garantia && <div className="cta-beneficio"><Check size={15} color="var(--primary-light)"/> {curso.dias_garantia} días de garantía</div>}
+          </div>
+
+          {esOferta && <div className="oferta-badge">🏷️ OFERTA</div>}
+          {curso.precio_original && esOferta && <div className="cta-precio-original">${curso.precio_original.toLocaleString()}</div>}
+          <div className="cta-precio">${curso.precio.toLocaleString()}</div>
+
+          {sinMetodoPago ? (
+            <a className="btn-wsp"
+              href={`https://wa.me/${terapeuta.whatsapp?.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero inscribirme al curso ${curso.titulo}, ¿cómo pago?`)}`}
+              target="_blank" rel="noopener noreferrer">
+              💬 Quiero inscribirme
+            </a>
+          ) : (
+            <button className="btn-comprar" onClick={irACheckout}>✦ Comprar curso</button>
+          )}
+
+          {curso.dias_garantia && (
+            <div className="garantia-card">
+              <Shield size={22} color="#34D399" style={{marginBottom:'6px'}}/>
+              <div style={{fontSize:'13px',color:'rgba(255,255,255,0.85)',lineHeight:1.5}}>
+                {curso.dias_garantia} días de garantía{curso.politica_reembolso ? ` — ${curso.politica_reembolso}` : ''}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* FOOTER */}
       <div className="footer-curso">
-        Creado con <a href="https://lumaapp.lat" style={{color:'#8B5CF6',textDecoration:'none',fontWeight:600}}>Luma</a>
+        Creado con <a href="https://lumaapp.lat" style={{color:'var(--primary)',textDecoration:'none',fontWeight:700}}>Luma</a>
       </div>
     </div>
   )

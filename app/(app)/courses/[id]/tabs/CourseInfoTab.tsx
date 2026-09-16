@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Plus, X } from 'lucide-react'
 
@@ -16,6 +16,11 @@ type Curso = {
   estado: string
 }
 
+type Testimonio = {
+    id: string; tipo: string; nombre: string; texto: string
+    avatar_url: string | null; video_url: string | null; orden: number
+  }
+
 export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
     console.log('CURSO ESTADO:', curso.estado)
     const [form, setForm] = useState({ ...curso,
@@ -27,6 +32,19 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [msg, setMsg] = useState('')
 
+  const [testimonios, setTestimonios] = useState<Testimonio[]>([])
+  const [subiendoTesti, setSubiendoTesti] = useState<string | null>(null)
+  const [guardandoTesti, setGuardandoTesti] = useState(false)
+  const [nuevoTesti, setNuevoTesti] = useState({ tipo: 'texto', nombre: '', texto: '', avatar_url: '', video_url: '' })
+
+  useEffect(() => { cargarTestimonios() }, [])
+
+  async function cargarTestimonios() {
+    const supabase = createClient()
+    const { data } = await supabase.from('course_testimonials').select('*').eq('course_id', curso.id).order('orden')
+    if (data) setTestimonios(data)
+  }
+
   async function subirImagen(file: File) {
     setSubiendoImagen(true)
     try {
@@ -37,6 +55,48 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
     } finally { setSubiendoImagen(false) }
+  }
+
+  async function subirArchivoTesti(file: File, campo: 'avatar_url' | 'video_url') {
+    setSubiendoTesti(campo)
+    try {
+      const supabase = createClient()
+      const ext = file.name.split('.').pop()
+      const path = `testimonios/${curso.id}/${Date.now()}.${ext}`
+      await supabase.storage.from('course-images').upload(path, file, { upsert: true })
+      const { data } = supabase.storage.from('course-images').getPublicUrl(path)
+      setNuevoTesti(prev => ({ ...prev, [campo]: data.publicUrl }))
+    } finally { setSubiendoTesti(null) }
+  }
+
+  async function agregarTestimonio() {
+    if (nuevoTesti.tipo === 'texto' && !nuevoTesti.texto.trim()) return
+    if (nuevoTesti.tipo === 'imagen' && !nuevoTesti.avatar_url) return
+    if (nuevoTesti.tipo === 'video' && !nuevoTesti.video_url) return
+    setGuardandoTesti(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.from('course_testimonials').insert({
+        course_id: curso.id,
+        tipo: nuevoTesti.tipo,
+        nombre: nuevoTesti.nombre,
+        texto: nuevoTesti.texto,
+        avatar_url: nuevoTesti.avatar_url || null,
+        video_url: nuevoTesti.video_url || null,
+        orden: testimonios.length,
+      }).select().single()
+      if (error) console.error('Error insertando testimonio:', error)
+      if (data) {
+        setTestimonios(prev => [...prev, data])
+        setNuevoTesti({ tipo: 'texto', nombre: '', texto: '', avatar_url: '', video_url: '' })
+      }
+    } finally { setGuardandoTesti(false) }
+  }
+
+  async function eliminarTestimonio(id: string) {
+    const supabase = createClient()
+    await supabase.from('course_testimonials').delete().eq('id', id)
+    setTestimonios(prev => prev.filter(t => t.id !== id))
   }
 
   async function guardar(estado?: string) {
@@ -92,7 +152,15 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
         .bullet-item input{flex:1;padding:8px 10px;border-radius:8px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
         .btn-add{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--accent);background:transparent;border:0.5px solid var(--accent);border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;margin-top:4px}
         .btn-remove{width:24px;height:24px;border-radius:6px;border:none;background:#FEE2E2;color:#EF4444;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-        .precio-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+               .precio-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+       .testi-tipo-row{display:flex;gap:6px;margin-bottom:12px}
+       .testi-tipo-btn{flex:1;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-input);font-size:11px;font-weight:600;color:var(--text-muted);cursor:pointer;font-family:inherit}
+       .testi-tipo-btn.act{background:var(--accent);color:white;border-color:var(--accent)}
+       .testi-card{display:flex;gap:10px;align-items:center;padding:10px;border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--bg-input)}
+       .testi-card-thumb{width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--border-light)}
+       .testi-card-texto{flex:1;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+       .testi-upload-box{border:0.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center;background:var(--bg-input);cursor:pointer;font-size:12px;color:var(--text-muted)}
+</parameter>
        .bottom-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:0;right:0;background:transparent;border-top:none;border-bottom:none;padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;align-items:center;z-index:201;flex-wrap:wrap}
 @media(min-width:768px){.bottom-bar{left:200px;bottom:0;border-bottom:none}}
       `}</style>
@@ -213,6 +281,72 @@ export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpd
           <input value={form.politica_reembolso || ''}
             onChange={e => setForm({...form, politica_reembolso: e.target.value})}/>
         </div>
+      </div>
+
+      <div className="section-title">Testimonios</div>
+
+      {testimonios.map(ti => (
+        <div key={ti.id} className="testi-card">
+          {ti.tipo === 'video'
+            ? <div className="testi-card-thumb" style={{display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px'}}>🎬</div>
+            : ti.avatar_url
+              ? <img src={ti.avatar_url} className="testi-card-thumb"/>
+              : <div className="testi-card-thumb"/>
+          }
+          <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-primary)'}}>{ti.nombre || 'Sin nombre'}</div>
+            <div className="testi-card-texto">{ti.tipo === 'video' ? 'Video subido' : ti.texto}</div>
+          </div>
+          <button className="btn-remove" onClick={() => eliminarTestimonio(ti.id)}><X size={10}/></button>
+        </div>
+      ))}
+
+      <div style={{border:'0.5px solid var(--border)',borderRadius:'12px',padding:'14px',marginTop:'10px'}}>
+        <div className="testi-tipo-row">
+          <button className={`testi-tipo-btn${nuevoTesti.tipo==='texto'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'texto'})}>Texto</button>
+          <button className={`testi-tipo-btn${nuevoTesti.tipo==='imagen'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'imagen'})}>Imagen</button>
+          <button className={`testi-tipo-btn${nuevoTesti.tipo==='video'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'video'})}>Video</button>
+        </div>
+
+        <div className="field">
+          <label>Nombre de la alumna</label>
+          <input value={nuevoTesti.nombre} placeholder="Ej: Camila R."
+            onChange={e => setNuevoTesti({...nuevoTesti, nombre: e.target.value})}/>
+        </div>
+
+        {nuevoTesti.tipo !== 'video' && (
+          <div className="field">
+            <label>{nuevoTesti.tipo === 'imagen' ? 'Texto opcional (debajo de la imagen)' : 'Testimonio'}</label>
+            <textarea value={nuevoTesti.texto} placeholder="Qué dijo la alumna..."
+              onChange={e => setNuevoTesti({...nuevoTesti, texto: e.target.value})}/>
+          </div>
+        )}
+
+        {nuevoTesti.tipo === 'imagen' && (
+          <div className="field">
+            <label>Imagen o captura</label>
+            <div className="testi-upload-box" onClick={() => document.getElementById('testi-img')?.click()}>
+              {nuevoTesti.avatar_url ? <img src={nuevoTesti.avatar_url} style={{width:'100%',height:'100px',objectFit:'cover',borderRadius:'8px'}}/> : (subiendoTesti === 'avatar_url' ? 'Subiendo...' : '📷 Tocá para subir')}
+            </div>
+            <input id="testi-img" type="file" accept="image/*" style={{display:'none'}}
+              onChange={e => e.target.files?.[0] && subirArchivoTesti(e.target.files[0], 'avatar_url')}/>
+          </div>
+        )}
+
+        {nuevoTesti.tipo === 'video' && (
+          <div className="field">
+            <label>Video</label>
+            <div className="testi-upload-box" onClick={() => document.getElementById('testi-video')?.click()}>
+              {nuevoTesti.video_url ? '✓ Video cargado' : (subiendoTesti === 'video_url' ? 'Subiendo...' : '🎬 Tocá para subir')}
+            </div>
+            <input id="testi-video" type="file" accept="video/*" style={{display:'none'}}
+              onChange={e => e.target.files?.[0] && subirArchivoTesti(e.target.files[0], 'video_url')}/>
+          </div>
+        )}
+
+        <button className="btn-add" onClick={agregarTestimonio} disabled={guardandoTesti}>
+          <Plus size={11}/>{guardandoTesti ? 'Agregando...' : 'Agregar testimonio'}
+        </button>
       </div>
 
       <div className="bottom-bar">
