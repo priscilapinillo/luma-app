@@ -291,7 +291,7 @@ export default function CursoPublicoPage() {
         .hero-foto-frame{position:relative;z-index:2;padding:5px;border-radius:32px;background:var(--btn-bg);box-shadow:0 30px 60px rgba(0,0,0,${t.dark?0.55:0.2}),0 0 0 1px var(--border)}
         .hero-foto{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:27px;display:block}
         .hero-sticker{position:absolute;top:-14px;right:-10px;z-index:3;width:54px;height:54px;border-radius:50%;background:var(--card-bg);border:2px dashed var(--primary);display:flex;align-items:center;justify-content:center;transform:rotate(-12deg);box-shadow:0 10px 26px rgba(0,0,0,${t.dark?0.5:0.18});backdrop-filter:blur(6px)}
-        .hero-sub{font-size:15px;color:var(--text-dim);line-height:1.5;max-width:420px}
+        .hero-sub{font-size:15px;font-weight:500;color:var(--text);line-height:1.5;max-width:420px}
         .hero-btn{display:inline-flex;align-items:center;gap:8px;padding:15px 34px;background:var(--btn-bg);color:var(--btn-color);border:none;border-radius:50px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font-body);box-shadow:0 14px 34px var(--accent-dim)}
         .wave{position:relative;width:100%;line-height:0;z-index:2}
 
