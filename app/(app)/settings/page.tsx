@@ -607,7 +607,7 @@ export default function AjustesPage() {
     </div>
     <div style={{background:'var(--bg-input)',borderRadius:'10px',padding:'12px 14px',border:'0.5px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'}}>
       <span style={{fontSize:'13px',color:'var(--text-secondary)',wordBreak:'break-all'}}>
-        {typeof window !== 'undefined' ? window.location.origin : ''}/p/{perfil.slug || 'tu-slug'}
+      const url = `https://lumaapp.lat/p/${perfil.slug || ''}`
       </span>
       <button style={{padding:'6px 14px',borderRadius:'8px',background:'var(--accent-light)',color:'var(--accent)',border:'none',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}
         onClick={() => {
