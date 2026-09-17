@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 export default function Sidebar() {
@@ -13,7 +13,7 @@ export default function Sidebar() {
   const [perfil, setPerfil] = useState({ nombre: '', plan: 'Trial activo' })
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
-  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null} | null>(null)
+  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string} | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
@@ -32,7 +32,7 @@ export default function Sidebar() {
       if (!user) return
       const [{ data: prof }, { data: sub }] = await Promise.all([
         supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
-        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan').eq('user_id', user.id).maybeSingle(),
       ])
       const planLabel = sub?.status === 'active' ? 'Plan activo' : sub?.status === 'trial' ? 'Trial activo' : 'Sin plan'
       setPerfil({
@@ -64,6 +64,11 @@ export default function Sidebar() {
   }
 
   const iniciales = perfil.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?'
+
+  const ahora = new Date()
+  const trialVigente = sub?.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora
+  const premiumActivo = sub?.status === 'active' && sub.plan === 'premium' && (!sub.current_period_ends_at || new Date(sub.current_period_ends_at) > ahora)
+  const tieneAccesoCursos = !!(trialVigente || premiumActivo)
 
   const links = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
@@ -331,6 +336,12 @@ html.dark .sb-mobile {
 
             <ul className="sb-dropdown-list">
               <li>
+                <Link href="/courses" className="sb-dropdown-item" onClick={() => setMenuMobile(false)} style={{position:'relative'}}>
+                  <BookOpen size={16}/> <span>Cursos</span>
+                  {!tieneAccesoCursos && <Lock size={11} style={{marginLeft:'auto',opacity:0.6}}/>}
+                </Link>
+              </li>
+              <li>
                 <Link href="/roadmap" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
                   <Map size={16}/> <span>Novedades</span>
                 </Link>
@@ -443,6 +454,11 @@ html.dark .sb-mobile {
         ))}
 
         <hr className="sb-div"/>
+
+        <Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
+          <BookOpen size={13}/>Cursos
+          {!tieneAccesoCursos && <Lock size={10} style={{marginLeft:'auto',opacity:0.6}}/>}
+        </Link>
 
         <Link href="/settings" className={`sb-link${pathname==='/settings'?' active':''}`}>
           <Settings size={13}/>Configuración

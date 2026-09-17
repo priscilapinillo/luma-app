@@ -29,9 +29,18 @@ export default function AuthPage() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
-    router.push('/dashboard')
+
+    const userId = data.user?.id
+    const { data: perfilTerapeuta } = await supabase
+      .from('therapist_profiles').select('user_id').eq('user_id', userId).maybeSingle()
+
+    if (perfilTerapeuta) {
+      router.push('/dashboard')
+    } else {
+      router.push('/mi-cuenta/cursos')
+    }
   }
   async function handleRecuperar(e?: React.FormEvent) {
     e?.preventDefault()
