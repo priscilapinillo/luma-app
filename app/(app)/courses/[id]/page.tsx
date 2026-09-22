@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, BookOpen, Users, Info } from 'lucide-react'
+import { ArrowLeft, BookOpen, Users, Info, GraduationCap } from 'lucide-react'
 import CourseInfoTab from './tabs/CourseInfoTab'
 import CourseContentTab from './tabs/CourseContentTab'
 import CourseStudentsTab from './tabs/CourseStudentsTab'
+import CourseExamTab from './tabs/CourseExamTab'
 
 type Curso = {
   id: string
@@ -36,7 +37,7 @@ export default function CourseEditPage() {
   const id = params.id as string
   const [curso, setCurso] = useState<Curso | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas'>('info')
+  const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas' | 'examen'>('info')
 
   useEffect(() => { cargarCurso() }, [id])
 
@@ -109,12 +110,16 @@ export default function CourseEditPage() {
         <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')}>
           <Users size={13}/>Alumnas
         </button>
+        <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
+          <GraduationCap size={13}/>Examen
+        </button>
       </div>
 
       {/* CONTENIDO */}
       {tab === 'info' && <CourseInfoTab curso={curso} onUpdate={setCurso}/>}
       {tab === 'contenido' && <CourseContentTab cursoId={id}/>}
       {tab === 'alumnas' && <CourseStudentsTab cursoId={id}/>}
+      {tab === 'examen' && <CourseExamTab cursoId={id}/>}
     </div>
   )
 }

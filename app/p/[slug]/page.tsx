@@ -29,6 +29,12 @@ type Servicio = {
   duracion_estimada: number; precio_base: number; color: string
   tipo_servicio?: string; plazo_horas?: number; precio_usd?: number | null
 }
+type Curso = {
+  id: string; titulo: string; slug: string
+  descripcion_corta: string; imagen_url: string
+  precio: number; nivel: string
+}
+
 const SIMBOLOS_MONEDA: Record<string, string> = {
   ARS: '$', MXN: 'MX$', COP: 'COL$', CLP: 'CL$',
   PEN: 'S/', UYU: '$U', BOB: 'Bs.', PYG: '₲',
@@ -119,6 +125,25 @@ const TESTIMONIOS_DEFAULT = [
   { texto: 'La sesión fue increíble. Llegué confundida y me fui con total claridad.', nombre: 'Camila R.' },
   { texto: 'Su energía y presencia me hicieron sentir contenida desde el primer momento.', nombre: 'Florencia M.' },
   { texto: 'Las lecturas escritas son increíbles, siempre súper detalladas y amorosas.', nombre: 'Julieta A.' },
+]
+
+const ZODIACOS_HERO = [
+  { simbolo: '♈', top: '6%', left: '4%', size: '20px', rot: '-8deg' },
+  { simbolo: '♌', top: '10%', left: '92%', size: '17px', rot: '10deg' },
+  { simbolo: '♎', top: '66%', left: '6%', size: '18px', rot: '6deg' },
+  { simbolo: '♓', top: '4%', left: '62%', size: '15px', rot: '-4deg' },
+  { simbolo: '♊', top: '70%', left: '93%', size: '16px', rot: '12deg' },
+  { simbolo: '♑', top: '24%', left: '3%', size: '14px', rot: '9deg' },
+  { simbolo: '♐', top: '30%', left: '95%', size: '15px', rot: '-11deg' },
+  { simbolo: '♋', top: '46%', left: '4%', size: '13px', rot: '5deg' },
+]
+const DESTELLOS_HERO = [
+  { simbolo: '✦', top: '20%', left: '8%', size: '12px', delay: '0s' },
+  { simbolo: '✧', top: '58%', left: '15%', size: '9px', delay: '0.9s' },
+  { simbolo: '✦', top: '10%', left: '82%', size: '10px', delay: '1.6s' },
+  { simbolo: '✧', top: '60%', left: '90%', size: '8px', delay: '0.4s' },
+  { simbolo: '✦', top: '48%', left: '3%', size: '8px', delay: '2.1s' },
+  { simbolo: '✧', top: '35%', left: '96%', size: '7px', delay: '1.2s' },
 ]
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -235,6 +260,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [bloqueos, setBloqueos] = useState<{fecha_inicio:string;fecha_fin:string}[]>([])
   const [entregasLlenas, setEntregasLlenas] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [cursos, setCursos] = useState<Curso[]>([])
+  const [tabActiva, setTabActiva] = useState<'servicios' | 'cursos' | 'links'>('servicios')
+  const [cursoPageIdx, setCursoPageIdx] = useState(0)
 
   // flujo de reserva
   const [paso, setPaso] = useState(0) // 0=inicial 2=horarios 3=form
@@ -324,13 +352,16 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
       setTerapeuta(perfil)
-      const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }] = await Promise.all([
+      const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
         supabase.from('availability').select('*').eq('user_id', perfil.user_id),
         supabase.from('sessions').select('fecha,hora,duracion').eq('user_id', perfil.user_id),
         supabase.from('calendar_blocks').select('fecha_inicio,fecha_fin').eq('user_id', perfil.user_id),
+        supabase.from('courses').select('id,titulo,slug,descripcion_corta,imagen_url,precio,nivel')
+          .eq('user_id', perfil.user_id).eq('estado', 'publicado'),
       ])
       if (servs) setServicios(servs)
+      if (cursosData) setCursos(cursosData)
       if (disp) setDisponibilidad(disp)
         if (sess) setSesionesOcupadas(sess.map(s => ({
           fecha: s.fecha?.split('T')[0] || '',
@@ -552,7 +583,21 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .nav-logo{font-family:var(--font-title);font-size:clamp(11px,2.5vw,20px);font-weight:600;color:var(--primary);letter-spacing:1px;overflow:hidden;max-width:55vw;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
 
-        .hero{position:relative;min-height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;background:${t.heroBg}}
+        .hero{position:relative;min-height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;
+          background:
+            radial-gradient(circle at 14% 18%, var(--accent-dim) 0%, transparent 42%),
+            radial-gradient(circle at 88% 8%, var(--primary-dim) 0%, transparent 38%),
+            radial-gradient(circle at 78% 92%, var(--accent-dim) 0%, transparent 46%),
+            ${t.heroBg};
+        }
+        .hero-grano::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+          opacity:${t.dark ? 0.14 : 0.09};
+          background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+        .hero-mandala{position:absolute;z-index:0;pointer-events:none;opacity:${t.dark ? 0.14 : 0.09};top:50%;left:50%;width:640px;height:640px;transform:translate(-50%,-50%)}
+        .hero-zodiaco{position:absolute;z-index:0;color:var(--primary-light);opacity:.28;font-family:serif;pointer-events:none;user-select:none;text-shadow:0 0 10px var(--primary-dim);animation:zodiflotar 7s ease-in-out infinite}
+        @keyframes zodiflotar{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}50%{transform:translateY(-8px) rotate(var(--rot,0deg))}}
+        .hero-destello{position:absolute;z-index:0;color:var(--accent-light);opacity:0;pointer-events:none;animation:destellar 2.8s ease-in-out infinite}
+        @keyframes destellar{0%,100%{opacity:0;transform:scale(.6) rotate(0deg)}50%{opacity:.8;transform:scale(1) rotate(90deg)}}
         .carta-wrap{position:relative;margin-bottom:32px;animation:float 6s ease-in-out infinite}
         @keyframes float{0%,100%{transform:translateY(0px)}50%{transform:translateY(-12px)}}
         .carta{width:220px;height:340px;border-radius:16px;border:1.5px solid var(--primary);position:relative;overflow:hidden;box-shadow:0 0 40px var(--primary-dim),0 0 80px var(--accent-dim),inset 0 0 30px var(--primary-dim)}
@@ -566,6 +611,59 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hero-bio{font-size:17px;line-height:1.8;color:var(--text);max-width:340px;font-weight:400;margin-bottom:32px;font-family:var(--font-subtitle)}
         .hero-cta{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;margin-bottom:16px}
         .hero-cta:hover{transform:translateY(-2px)}
+        .hero-ctas{display:flex;flex-direction:column;align-items:center}
+        .hero-cta-fancy{
+          --heroBlack:color-mix(in srgb, black 80%, var(--accent) 20%);
+          --border_radius:9999px; --transtion:0.3s ease-in-out;
+          cursor:pointer; position:relative; display:flex; align-items:center; gap:0.5rem;
+          transform-origin:center; padding:16px 36px; background-color:transparent;
+          border:none; border-radius:var(--border_radius);
+          transform:scale(calc(1 + (var(--active,0) * 0.06)));
+          transition:transform var(--transtion); margin-bottom:16px; font-family:var(--font-body);
+        }
+        .hero-cta-fancy::before{
+          content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+          width:100%; height:100%; background-color:var(--heroBlack); border-radius:var(--border_radius);
+          box-shadow:inset 0 0.5px hsl(0,0%,100%), inset 0 -1px 2px 0 hsl(0,0%,0%),
+            0px 4px 10px -4px hsla(0 0% 0% / calc(1 - var(--active,0))),
+            0 0 0 calc(var(--active,0) * 0.375rem) var(--accent-dim);
+          transition:all var(--transtion); z-index:0;
+        }
+        .hero-cta-fancy::after{
+          content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+          width:100%; height:100%;
+          background-color:color-mix(in srgb, var(--accent) 75%, transparent);
+          background-image:
+            radial-gradient(at 51% 89%, var(--accent-light) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, var(--accent) 0px, transparent 50%),
+            radial-gradient(at 22% 91%, var(--accent) 0px, transparent 50%);
+          background-position:top; opacity:var(--active,0); border-radius:var(--border_radius);
+          transition:opacity var(--transtion); z-index:2;
+        }
+        .hero-cta-fancy:is(:hover,:focus-visible){ --active:1; }
+        .hero-cta-fancy:active{ transform:scale(1); }
+        .hero-cta-dots{ overflow:hidden; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+          width:calc(100% + 2px); height:calc(100% + 2px); background-color:transparent;
+          border-radius:var(--border_radius); z-index:-10; }
+        .hero-cta-dots::before{ content:''; position:absolute; top:30%; left:50%;
+          transform-origin:left; width:100%; height:2rem; background-color:var(--primary-light);
+          mask:linear-gradient(transparent 0%, white 120%); animation:heroCtaRotate 2s linear infinite; }
+        @keyframes heroCtaRotate{ to{ transform:rotate(360deg); } }
+        .hero-cta-sparkle{ position:relative; z-index:10; width:1.6rem; flex-shrink:0; }
+        .hero-cta-sparkle .path{ fill:currentColor; stroke:currentColor; transform-origin:center; color:var(--btn-color); }
+        .hero-cta-fancy:is(:hover,:focus) .hero-cta-sparkle .path{ animation:heroCtaPath 1.5s linear 0.5s infinite; }
+        .hero-cta-sparkle .path:nth-child(1){ --scale1:1.2; }
+        .hero-cta-sparkle .path:nth-child(2){ --scale2:1.2; }
+        .hero-cta-sparkle .path:nth-child(3){ --scale3:1.2; }
+        @keyframes heroCtaPath{
+          0%,34%,71%,100%{ transform:scale(1); }
+          17%{ transform:scale(var(--scale1,1)); }
+          49%{ transform:scale(var(--scale2,1)); }
+          83%{ transform:scale(var(--scale3,1)); }
+        }
+        .hero-cta-texto{ position:relative; z-index:10; color:var(--btn-color); font-size:14px; font-weight:600; letter-spacing:2px; text-transform:uppercase; }
+        .hero-cta-secundario{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:transparent;color:var(--primary);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:1.5px;text-transform:uppercase;transition:all 0.3s;margin-bottom:16px}
+        .hero-cta-secundario:hover{background:var(--primary-dim);color:var(--cream)}
         .hero-trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);letter-spacing:1px;font-family:var(--font-subtitle)}
 
         .section{position:relative;z-index:1;padding:60px 20px;max-width:560px;margin:0 auto;width:100%}
@@ -591,6 +689,39 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .serv-precio{font-family:var(--font-title);font-size:22px;color:var(--primary-light);font-weight:500}
         .serv-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);font-family:var(--font-subtitle)}
         .serv-btn{padding:8px 20px;background:transparent;border:0.5px solid var(--primary-dim);color:var(--primary);border-radius:50px;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:var(--font-subtitle);font-weight:600;transition:all 0.2s;min-height:36px}
+
+        .tabs-toggle{display:flex;position:relative;background:var(--card-bg);border:0.5px solid var(--border);border-radius:14px;backdrop-filter:blur(10px);overflow:hidden;width:fit-content;margin:0 auto 28px;box-shadow:0 8px 24px rgba(0,0,0,0.15)}
+        .tabs-toggle input{display:none}
+        .tabs-toggle label{flex:1;display:flex;align-items:center;justify-content:center;min-width:90px;font-size:12px;padding:10px 18px;cursor:pointer;font-weight:600;color:var(--text-dim);position:relative;z-index:2;transition:color 0.25s;font-family:var(--font-subtitle)}
+        .tabs-toggle input:checked + label{color:var(--btn-color)}
+        .tabs-glider{position:absolute;top:0;bottom:0;width:calc(100% / 3);border-radius:12px;z-index:1;background:var(--btn-bg);transition:transform 0.4s cubic-bezier(0.37,1.95,0.66,0.56);box-shadow:0 0 18px var(--accent-dim)}
+        #tab-servicios:checked ~ .tabs-glider{transform:translateX(0%)}
+        #tab-cursos:checked ~ .tabs-glider{transform:translateX(100%)}
+        #tab-links:checked ~ .tabs-glider{transform:translateX(200%)}
+
+        .curso-card{position:relative;border-radius:24px;overflow:hidden;padding:20px 18px 18px;display:flex;flex-direction:column;justify-content:flex-end;box-shadow:0 16px 40px rgba(0,0,0,0.35);background-size:cover;background-position:center;text-decoration:none}
+.curso-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(to bottom, transparent 0%, color-mix(in srgb, color-mix(in srgb, black 60%, var(--accent) 40%) 65%, transparent) 45%, color-mix(in srgb, color-mix(in srgb, black 88%, var(--accent) 12%) 65%, transparent) 100%)}
+        .curso-badge{position:relative;z-index:2;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--primary-light);opacity:0.9;margin-bottom:4px;font-family:var(--font-subtitle);text-decoration:none}
+        .curso-h2{position:relative;z-index:2;font-family:var(--font-title);font-weight:600;font-size:21px;line-height:1.15;color:white;margin-bottom:6px;text-decoration:none}
+        .curso-desc{position:relative;z-index:2;font-size:12px;color:rgba(255,255,255,0.8);line-height:1.3;margin-bottom:14px;font-family:var(--font-subtitle);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-decoration:none}
+        .curso-bottom{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .curso-precio{font-family:var(--font-title);font-weight:600;font-size:16px;color:white;text-decoration:none}
+        .curso-btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;background:white;color:#1A1035;border-radius:50px;font-size:11px;font-weight:700;white-space:nowrap;font-family:var(--font-subtitle);text-decoration:none}
+
+        .cursos-mobile{display:flex;flex-direction:column;gap:16px}
+        .cursos-mobile .curso-card{min-height:380px}
+        .cursos-desktop{display:none}
+        .cursos-dots{display:none}
+        @media(min-width:768px){
+          .cursos-mobile{display:none}
+          .cursos-desktop{display:grid;grid-template-columns:1.15fr 1fr;grid-template-rows:1fr 1fr;gap:14px;height:440px}
+          .cursos-desktop .curso-card:first-child{grid-row:1/3}
+          .cursos-dots{display:flex;justify-content:center;gap:8px;margin-top:18px}
+        }
+        .cursos-dot{width:7px;height:7px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.2s;border:none;padding:0}
+        .cursos-dot.act{width:22px;border-radius:4px;background:var(--primary)}
+
+        .links-placeholder{text-align:center;padding:48px 20px;color:var(--text-dim);font-family:var(--font-subtitle);font-size:14px;line-height:1.7}
 
         .serv-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.88);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn 0.2s ease}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -737,7 +868,18 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </button>
       </nav>
 
-      <section className="hero">
+      <section className="hero hero-grano">
+        <svg className="hero-mandala" viewBox="0 0 200 200" fill="none">
+          <circle cx="100" cy="100" r="98" stroke="var(--primary)" strokeWidth="0.5"/>
+          <circle cx="100" cy="100" r="76" stroke="var(--accent-light)" strokeWidth="0.5"/>
+          <circle cx="100" cy="100" r="54" stroke="var(--primary)" strokeWidth="0.5"/>
+        </svg>
+        {ZODIACOS_HERO.map((z, i) => (
+          <div key={i} className="hero-zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot} as React.CSSProperties}>{z.simbolo}</div>
+        ))}
+        {DESTELLOS_HERO.map((d, i) => (
+          <div key={i} className="hero-destello" style={{top:d.top,left:d.left,fontSize:d.size,animationDelay:d.delay}}>{d.simbolo}</div>
+        ))}
         <div className="carta-wrap">
           <div className="carta-glow"/>
           <div className="carta">
@@ -753,9 +895,22 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div className="hero-esp">{terapeuta.especialidad || 'Tarot & Bienestar'}</div>
           <h1 className="hero-nombre">{terapeuta.nombre_profesional}</h1>
           <p className="hero-bio">{terapeuta.mensaje_bienvenida || 'Te acompaño a conectar con tu intuición y encontrar claridad.'}</p>
-          <button className="hero-cta" onClick={() => reservaRef.current?.scrollIntoView({behavior:'smooth'})}>
-            {t.deco} Reservar sesión
-          </button>
+          <div className="hero-ctas">
+          <button className="hero-cta-fancy" onClick={() => { setTabActiva('servicios'); reservaRef.current?.scrollIntoView({behavior:'smooth'}) }}>
+              <div className="hero-cta-dots"/>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="hero-cta-sparkle">
+                <path className="path" strokeLinejoin="round" strokeLinecap="round" stroke="currentColor" fill="currentColor" d="M14.187 8.096L15 5.25L15.813 8.096C16.0231 8.83114 16.4171 9.50062 16.9577 10.0413C17.4984 10.5819 18.1679 10.9759 18.903 11.186L21.75 12L18.904 12.813C18.1689 13.0231 17.4994 13.4171 16.9587 13.9577C16.4181 14.4984 16.0241 15.1679 15.814 15.903L15 18.75L14.187 15.904C13.9769 15.1689 13.5829 14.4994 13.0423 13.9587C12.5016 13.4181 11.8321 13.0241 11.097 12.814L8.25 12L11.096 11.187C11.8311 10.9769 12.5006 10.5829 13.0413 10.0423C13.5819 9.50162 13.9759 8.83214 14.186 8.097L14.187 8.096Z"></path>
+                <path className="path" strokeLinejoin="round" strokeLinecap="round" stroke="currentColor" fill="currentColor" d="M6 14.25L5.741 15.285C5.59267 15.8785 5.28579 16.4206 4.85319 16.8532C4.42059 17.2858 3.87853 17.5927 3.285 17.741L2.25 18L3.285 18.259C3.87853 18.4073 4.42059 18.7142 4.85319 19.1468C5.28579 19.5794 5.59267 20.1215 5.741 20.715L6 21.75L6.259 20.715C6.40725 20.1216 6.71398 19.5796 7.14639 19.147C7.5788 18.7144 8.12065 18.4075 8.714 18.259L9.75 18L8.714 17.741C8.12065 17.5925 7.5788 17.2856 7.14639 16.853C6.71398 16.4204 6.40725 15.8784 6.259 15.285L6 14.25Z"></path>
+                <path className="path" strokeLinejoin="round" strokeLinecap="round" stroke="currentColor" fill="currentColor" d="M6.5 4L6.303 4.5915C6.24777 4.75718 6.15472 4.90774 6.03123 5.03123C5.90774 5.15472 5.75718 5.24777 5.5915 5.303L5 5.5L5.5915 5.697C5.75718 5.75223 5.90774 5.84528 6.03123 5.96877C6.15472 6.09226 6.24282 6.15472 6.24777 6.4085L6.5 7L6.697 6.4085C6.75223 6.24282 6.84528 6.09226 6.96877 5.96877C7.09226 5.84528 7.24282 5.75223 7.4085 5.697L8 5.5L7.4085 5.303C7.24282 5.24777 7.09226 5.15472 6.96877 5.03123C6.84528 4.90774 6.75223 4.75718 6.697 4.5915L6.5 4Z"></path>
+              </svg>
+              <span className="hero-cta-texto">{t.deco} Reservar sesión</span>
+            </button>
+            {cursos.length > 0 && (
+              <button className="hero-cta-secundario" onClick={() => { setTabActiva('cursos'); reservaRef.current?.scrollIntoView({behavior:'smooth'}) }}>
+                Ver cursos
+              </button>
+            )}
+          </div>
           <div className="hero-trust"><Shield size={11}/> Sesiones online · Espacio seguro y confidencial</div>
         </div>
         <div className="hero-scroll"><ChevronDown size={20}/></div>
@@ -794,13 +949,73 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <div className="section-label">Servicios</div>
         <h2 className="section-title">¿Cómo puedo acompañarte?</h2>
         <p className="section-sub">Elegí el servicio que resuene con lo que necesitás hoy</p>
-{(terapeuta.zona_horaria || terapeuta.moneda) && (
+        {(terapeuta.zona_horaria || terapeuta.moneda) && (
   <div style={{fontSize:'11px',color:'var(--text-dim)',fontFamily:'var(--font-subtitle)',marginBottom:'16px',marginTop:'-8px',letterSpacing:'0.3px'}}>
     Horarios y precios en zona horaria y moneda de {terapeuta.zona_horaria?.split('/')[1]?.replace(/_/g,' ') || 'Argentina'}
   </div>
 )}
 
-        {servicios.length === 0 ? (
+        <div className="tabs-toggle">
+          <input type="radio" id="tab-servicios" name="tab" checked={tabActiva==='servicios'} onChange={() => setTabActiva('servicios')}/>
+          <label htmlFor="tab-servicios">Servicios</label>
+          <input type="radio" id="tab-cursos" name="tab" checked={tabActiva==='cursos'} onChange={() => setTabActiva('cursos')}/>
+          <label htmlFor="tab-cursos">Cursos</label>
+          <input type="radio" id="tab-links" name="tab" checked={tabActiva==='links'} onChange={() => setTabActiva('links')}/>
+          <label htmlFor="tab-links">Links</label>
+          <div className="tabs-glider"/>
+        </div>
+
+        {tabActiva === 'links' && (
+          <div className="links-placeholder">{t.deco} Muy pronto vas a poder ver acá mis redes y otros links {t.deco}</div>
+        )}
+
+{tabActiva === 'cursos' && (
+          cursos.length === 0 ? (
+            <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
+              Próximamente disponibles {t.deco}
+            </div>
+          ) : (<>
+            <div className="cursos-mobile">
+              {cursos.map(c => (
+                <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
+                  <div className="curso-overlay"/>
+                  {c.nivel && <div className="curso-badge">{c.nivel}</div>}
+                  <div className="curso-h2">{c.titulo}</div>
+                  {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
+                  <div className="curso-bottom">
+                    <div className="curso-precio">${c.precio?.toLocaleString()}</div>
+                    <div className="curso-btn">{t.deco} Ver detalle</div>
+                  </div>
+                </a>
+              ))}
+            </div>
+
+            <div className="cursos-desktop">
+              {cursos.slice(cursoPageIdx*3, cursoPageIdx*3+3).map(c => (
+                <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
+                  <div className="curso-overlay"/>
+                  {c.nivel && <div className="curso-badge">{c.nivel}</div>}
+                  <div className="curso-h2">{c.titulo}</div>
+                  {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
+                  <div className="curso-bottom">
+                    <div className="curso-precio">${c.precio?.toLocaleString()}</div>
+                    <div className="curso-btn">{t.deco} Ver detalle</div>
+                  </div>
+                </a>
+              ))}
+            </div>
+            {cursos.length > 3 && (
+              <div className="cursos-dots">
+                {Array.from({length: Math.ceil(cursos.length/3)}).map((_,i) => (
+                  <button key={i} className={`cursos-dot${cursoPageIdx===i?' act':''}`} onClick={() => setCursoPageIdx(i)}/>
+                ))}
+              </div>
+            )}
+          </>)
+        )}
+
+        {tabActiva === 'servicios' && (
+        servicios.length === 0 ? (
           <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
             Próximamente disponibles {t.deco}
           </div>
@@ -832,7 +1047,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               </div>
             ))}
           </div>
-        )}
+        ))}
 
         {/* HORARIOS — solo para sesiones en vivo */}
         {paso >= 1 && paso < 3 && servicioSel && servicioSel.tipo_servicio !== 'entrega' && !enviado && secciones.disponibilidad && (

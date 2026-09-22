@@ -30,8 +30,9 @@ export default function CourseContentTab({ cursoId }: { cursoId: string }) {
     descripcion: '', notas: '',
   })
   const [guardando, setGuardando] = useState(false)
-  const [subiendoAdjunto, setSubiendoAdjunto] = useState(false)
   const [adjuntosNuevos, setAdjuntosNuevos] = useState<{nombre: string; url: string; tipo: string}[]>([])
+  const [nuevoAdjuntoNombre, setNuevoAdjuntoNombre] = useState('')
+  const [nuevoAdjuntoUrl, setNuevoAdjuntoUrl] = useState('')
 const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre: string; url: string; tipo: string}[]>([])
 
   useEffect(() => { cargarModulos() }, [cursoId])
@@ -78,18 +79,12 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
   }
 
 
-  async function subirAdjunto(file: File) {
-    setSubiendoAdjunto(true)
-    try {
-      const supabase = createClient()
-      const ext = file.name.split('.').pop()
-      const nombre = `${Date.now()}-${file.name}`
-      await supabase.storage.from('lesson-attachments').upload(nombre, file, { upsert: true })
-      const { data } = supabase.storage.from('lesson-attachments').getPublicUrl(nombre)
-      setAdjuntosNuevos(prev => [...prev, { nombre: file.name, url: data.publicUrl, tipo: ext || 'pdf' }])
-    } catch(err) { console.error(err) }
-    finally { setSubiendoAdjunto(false) }
-  } 
+  function agregarAdjuntoLink() {
+    if (!nuevoAdjuntoNombre.trim() || !nuevoAdjuntoUrl.trim()) return
+    setAdjuntosNuevos(prev => [...prev, { nombre: nuevoAdjuntoNombre.trim(), url: nuevoAdjuntoUrl.trim(), tipo: 'link' }])
+    setNuevoAdjuntoNombre('')
+    setNuevoAdjuntoUrl('')
+  }
 
   async function guardarLeccion(moduleId: string) {
     if (!formLeccion.titulo) return
@@ -337,13 +332,20 @@ setModalLeccion(m.id) }}
             </div>
             <div className="field">
               <label>Archivos descargables</label>
-              <div style={{border:'0.5px dashed var(--border)',borderRadius:'10px',padding:'14px',textAlign:'center',background:'var(--bg-input)',cursor:'pointer'}}
-                onClick={() => document.getElementById('adj-upload')?.click()}>
-                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>
-                  {subiendoAdjunto ? 'Subiendo...' : '📎 Subir PDF, audio u otro archivo'}
-                </div>
-                <input id="adj-upload" type="file" accept=".pdf,.mp3,.mp4,.doc,.docx,.zip" style={{display:'none'}}
-                  onChange={e => e.target.files?.[0] && subirAdjunto(e.target.files[0])}/>
+              <span style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'6px',display:'block'}}>
+                Subí el archivo a Google Drive o Dropbox y pegá el link acá. Si después lo actualizás, tus alumnas siempre van a ver la última versión.
+              </span>
+              <div style={{display:'flex',gap:'6px'}}>
+                <input value={nuevoAdjuntoNombre} placeholder="Nombre (ej: Ficha de arcanos)"
+                  onChange={e => setNuevoAdjuntoNombre(e.target.value)} style={{flex:1}}/>
+              </div>
+              <div style={{display:'flex',gap:'6px',marginTop:'6px'}}>
+                <input value={nuevoAdjuntoUrl} placeholder="https://drive.google.com/..."
+                  onChange={e => setNuevoAdjuntoUrl(e.target.value)} style={{flex:1}}/>
+                <button type="button" onClick={agregarAdjuntoLink}
+                  style={{padding:'0 14px',background:'var(--accent)',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>
+                  + Agregar
+                </button>
               </div>
               {adjuntosExistentes.map((a, i) => (
                 <div key={i} style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'6px',padding:'6px 10px',background:'var(--bg-input)',borderRadius:'8px',border:'0.5px solid var(--border)'}}>

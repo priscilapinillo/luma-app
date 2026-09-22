@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote } from 'lucide-react'
+import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap } from 'lucide-react'
 
 type Leccion = {
   id: string; titulo: string; tipo: string; contenido_url: string | null
@@ -16,6 +16,10 @@ type Modulo = {
   lecciones: Leccion[]
 }
 
+type OpcionExamen = { id: string; texto: string }
+type PreguntaExamen = { id: string; pregunta: string; tipo: string; opciones: OpcionExamen[] }
+type ExamenInfo = { id: string; titulo: string; puntaje_minimo: number; max_intentos: number }
+
 export default function AulaCursoPage() {
   const params = useParams()
   const router = useRouter()
@@ -24,13 +28,23 @@ export default function AulaCursoPage() {
   const [loading, setLoading] = useState(true)
   const [sinAcceso, setSinAcceso] = useState(false)
   const [debugInfo, setDebugInfo] = useState('')
-  const [curso, setCurso] = useState<{ titulo: string; imagen_url: string } | null>(null)
+  const [curso, setCurso] = useState<{ titulo: string; imagen_url: string; user_id: string } | null>(null)
   const [modulos, setModulos] = useState<Modulo[]>([])
   const [enrollmentId, setEnrollmentId] = useState<string | null>(null)
   const [completadas, setCompletadas] = useState<Set<string>>(new Set())
   const [moduloAbierto, setModuloAbierto] = useState<string | null>(null)
   const [leccionActiva, setLeccionActiva] = useState<Leccion | null>(null)
   const [guardandoProgreso, setGuardandoProgreso] = useState(false)
+  const [examen, setExamen] = useState<ExamenInfo | null>(null)
+  const [intentosUsados, setIntentosUsados] = useState(0)
+  const [ultimoResultado, setUltimoResultado] = useState<{puntaje: number; aprobado: boolean} | null>(null)
+  const [vista, setVista] = useState<'curso' | 'examen'>('curso')
+  const [preguntasExamen, setPreguntasExamen] = useState<PreguntaExamen[]>([])
+  const [respuestas, setRespuestas] = useState<Record<string,string>>({})
+  const [enviandoExamen, setEnviandoExamen] = useState(false)
+  const [cargandoExamen, setCargandoExamen] = useState(false)
+  const [personaId, setPersonaId] = useState<string | null>(null)
+  const [certificadoCodigo, setCertificadoCodigo] = useState<string | null>(null)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -43,6 +57,7 @@ export default function AulaCursoPage() {
       const { data: persona } = await supabase
         .from('persons').select('id').eq('auth_user_id', user.id).maybeSingle()
       if (!persona) { setSinAcceso(true); setLoading(false); return }
+      setPersonaId(persona.id)
 
       const { data: enrollment, error: errorEnroll } = await supabase
         .from('enrollments').select('id, estado')
@@ -55,7 +70,7 @@ export default function AulaCursoPage() {
       setEnrollmentId(enrollment.id)
 
       const { data: cursoData } = await supabase
-        .from('courses').select('titulo, imagen_url').eq('id', courseId).maybeSingle()
+        .from('courses').select('titulo, imagen_url, user_id').eq('id', courseId).maybeSingle()
       if (cursoData) setCurso(cursoData)
 
       const { data: mods } = await supabase
@@ -80,6 +95,24 @@ export default function AulaCursoPage() {
       if (progreso) {
         setCompletadas(new Set(progreso.filter(p => p.completada).map(p => p.lesson_id)))
       }
+
+      const { data: examData } = await supabase
+        .from('exams').select('id,titulo,puntaje_minimo,max_intentos').eq('course_id', courseId).maybeSingle()
+      if (examData) {
+        setExamen(examData)
+        const { data: intentos } = await supabase
+          .from('exam_attempts').select('id,puntaje_obtenido,aprobado,completado_en')
+          .eq('exam_id', examData.id).eq('enrollment_id', enrollment.id)
+          .order('completado_en', { ascending: false })
+        if (intentos) {
+          setIntentosUsados(intentos.length)
+          if (intentos.length > 0) setUltimoResultado({ puntaje: intentos[0].puntaje_obtenido, aprobado: intentos[0].aprobado })
+        }
+      }
+
+      const { data: certExistente } = await supabase
+        .from('certificates').select('codigo_unico').eq('enrollment_id', enrollment.id).maybeSingle()
+      if (certExistente) setCertificadoCodigo(certExistente.codigo_unico)
     } catch (e: any) {
       console.error(e)
       setDebugInfo(`Error inesperado: ${e?.message || JSON.stringify(e)}`)
@@ -116,6 +149,68 @@ export default function AulaCursoPage() {
       })
     } catch (e) { console.error(e) }
     finally { setGuardandoProgreso(false) }
+  }
+
+  async function iniciarExamen() {
+    if (!examen) return
+    setCargandoExamen(true)
+    try {
+      const supabase = createClient()
+      const { data: preg } = await supabase.from('exam_questions').select('id,pregunta,tipo,orden').eq('exam_id', examen.id).order('orden')
+      if (preg) {
+        const { data: opts } = await supabase.from('exam_options').select('id,texto,question_id').in('question_id', preg.map(p => p.id)).order('orden')
+        setPreguntasExamen(preg.map(p => ({ ...p, opciones: (opts || []).filter(o => o.question_id === p.id) })))
+      }
+      setRespuestas({})
+      setVista('examen')
+    } catch (e) { console.error(e) }
+    finally { setCargandoExamen(false) }
+  }
+
+  function seleccionarRespuesta(preguntaId: string, opcionId: string) {
+    setRespuestas(prev => ({ ...prev, [preguntaId]: opcionId }))
+  }
+
+  async function enviarExamen() {
+    if (!examen || !enrollmentId) return
+    setEnviandoExamen(true)
+    try {
+      const supabase = createClient()
+      const preguntaIds = preguntasExamen.map(p => p.id)
+      const { data: opcionesCorrectas } = await supabase
+        .from('exam_options').select('id,question_id,es_correcta')
+        .in('question_id', preguntaIds).eq('es_correcta', true)
+
+      let correctas = 0
+      preguntasExamen.forEach(p => {
+        const correcta = opcionesCorrectas?.find(o => o.question_id === p.id)
+        if (correcta && respuestas[p.id] === correcta.id) correctas++
+      })
+      const puntaje = preguntasExamen.length > 0 ? Math.round((correctas / preguntasExamen.length) * 100) : 0
+      const aprobado = puntaje >= examen.puntaje_minimo
+
+      await supabase.from('exam_attempts').insert({
+        exam_id: examen.id, enrollment_id: enrollmentId,
+        respuestas, puntaje_obtenido: puntaje, aprobado,
+      })
+
+      setUltimoResultado({ puntaje, aprobado })
+      setIntentosUsados(prev => prev + 1)
+      setVista('curso')
+
+      if (aprobado && !certificadoCodigo && curso && personaId) {
+        const codigoNuevo = 'LUMA-' + Math.random().toString(36).slice(2, 8).toUpperCase()
+        const { data: cert, error: errorCert } = await supabase.from('certificates').insert({
+          enrollment_id: enrollmentId,
+          course_id: courseId,
+          person_id: personaId,
+          terapeuta_id: curso.user_id,
+          codigo_unico: codigoNuevo,
+        }).select('codigo_unico').single()
+        if (!errorCert && cert) setCertificadoCodigo(cert.codigo_unico)
+      }
+    } catch (e) { console.error(e) }
+    finally { setEnviandoExamen(false) }
   }
 
   async function cerrarSesion() {
@@ -178,6 +273,16 @@ export default function AulaCursoPage() {
         .aula-btn-completar{display:flex;align-items:center;gap:8px;padding:12px 20px;border-radius:10px;border:none;background:#0A0A0A;color:white;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
         .aula-btn-completar.done{background:#DCFCE7;color:#166534}
         .aula-notas{margin-top:24px;padding:16px;background:white;border:1px solid #E5E5E5;border-radius:12px;font-size:13px;color:#525252;line-height:1.6}
+        .aula-examen-banner{display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid #E5E5E5;background:#F4F0FF}
+        .aula-examen-btn{padding:8px 16px;background:#8B5CF6;color:white;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}
+        .aula-examen-btn:disabled{opacity:0.6;cursor:not-allowed}
+        .examen-titulo{font-size:20px;font-weight:800;color:#0A0A0A;margin-bottom:20px}
+        .examen-pregunta{margin-bottom:24px;padding:18px;background:white;border:1px solid #E5E5E5;border-radius:14px}
+        .examen-pregunta-txt{font-size:14px;font-weight:700;color:#0A0A0A;margin-bottom:12px}
+        .examen-opcion{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid #E5E5E5;margin-bottom:8px;cursor:pointer}
+        .examen-opcion.sel{border-color:#8B5CF6;background:#F4F0FF}
+        .examen-opcion-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid #D4D4D4;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+        .examen-opcion.sel .examen-opcion-radio{border-color:#8B5CF6;background:#8B5CF6}
       `}</style>
 
       <nav className="aula-nav">
@@ -202,7 +307,7 @@ export default function AulaCursoPage() {
               {moduloAbierto === m.id && m.lecciones.map(l => (
                 <div key={l.id}
                   className={`aula-leccion${leccionActiva?.id === l.id ? ' activa' : ''}`}
-                  onClick={() => setLeccionActiva(l)}>
+                  onClick={() => { setLeccionActiva(l); setVista('curso') }}>
                   <div className={`aula-leccion-check${completadas.has(l.id) ? ' done' : ''}`}>
                     {completadas.has(l.id) && <Check size={11} color="white"/>}
                   </div>
@@ -212,10 +317,62 @@ export default function AulaCursoPage() {
               ))}
             </div>
           ))}
+
+          {examen && totalLecciones > 0 && completadas.size === totalLecciones && (
+            <div className="aula-examen-banner">
+              <GraduationCap size={16} color="#8B5CF6"/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'12px',fontWeight:700,color:'#0A0A0A'}}>{examen.titulo}</div>
+                {ultimoResultado && (
+                  <div style={{fontSize:'10px',color: ultimoResultado.aprobado ? '#166534' : '#DC2626'}}>
+                    Último intento: {ultimoResultado.puntaje}% {ultimoResultado.aprobado ? '· Aprobado ✓' : '· No aprobado'}
+                  </div>
+                )}
+              </div>
+              {ultimoResultado?.aprobado ? (
+                certificadoCodigo ? (
+                  <a href={`/certificado/${certificadoCodigo}`} target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:'10px',fontWeight:700,color:'#166534',textDecoration:'none',background:'#DCFCE7',padding:'6px 12px',borderRadius:'8px'}}>
+                    🎓 Ver certificado
+                  </a>
+                ) : (
+                  <span style={{fontSize:'10px',fontWeight:700,color:'#166534'}}>✓ Aprobado</span>
+                )
+              ) : intentosUsados >= examen.max_intentos ? (
+                <span style={{fontSize:'10px',color:'#DC2626',fontWeight:600}}>Sin intentos</span>
+              ) : (
+                <button className="aula-examen-btn" onClick={iniciarExamen} disabled={cargandoExamen}>
+                  {cargandoExamen ? '...' : ultimoResultado ? 'Reintentar' : 'Rendir'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="aula-main">
-          {leccionActiva ? (<>
+          {vista === 'examen' ? (
+            <div>
+              <h1 className="examen-titulo">{examen?.titulo}</h1>
+              {preguntasExamen.map((p, idx) => (
+                <div key={p.id} className="examen-pregunta">
+                  <div className="examen-pregunta-txt">{idx + 1}. {p.pregunta}</div>
+                  {p.opciones.map(o => (
+                    <div key={o.id}
+                      className={`examen-opcion${respuestas[p.id] === o.id ? ' sel' : ''}`}
+                      onClick={() => seleccionarRespuesta(p.id, o.id)}>
+                      <div className="examen-opcion-radio"/>
+                      <div style={{fontSize:'13px',color:'#404040'}}>{o.texto}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <button className="aula-btn-completar"
+                onClick={enviarExamen}
+                disabled={enviandoExamen || Object.keys(respuestas).length < preguntasExamen.length}>
+                <Check size={15}/> {enviandoExamen ? 'Enviando...' : 'Entregar examen'}
+              </button>
+            </div>
+          ) : leccionActiva ? (<>
             {leccionActiva.tipo === 'video' && leccionActiva.contenido_url && (
               <div className="aula-video-wrap">
                 <iframe src={leccionActiva.contenido_url.replace('watch?v=', 'embed/')} allowFullScreen/>
