@@ -45,6 +45,7 @@ export default function AulaCursoPage() {
   const [cargandoExamen, setCargandoExamen] = useState(false)
   const [personaId, setPersonaId] = useState<string | null>(null)
   const [certificadoCodigo, setCertificadoCodigo] = useState<string | null>(null)
+  const [proximoEncuentro, setProximoEncuentro] = useState<{titulo: string; fecha_hora: string; link_zoom: string} | null>(null)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -113,6 +114,12 @@ export default function AulaCursoPage() {
       const { data: certExistente } = await supabase
         .from('certificates').select('codigo_unico').eq('enrollment_id', enrollment.id).maybeSingle()
       if (certExistente) setCertificadoCodigo(certExistente.codigo_unico)
+
+      const { data: encuentro } = await supabase
+        .from('course_live_sessions').select('titulo, fecha_hora, link_zoom')
+        .eq('course_id', courseId).gte('fecha_hora', new Date().toISOString())
+        .order('fecha_hora').limit(1).maybeSingle()
+      if (encuentro) setProximoEncuentro(encuentro)
     } catch (e: any) {
       console.error(e)
       setDebugInfo(`Error inesperado: ${e?.message || JSON.stringify(e)}`)
@@ -297,6 +304,17 @@ export default function AulaCursoPage() {
             <div className="aula-barra"><div className="aula-barra-fill" style={{width:`${porcentaje}%`}}/></div>
             <div className="aula-progreso-txt">{completadas.size} de {totalLecciones} lecciones · {porcentaje}%</div>
           </div>
+
+          {proximoEncuentro && (
+            <a href={proximoEncuentro.link_zoom} target="_blank" rel="noopener noreferrer"
+              style={{display:'block',margin:'0 20px 16px',padding:'14px',background:'linear-gradient(135deg,#7C3AED,#EC4899)',borderRadius:'12px',textDecoration:'none',color:'white'}}>
+              <div style={{fontSize:'10px',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',opacity:0.85,marginBottom:'4px'}}>🔴 Próximo encuentro en vivo</div>
+              <div style={{fontSize:'13px',fontWeight:700,marginBottom:'2px'}}>{proximoEncuentro.titulo}</div>
+              <div style={{fontSize:'11px',opacity:0.9}}>
+                {new Date(proximoEncuentro.fecha_hora).toLocaleString('es-AR', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' })} hs · Tocá para unirte
+              </div>
+            </a>
+          )}
 
           {modulos.map(m => (
             <div key={m.id} className="aula-modulo">

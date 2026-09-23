@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Lock, Sparkles } from 'lucide-react'
+import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
 
 export default function CoursesLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -22,11 +23,21 @@ export default function CoursesLayout({ children }: { children: React.ReactNode 
         .eq('user_id', user.id)
         .maybeSingle()
 
-      const ahora = new Date()
-      const trialVigente = sub?.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora
-      const premiumActivo = sub?.status === 'active' && sub.plan === 'premium' && (!sub.current_period_ends_at || new Date(sub.current_period_ends_at) > ahora)
+      let nivel = calcularAcceso(sub)
 
-      setTieneAcceso(!!(trialVigente || premiumActivo))
+      if (nivel !== 'premium' && pareceDesactualizado(sub)) {
+        try {
+          const res = await fetch('/api/mp/verificar-suscripcion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id }),
+          })
+          const data = await res.json()
+          if (data.vigente && data.plan === 'premium') nivel = 'premium'
+        } catch (e) { console.error('Error verificando en vivo:', e) }
+      }
+
+      setTieneAcceso(nivel === 'premium')
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }

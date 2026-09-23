@@ -23,8 +23,9 @@ cbu?: string
 titular_cuenta?: string
 banco?: string
 instrucciones_pago?: string
-  valores: { icon: string; name: string; desc: string }[]
-  testimonios: { texto: string; nombre: string }[]
+valores: { icon: string; name: string; desc: string }[]
+testimonios: { texto: string; nombre: string }[]
+links: { tipo: string; titulo: string; url: string; descripcion?: string }[]
 }
 
 
@@ -100,6 +101,7 @@ export default function AjustesPage() {
   const [suscripcion, setSuscripcion] = useState<any>(null)
   const [confirmEliminar, setConfirmEliminar] = useState(false)
   const [msgExito, setMsgExito] = useState('')
+  const perfilGuardadoRef = useRef<string>('')
 
   const [perfil, setPerfil] = useState<Perfil>({
     nombre_profesional: '', nombre_completo: '', especialidad: '',
@@ -117,7 +119,19 @@ export default function AjustesPage() {
       {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
     ],
     testimonios: [],
+    links: [],
   })
+
+  useEffect(() => {
+    function avisarSalida(e: BeforeUnloadEvent) {
+      if (JSON.stringify(perfil) !== perfilGuardadoRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', avisarSalida)
+    return () => window.removeEventListener('beforeunload', avisarSalida)
+  }, [perfil])
 
   const [passForm, setPassForm] = useState({
     nueva: '', confirmar: '', showNueva: false, showConfirmar: false,
@@ -144,8 +158,9 @@ export default function AjustesPage() {
         supabase.from('therapist_profiles').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
       ])
-      if (prof) setPerfil({
-        id: prof.id,
+      if (prof) {
+        const perfilCargado = {
+          id: prof.id,
         nombre_profesional: prof.nombre_profesional || '',
         nombre_completo: prof.nombre_completo || '',
         especialidad: prof.especialidad || '',
@@ -176,7 +191,11 @@ export default function AjustesPage() {
           {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
         ],
         testimonios: prof.testimonios || [],
-      })
+        links: prof.links || [],
+      }
+      setPerfil(perfilCargado)
+      perfilGuardadoRef.current = JSON.stringify(perfilCargado)
+      }
       if (subs) setSuscripcion(subs)
 
         // Verificar si ya tiene notificaciones activas
@@ -226,11 +245,13 @@ export default function AjustesPage() {
         instrucciones_pago: perfil.instrucciones_pago || '',
         valores: perfil.valores,
         testimonios: perfil.testimonios,
+        links: perfil.links,
         updated_at: new Date().toISOString(),
       }
       if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
-      else await supabase.from('therapist_profiles').insert(datos)
-      setMsgExito('Perfil guardado correctamente')
+        else await supabase.from('therapist_profiles').insert(datos)
+        perfilGuardadoRef.current = JSON.stringify(perfil)
+        setMsgExito('Perfil guardado correctamente')
       setTimeout(() => setMsgExito(''), 3000)
     } catch (err) {
       console.error('Error guardando:', err)
@@ -849,6 +870,71 @@ export default function AjustesPage() {
       onClick={() => setPerfil({...perfil, testimonios: [...perfil.testimonios, {texto:'',nombre:''}]})}
       style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
       + Agregar testimonio
+    </button>
+  </div>
+
+  {/* LINKS */}
+  <div className="s-card">
+    <div className="s-card-title"><Settings size={14}/>Links</div>
+    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
+      Tus redes, podcast o cualquier link extra — aparecen en una pestaña aparte de tu página pública.
+    </div>
+    {perfil.links.map((link, i) => (
+      <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
+        <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
+          <select
+            style={{padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',flexShrink:0}}
+            value={link.tipo}
+            onChange={e => {
+              const nuevo = [...perfil.links]
+              nuevo[i] = {...nuevo[i], tipo: e.target.value}
+              setPerfil({...perfil, links: nuevo})
+            }}>
+            <option value="tiktok">TikTok</option>
+            <option value="instagram">Instagram</option>
+            <option value="podcast">Podcast</option>
+            <option value="youtube">YouTube</option>
+            <option value="descargable">Descargable</option>
+            <option value="otro">Otro</option>
+          </select>
+          <input
+            style={{flex:1,padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',minWidth:0}}
+            placeholder="Título (ej: @priscila.tarot)"
+            value={link.titulo}
+            onChange={e => {
+              const nuevo = [...perfil.links]
+              nuevo[i] = {...nuevo[i], titulo: e.target.value}
+              setPerfil({...perfil, links: nuevo})
+            }}/>
+          <button onClick={() => setPerfil({...perfil, links: perfil.links.filter((_,j) => j !== i)})}
+            style={{width:'28px',height:'28px',border:'none',background:'#FEF2F2',color:'#EF4444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            ✕
+          </button>
+        </div>
+        <input
+          style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',marginBottom:'8px'}}
+          placeholder="https://..."
+          value={link.url}
+          onChange={e => {
+            const nuevo = [...perfil.links]
+            nuevo[i] = {...nuevo[i], url: e.target.value}
+            setPerfil({...perfil, links: nuevo})
+          }}/>
+        <input
+          style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none'}}
+          placeholder="Descripción breve (opcional)"
+          value={link.descripcion || ''}
+          onChange={e => {
+            const nuevo = [...perfil.links]
+            nuevo[i] = {...nuevo[i], descripcion: e.target.value}
+            setPerfil({...perfil, links: nuevo})
+          }}/>
+      </div>
+    ))}
+    <button
+      onClick={() => setPerfil({...perfil, links: [...perfil.links, {tipo:'instagram',titulo:'',url:'',descripcion:''}]})}
+      style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
+      + Agregar link
     </button>
   </div>
 

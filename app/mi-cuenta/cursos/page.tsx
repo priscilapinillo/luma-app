@@ -19,6 +19,7 @@ type Inscripcion = {
     nombre_profesional: string
     slug: string
   } | null
+  proximoEncuentro: { fecha_hora: string } | null
 }
 
 export default function MisCursosPage() {
@@ -68,15 +69,22 @@ export default function MisCursosPage() {
         .from('therapist_profiles').select('user_id, nombre_profesional, slug')
         .in('user_id', terapeutaIds)
 
+        const { data: encuentros } = await supabase
+        .from('course_live_sessions').select('course_id, fecha_hora')
+        .in('course_id', courseIds).gte('fecha_hora', new Date().toISOString())
+        .order('fecha_hora')
+
       const combinado = enrollments.map(e => {
         const curso = cursos?.find(c => c.id === e.course_id)
         const terapeuta = terapeutas?.find(t => t.user_id === curso?.user_id)
+        const proximoEncuentro = encuentros?.find(en => en.course_id === e.course_id) || null
         return {
           id: e.id,
           estado: e.estado,
           fecha_inicio: e.fecha_inicio,
           course: curso as Inscripcion['course'],
           terapeuta: terapeuta ? { nombre_profesional: terapeuta.nombre_profesional, slug: terapeuta.slug } : null,
+          proximoEncuentro,
         }
       }).filter(i => i.course)
 
@@ -152,6 +160,11 @@ export default function MisCursosPage() {
                   {i.terapeuta && <div className="mc-card-terapeuta">{i.terapeuta.nombre_profesional}</div>}
                   {i.estado === 'activa' ? (<>
                     <span className="mc-badge activa">✓ Acceso activo</span>
+                    {i.proximoEncuentro && (
+                      <div style={{fontSize:'11px',fontWeight:700,color:'#EC4899',marginTop:'6px'}}>
+                        🔴 Encuentro: {new Date(i.proximoEncuentro.fecha_hora).toLocaleDateString('es-AR', { day:'numeric', month:'short' })}
+                      </div>
+                    )}
                     <div className="mc-ver-btn">Ver curso →</div>
                   </>) : (
                     <span className="mc-badge pendiente_pago">⏳ Esperando confirmación de pago</span>

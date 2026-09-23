@@ -31,6 +31,25 @@ export async function POST(req: NextRequest) {
       console.error('Fallo de autenticación en create-subscription:', errorUser)
       return NextResponse.json({ error: 'No autenticado', detalle: errorUser?.message }, { status: 401 })
     }
+
+    // Si ya tiene una suscripción vigente en MP, la cancelamos primero —
+    // así "Pasarme a Premium" desde Básico no termina pagando dos planes a la vez
+    const { data: subActual } = await supabase
+      .from('subscriptions')
+      .select('mp_subscription_id, status')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (subActual?.mp_subscription_id && subActual.status === 'active') {
+      await fetch(`https://api.mercadopago.com/preapproval/${subActual.mp_subscription_id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'cancelled' }),
+      }).catch(e => console.error('Error cancelando suscripción vieja (se sigue igual con la nueva):', e))
+    }
     const response = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {

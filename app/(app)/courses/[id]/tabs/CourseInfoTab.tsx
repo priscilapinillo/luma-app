@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Video, Trash2 } from 'lucide-react'
 
 type Curso = {
   id: string; titulo: string; slug: string
@@ -21,7 +21,7 @@ type Testimonio = {
     avatar_url: string | null; video_url: string | null; orden: number
   }
 
-export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
+  export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
     console.log('CURSO ESTADO:', curso.estado)
     const [form, setForm] = useState({ ...curso,
     para_quien: curso.para_quien || [''],

@@ -162,4 +162,4 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
       })}
     </div>
   )
-}
+} 

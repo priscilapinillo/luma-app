@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, BookOpen, Users, Info, GraduationCap } from 'lucide-react'
+import { ArrowLeft, BookOpen, Users, Info, GraduationCap, Video } from 'lucide-react'
 import CourseInfoTab from './tabs/CourseInfoTab'
 import CourseContentTab from './tabs/CourseContentTab'
 import CourseStudentsTab from './tabs/CourseStudentsTab'
 import CourseExamTab from './tabs/CourseExamTab'
+import CourseLiveTab from './tabs/CourseLiveTab'
 
 type Curso = {
   id: string
@@ -37,19 +38,27 @@ export default function CourseEditPage() {
   const id = params.id as string
   const [curso, setCurso] = useState<Curso | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas' | 'examen'>('info')
+  const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas' | 'examen' | 'encuentros'>('info')
 
   useEffect(() => { cargarCurso() }, [id])
 
   async function cargarCurso() {
     try {
       const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/auth/login'); return }
+
       const { data } = await supabase
         .from('courses')
         .select('*')
         .eq('id', id)
         .single()
-      if (data) setCurso(data)
+
+      if (!data || data.user_id !== user.id) {
+        router.push('/courses')
+        return
+      }
+      setCurso(data)
     } catch (err) {
       console.error(err)
     } finally {
@@ -113,6 +122,9 @@ export default function CourseEditPage() {
         <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
           <GraduationCap size={13}/>Examen
         </button>
+        <button className={`tab-btn${tab==='encuentros'?' active':''}`} onClick={() => setTab('encuentros')}>
+          <Video size={13}/>Encuentros
+        </button>
       </div>
 
       {/* CONTENIDO */}
@@ -120,6 +132,7 @@ export default function CourseEditPage() {
       {tab === 'contenido' && <CourseContentTab cursoId={id}/>}
       {tab === 'alumnas' && <CourseStudentsTab cursoId={id}/>}
       {tab === 'examen' && <CourseExamTab cursoId={id}/>}
+      {tab === 'encuentros' && <CourseLiveTab cursoId={id}/>}
     </div>
   )
 }

@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { horaAMin, slotConflictsWithBlock } from '@/lib/datetime'
-import { ChevronLeft, ChevronRight, Check, Clock, Shield, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Clock, Shield, ChevronDown, Music2, Camera, Mic, PlayCircle, FileDown, Link as LinkIcon } from 'lucide-react'
+
 
 type Terapeuta = {
   user_id: string; nombre_profesional: string; especialidad: string
@@ -14,6 +15,7 @@ type Terapeuta = {
   faq?: { pregunta: string; respuesta: string }[]
   valores?: { icon: string; name: string; desc: string }[]
   testimonios?: { texto: string; nombre: string }[]
+  links?: { tipo: string; titulo: string; url: string; descripcion?: string }[]
   whatsapp?: string
   alias_pago?: string; cbu?: string; titular_cuenta?: string; banco?: string
   instrucciones_pago?: string; acepta_transferencia?: boolean
@@ -583,7 +585,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .nav-logo{font-family:var(--font-title);font-size:clamp(11px,2.5vw,20px);font-weight:600;color:var(--primary);letter-spacing:1px;overflow:hidden;max-width:55vw;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
 
-        .hero{position:relative;min-height:100vh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;
+        .hero{position:relative;min-height:100vh;width:100%;max-width:100vw;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px 60px;text-align:center;z-index:1;
           background:
             radial-gradient(circle at 14% 18%, var(--accent-dim) 0%, transparent 42%),
             radial-gradient(circle at 88% 8%, var(--primary-dim) 0%, transparent 38%),
@@ -722,6 +724,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .cursos-dot.act{width:22px;border-radius:4px;background:var(--primary)}
 
         .links-placeholder{text-align:center;padding:48px 20px;color:var(--text-dim);font-family:var(--font-subtitle);font-size:14px;line-height:1.7}
+
+        .link-card{display:flex;align-items:stretch;border-radius:20px;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb, var(--accent-light) 35%, white) 0%,color-mix(in srgb, var(--primary-light) 35%, white) 100%);margin-bottom:14px;box-shadow:0 10px 26px rgba(0,0,0,0.1);text-decoration:none;max-width:520px}
+        .link-icono-wrap{width:38%;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:16px}
+        .link-icono{width:100%;aspect-ratio:1/1;border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.5);box-shadow:0 4px 14px rgba(0,0,0,0.08)}
+        .link-body{flex:1;padding:16px 18px 16px 4px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+        .link-tipo{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:color-mix(in srgb, var(--accent) 70%, black);opacity:0.85;margin-bottom:5px;font-family:var(--font-subtitle)}
+        .link-titulo{font-family:var(--font-title);font-weight:700;font-size:19px;color:color-mix(in srgb, var(--accent) 85%, black);margin-bottom:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .link-desc{font-size:13px;color:color-mix(in srgb, var(--accent) 60%, black);line-height:1.5;margin-bottom:12px;font-family:var(--font-subtitle);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .link-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:color-mix(in srgb, var(--accent) 85%, black);color:white;border-radius:50px;font-size:12px;font-weight:700;width:fit-content;font-family:var(--font-subtitle)}
 
         .serv-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.88);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn 0.2s ease}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -966,7 +977,31 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </div>
 
         {tabActiva === 'links' && (
-          <div className="links-placeholder">{t.deco} Muy pronto vas a poder ver acá mis redes y otros links {t.deco}</div>
+          !terapeuta.links || terapeuta.links.length === 0 ? (
+            <div className="links-placeholder">{t.deco} Todavía no hay links cargados {t.deco}</div>
+          ) : (
+            <div>
+              {terapeuta.links.map((link, i) => {
+                const IconComp = link.tipo === 'tiktok' ? Music2
+                : link.tipo === 'instagram' ? Camera
+                : link.tipo === 'podcast' ? Mic
+                : link.tipo === 'youtube' ? PlayCircle
+                : link.tipo === 'descargable' ? FileDown
+                : LinkIcon
+                return (
+                  <a key={i} className="link-card" href={link.url} target="_blank" rel="noopener noreferrer">
+                    <div className="link-icono-wrap"><div className="link-icono"><IconComp size={30} color="color-mix(in srgb, var(--accent) 85%, black)"/></div></div>
+                    <div className="link-body">
+                      <div className="link-tipo">{link.tipo}</div>
+                      <div className="link-titulo">{link.titulo}</div>
+                      {link.descripcion && <div className="link-desc">{link.descripcion}</div>}
+                      <div className="link-btn">{t.deco} Ir</div>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          )
         )}
 
 {tabActiva === 'cursos' && (

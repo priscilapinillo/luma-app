@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { calcularAcceso } from '@/lib/acceso'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -65,10 +66,7 @@ export default function Sidebar() {
 
   const iniciales = perfil.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?'
 
-  const ahora = new Date()
-  const trialVigente = sub?.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora
-  const premiumActivo = sub?.status === 'active' && sub.plan === 'premium' && (!sub.current_period_ends_at || new Date(sub.current_period_ends_at) > ahora)
-  const tieneAccesoCursos = !!(trialVigente || premiumActivo)
+  const tieneAccesoCursos = calcularAcceso(sub) === 'premium'
 
   const links = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
@@ -262,6 +260,12 @@ html.dark .sb-mobile {
           }
 
           /* ── TOGGLE THEME ── */
+          .sb-plan-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(167,139,250,0.6);margin-bottom:3px}
+          html:not(.dark) .sb-plan-label{color:rgba(107,63,160,0.5)}
+          .sb-plan-status{font-size:12px;font-weight:600;color:rgba(255,255,255,0.9)}
+          html:not(.dark) .sb-plan-status{color:rgba(60,20,100,0.85)}
+          .sb-plan-status.ok{color:#6EE7B7}
+          html:not(.dark) .sb-plan-status.ok{color:#059669}
           .sb-mob-toggle-wrap {
             display: flex;
             align-items: center;
@@ -331,6 +335,29 @@ html.dark .sb-mobile {
                 <div className="sb-mob-toggle-dot"/>
               </div>
             </div>
+
+            {sub && (() => {
+              const ahora = new Date()
+              const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
+              const esTrial = sub.status === 'trial' && sub.trial_ends_at
+              const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
+              return (
+                <>
+                  <hr className="sb-dropdown-sep"/>
+                  <div style={{padding:'8px 18px'}}>
+                    <div className="sb-plan-label">Mi plan</div>
+                    <div className={`sb-plan-status${esActivo ? ' ok' : ''}`}>
+                      {esActivo ? '✓ Plan activo' : esTrial ? `✦ ${diasRestantes} días de prueba` : '⚠️ Prueba vencida'}
+                    </div>
+                    {!esActivo && !esTrial && (
+                      <a href="/suscripcion" onClick={() => setMenuMobile(false)} style={{fontSize:'11px',color:'#C4A8FF',fontWeight:600,textDecoration:'none',display:'block',marginTop:'4px'}}>
+                        Activar ahora →
+                      </a>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
 
             <hr className="sb-dropdown-sep"/>
 

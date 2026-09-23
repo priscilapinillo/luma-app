@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -33,10 +33,10 @@ export default function AuthPage() {
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
 
     const userId = data.user?.id
-    const { data: perfilTerapeuta } = await supabase
-      .from('therapist_profiles').select('user_id').eq('user_id', userId).maybeSingle()
+    const { data: sub } = await supabase
+      .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
 
-    if (perfilTerapeuta) {
+    if (sub) {
       router.push('/dashboard')
     } else {
       router.push('/mi-cuenta/cursos')
@@ -53,8 +53,12 @@ export default function AuthPage() {
     setEnviandoRecuperar(false)
   }
 
+  const registrandoRef = useRef(false)
+
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
+    if (registrandoRef.current) return
+    registrandoRef.current = true
     setRegLoading(true)
     setRegError('')
     const supabase = createClient()
@@ -63,17 +67,20 @@ export default function AuthPage() {
       options: { data: { full_name: nombre } }
     })
     if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); return }
+    console.log('DEBUG registro — data.user:', data.user, 'data.session:', data.session)
     if (data.user) {
       const trialEnds = new Date()
       trialEnds.setDate(trialEnds.getDate() + 7)
-      await supabase.from('subscriptions').insert({
+      const { error: errorSub } = await supabase.from('subscriptions').insert({
         user_id: data.user.id,
         status: 'trial',
         trial_ends_at: trialEnds.toISOString(),
       })
+      console.log('DEBUG registro — error insert subscriptions:', errorSub)
     }
     router.push('/dashboard')
     setRegLoading(false)
+    registrandoRef.current = false
   }
 
   return (
