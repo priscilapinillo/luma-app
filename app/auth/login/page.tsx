@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { emailEsAlumna } from '../verificar-rol'
 
 export default function AuthPage() {
   const [flipped, setFlipped] = useState(false)
@@ -61,12 +62,16 @@ export default function AuthPage() {
     registrandoRef.current = true
     setRegLoading(true)
     setRegError('')
+    if (await emailEsAlumna(regEmail).catch(() => false)) {
+      setRegError('Este email ya está registrado como alumna en Luma. Para tener también una cuenta de terapeuta, usá un email distinto.')
+      setRegLoading(false); registrandoRef.current = false; return
+    }
     const supabase = createClient()
     const { data, error } = await supabase.auth.signUp({
       email: regEmail, password: regPassword,
       options: { data: { full_name: nombre } }
     })
-    if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); return }
+    if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); registrandoRef.current = false; return }
     console.log('DEBUG registro — data.user:', data.user, 'data.session:', data.session)
     if (data.user) {
       const trialEnds = new Date()

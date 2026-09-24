@@ -95,7 +95,16 @@ export default function CheckoutCursoPage() {
         setErrorMsg('Ese email ya tiene una cuenta en Luma y la contraseña no coincide. Si ya compraste algo antes, usá la misma contraseña.')
         return null
       }
-      return signInData.user?.id || null
+      const userId = signInData.user?.id
+      if (!userId) return null
+      // una cuenta de terapeuta no puede comprar como alumna: si no, queda con fila en ambas tablas
+      const { data: sub } = await supabase
+        .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
+      if (sub) {
+        setErrorMsg('Este email ya tiene una cuenta de terapeuta en Luma. Para comprar este curso como alumna, usá un email distinto.')
+        return null
+      }
+      return userId
     }
 
     setErrorMsg(signUpError?.message || 'No se pudo crear la cuenta. Intentá de nuevo.')
