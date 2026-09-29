@@ -42,6 +42,8 @@ export default function PacientesPage() {
   const [contextoLocal, setContextoLocal] = useState('')
   const [nuevaNota, setNuevaNota] = useState('')
   const [editandoNota, setEditandoNota] = useState<string|null>(null)
+  const [notaModalAbierta, setNotaModalAbierta] = useState<string|null>(null)
+  const [notaHover, setNotaHover] = useState<string|null>(null)
   const [editTitulo, setEditTitulo] = useState('')
   const [editContenido, setEditContenido] = useState('')
   const [archivoNota, setArchivoNota] = useState<File|null>(null)
@@ -75,6 +77,11 @@ export default function PacientesPage() {
       setEditandoNota(null)
     }
   }, [pacienteSeleccionado?.id])
+
+  useEffect(() => {
+    document.body.classList.toggle('modal-ficha-abierto', !!notaModalAbierta)
+    return () => { document.body.classList.remove('modal-ficha-abierto') }
+  }, [notaModalAbierta])
 
   async function cargarDatos() {
     try {
@@ -404,7 +411,9 @@ export default function PacientesPage() {
         .tab:hover{color:var(--accent);background:var(--bg-input)}
         .tab-content{flex:1;overflow-y:auto;padding:14px 20px 16px;display:flex;flex-direction:column;gap:8px;min-height:0}
         .hist-empty{font-size:12px;color:var(--text-muted);text-align:center;padding:20px 0}
-        .hist-item{background:var(--bg-input);border-radius:12px;padding:10px 13px;border:0.5px solid var(--border-light);flex-shrink:0}
+        .hist-item{display:flex;align-items:stretch;background:var(--bg-card);border-radius:14px;overflow:hidden;box-shadow:0 4px 16px var(--shadow);flex-shrink:0}
+        .hist-edge{flex-shrink:0;display:block}
+        .hist-content{flex:1;min-width:0;padding:10px 13px 10px 6px}
         .hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
         .hist-date{font-size:11px;font-weight:600;color:var(--accent)}
         .hist-serv{font-size:10px;color:var(--text-muted)}
@@ -414,6 +423,12 @@ export default function PacientesPage() {
         .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
         .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
         .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
+        .ficha-modal-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.6);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(6px);padding:20px}
+        .ficha-modal-box{background:var(--bg-card);border-radius:20px;width:min(900px,92vw);height:75vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,0.4);position:relative}
+        .ficha-modal-img{width:100%;height:220px;object-fit:cover;display:block}
+        .ficha-modal-body{padding:20px 24px 28px}
+        .ficha-modal-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;background:rgba(0,0,0,0.45);border:none;color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
+        @media(max-width:768px){.ficha-modal-box{width:94vw;height:82vh}}
         .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
         .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
@@ -565,20 +580,26 @@ export default function PacientesPage() {
                 {sesionsPaciente.length === 0 && <div className="hist-empty">Este paciente aún no tiene sesiones registradas</div>}
                 {sesionsPaciente.map((s,i) => (
                   <div key={i} className="hist-item">
-                    <div className="hist-top">
-                      <span className="hist-date">{new Date(s.fecha).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
-                      <span className="hist-serv">{s.servicio_nombre}</span>
-                    </div>
-                    {s.contexto_sesion && <div className="hist-ctx">{s.contexto_sesion}</div>}
-                    <div className="hist-badges">
-                      <span className={`hbadge ${PAGO_CONFIG[s.estado_pago]?.cls||'tag-p'}`}>
-                        {PAGO_CONFIG[s.estado_pago]?.label||s.estado_pago}
-                      </span>
-                      {s.precio > 0 && (
-                        <span className="hbadge" style={{background:'var(--accent-light)',color:'var(--accent)',borderColor:'var(--border)'}}>
-                          ${s.precio.toLocaleString()}
+                    <svg className="hist-edge" width="14" height="100%" viewBox="0 0 16 96" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M 8 0 Q 4 4.8, 8 9.6 T 8 19.2 Q 4 24, 8 28.8 T 8 38.4 Q 4 43.2, 8 48 T 8 57.6 Q 4 62.4, 8 67.2 T 8 76.8 Q 4 81.6, 8 86.4 T 8 96 L 0 96 L 0 0 Z"
+                        fill="var(--accent-light)" stroke="var(--accent-light)" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    <div className="hist-content">
+                      <div className="hist-top">
+                        <span className="hist-date">{new Date(s.fecha).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</span>
+                        <span className="hist-serv">{s.servicio_nombre}</span>
+                      </div>
+                      {s.contexto_sesion && <div className="hist-ctx">{s.contexto_sesion}</div>}
+                      <div className="hist-badges">
+                        <span className={`hbadge ${PAGO_CONFIG[s.estado_pago]?.cls||'tag-p'}`}>
+                          {PAGO_CONFIG[s.estado_pago]?.label||s.estado_pago}
                         </span>
-                      )}
+                        {s.precio > 0 && (
+                          <span className="hbadge" style={{background:'var(--accent-light)',color:'var(--accent)',borderColor:'var(--border)'}}>
+                            ${s.precio.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -625,129 +646,47 @@ export default function PacientesPage() {
                 {notasPaciente.length === 0 ? (
                   <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',padding:'12px 0'}}>Sin fichas aún</div>
                 ) : (
-                  <div style={{position:'relative',flexShrink:0,minHeight:`${notasPaciente.length * 32 + 160}px`}}>
+                  <div style={{position:'relative',flexShrink:0,minHeight:`${(notasPaciente.length-1) * 46 + 190}px`}}>
                     {notasPaciente.map((n, i) => {
-                      const isActive = editandoNota === n.id || editandoNota === n.id + '_expand'
-                      const expandida = editandoNota === n.id + '_expand'
-                      const isEditing = editandoNota === n.id
+                      const isHovered = notaHover === n.id
+                      const hoveredIndex = notasPaciente.findIndex(x => x.id === notaHover)
+                      const empujado = hoveredIndex !== -1 && i > hoveredIndex
+                      const tieneImagen = n.archivo_tipo === 'imagen' && !!n.archivo_url
                       const color = FOLDER_COLORS[i % FOLDER_COLORS.length]
                       return (
-                        <div key={n.id} style={{
-                          position:'absolute',
-                          top: isActive ? `${Math.max(0, i*32-10)}px` : `${i*32}px`,
-                          left:0, right:0,
-                          zIndex: isActive ? 100 : i+1,
-                          transition:'all 0.35s cubic-bezier(0.34,1.56,0.64,1)',
-                          filter: isActive ? 'drop-shadow(0 20px 40px rgba(0,0,0,0.3))' : 'none',
-                          transform: isActive ? 'translateY(-12px) scale(1.01)' : 'translateY(0) scale(1)',
-                        }}>
-                          {/* PESTAÑA */}
-                          <div style={{
-                            display:'inline-flex',alignItems:'center',gap:'5px',
-                            background: color.tab,
-                            borderRadius:'7px 12px 0 0',
-                            padding:'4px 14px 4px 10px',
-                            fontSize:'10px',fontWeight:700,
-                            color:'rgba(0,0,0,0.75)',
-                            marginLeft:`${12 + (i % 4) * 18}px`,
-                            maxWidth:'160px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                        <div key={n.id}
+                          onMouseEnter={() => setNotaHover(n.id)}
+                          onMouseLeave={() => setNotaHover(null)}
+                          onClick={() => setNotaModalAbierta(n.id)}
+                          style={{
+                            position:'absolute',
+                            top:`${i*46 + (empujado ? 34 : 0) - (isHovered ? 10 : 0)}px`,
+                            left:0, right:0,
+                            height:'150px',
+                            zIndex: isHovered ? 200 : i+1,
+                            borderRadius:'16px',
+                            overflow:'hidden',
                             cursor:'pointer',
-                            boxShadow:'0 -2px 8px rgba(0,0,0,0.15)',
-                          }}
-                          onClick={() => setEditandoNota(isActive ? null : n.id + '_expand')}>
-                            {n.archivo_tipo === 'imagen' && '🖼 '}
-                            {n.archivo_tipo === 'pdf' && '📄 '}
-                            {n.titulo}
-                          </div>
-
-                          {/* CUERPO */}
-                          <div style={{
-                            background:'var(--bg-card)',
-                            border:`1px solid ${color.border}`,
-                            borderRadius:'0 12px 12px 12px',
-                            padding: isActive ? '14px' : '0 14px',
-                            maxHeight: isActive ? '450px' : '0px',
-                            overflow: isActive ? 'auto' : 'hidden',
-                            transition:'all 0.35s cubic-bezier(0.34,1.56,0.64,1)',
-                            boxShadow:'0 4px 16px rgba(0,0,0,0.08)',
+                            boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.12)',
+                            transform: isHovered ? 'scale(1.015)' : 'scale(1)',
+                            transition:'all 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+                            background: tieneImagen ? `url(${n.archivo_url}) center/cover no-repeat` : `linear-gradient(135deg, ${color.tab}, #FFFFFF)`,
                           }}>
-                            {!isActive && n.contenido && (
-                              <div style={{padding:'6px 0 8px',fontSize:'10px',color:'var(--text-muted)',overflow:'hidden',maxHeight:'32px',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>
-                                {n.contenido.slice(0,80)}
+                          {tieneImagen && (
+                            <div style={{
+                              position:'absolute',inset:0,
+                              background:'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 45%, rgba(0,0,0,0) 75%)',
+                            }}/>
+                          )}
+                          <div style={{position:'absolute',left:0,right:0,top:0,padding:'12px 16px'}}>
+                            <div style={{fontSize:'13px',fontWeight:800,color: tieneImagen ? 'white' : 'rgba(0,0,0,0.75)',fontFamily:"'Manrope',sans-serif",marginBottom:'4px',textShadow: tieneImagen ? '0 1px 4px rgba(0,0,0,0.4)' : 'none'}}>
+                              {n.archivo_tipo === 'pdf' && '📄 '}{n.titulo}
+                            </div>
+                            {n.contenido && (
+                              <div style={{fontSize:'11px',color: tieneImagen ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)',lineHeight:'1.4',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as const}}>
+                                {n.contenido}
                               </div>
                             )}
-
-                            {isActive && (<>
-                              {isEditing ? (
-                                <>
-                                  <input value={editTitulo} onChange={e => setEditTitulo(e.target.value)}
-                                    placeholder="Nombre de la ficha..."
-                                    style={{width:'100%',border:`0.5px solid ${color.border}`,borderRadius:'8px',padding:'6px 8px',fontSize:'11px',fontWeight:600,color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',fontFamily:'inherit',marginBottom:'7px'}}/>
-                                  <textarea value={editContenido} onChange={e => setEditContenido(e.target.value)}
-                                    style={{width:'100%',border:`0.5px solid ${color.border}`,borderRadius:'8px',padding:'7px',fontSize:'11px',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',resize:'none',height:'80px',fontFamily:'inherit',lineHeight:'1.6',marginBottom:'7px'}}/>
-                                  <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
-                                    <input ref={notaArchivoRef} type="file" accept="image/*,.pdf,.doc,.docx,audio/*" style={{display:'none'}}
-                                      onChange={e => setArchivoNota(e.target.files?.[0] || null)}/>
-                                    <button onClick={() => notaArchivoRef.current?.click()}
-                                      style={{padding:'3px 9px',borderRadius:'6px',background:'var(--bg-input)',border:`0.5px solid ${color.border}`,fontSize:'10px',color:'var(--text-primary)',cursor:'pointer',fontFamily:'inherit'}}>
-                                      📎 {archivoNota ? archivoNota.name.slice(0,18)+'...' : n.archivo_nombre ? 'Cambiar archivo' : 'Adjuntar'}
-                                    </button>
-                                    {n.archivo_url && !archivoNota && (
-                                      <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
-                                        style={{fontSize:'10px',color:color.tab,textDecoration:'none',fontWeight:600}}>Ver actual</a>
-                                    )}
-                                  </div>
-                                  <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
-                                    <button onClick={() => { setEditandoNota(null); setArchivoNota(null) }}
-                                      style={{padding:'5px 12px',borderRadius:'7px',border:`0.5px solid ${color.border}`,background:'transparent',fontSize:'10px',color:'var(--text-secondary)',cursor:'pointer',fontFamily:'inherit'}}>
-                                      Cancelar
-                                    </button>
-                                    <button onClick={() => guardarEdicionNota(n)} disabled={subiendoNotaArchivo}
-                                      style={{padding:'5px 12px',borderRadius:'7px',border:'none',background:color.tab,color:'rgba(0,0,0,0.8)',fontSize:'10px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:subiendoNotaArchivo?0.6:1}}>
-                                      {subiendoNotaArchivo ? 'Guardando...' : 'Guardar'}
-                                    </button>
-                                  </div>
-                                </>
-                              ) : (<>
-                                {n.contenido && (
-                                  <div style={{fontSize:'12px',color:'var(--text-primary)',lineHeight:'1.7',whiteSpace:'pre-wrap',marginBottom:'10px'}}>
-                                    {expandida ? n.contenido : n.contenido.slice(0,180)}
-                                    {n.contenido.length > 180 && (
-                                      <span onClick={() => setEditandoNota(n.id+'_expand')}
-                                        style={{color:color.tab,cursor:'pointer',fontWeight:600,fontSize:'10px',marginLeft:'4px'}}>
-                                        {expandida ? ' ver menos ↑' : '... ver más ↓'}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                                {n.archivo_url && (
-                                  <div style={{display:'flex',alignItems:'center',gap:'8px',background:'var(--bg-input)',borderRadius:'8px',padding:'8px 10px',marginBottom:'10px',border:`0.5px solid ${color.border}`}}>
-                                    {n.archivo_tipo === 'imagen'
-                                      ? <img src={n.archivo_url} alt="" style={{width:'48px',height:'48px',borderRadius:'6px',objectFit:'cover'}}/>
-                                      : <span style={{fontSize:'20px'}}>{n.archivo_tipo==='pdf'?'📄':'📎'}</span>}
-                                    <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
-                                      style={{fontSize:'11px',color:color.tab,textDecoration:'none',fontWeight:600}}>
-                                      {n.archivo_nombre?.slice(0,28) || 'Ver archivo'}
-                                    </a>
-                                  </div>
-                                )}
-                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'0.5px solid var(--border-light)',paddingTop:'8px'}}>
-                                  <span style={{fontSize:'9px',color:'var(--text-muted)'}}>
-                                    {new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}
-                                  </span>
-                                  <div style={{display:'flex',gap:'5px'}}>
-                                    <button onClick={() => { setEditandoNota(n.id); setEditTitulo(n.titulo); setEditContenido(n.contenido||''); setArchivoNota(null) }}
-                                      style={{width:'24px',height:'24px',border:`0.5px solid ${color.border}`,borderRadius:'6px',background:'var(--bg-input)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:color.tab}}>
-                                      <Pencil size={9}/>
-                                    </button>
-                                    <button onClick={() => borrarNota(n.id)}
-                                      style={{width:'24px',height:'24px',border:'0.5px solid #EF4444',borderRadius:'6px',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#EF4444'}}>
-                                      <Trash2 size={9}/>
-                                    </button>
-                                  </div>
-                                </div>
-                              </>)}
-                            </>)}
                           </div>
                         </div>
                       )
@@ -759,6 +698,83 @@ export default function PacientesPage() {
           </>)}
         </div>
       </div>
+
+      {notaModalAbierta && (() => {
+        const n = notasPaciente.find(x => x.id === notaModalAbierta)
+        if (!n) return null
+        const tieneImagen = n.archivo_tipo === 'imagen' && !!n.archivo_url
+        const isEditing = editandoNota === n.id
+        return (
+          <div className="ficha-modal-overlay" onClick={() => { setNotaModalAbierta(null); setEditandoNota(null); setArchivoNota(null) }}>
+            <div className="ficha-modal-box" onClick={e => e.stopPropagation()}>
+              <button className="ficha-modal-close" onClick={() => { setNotaModalAbierta(null); setEditandoNota(null); setArchivoNota(null) }}><X size={16}/></button>
+              {tieneImagen && <img src={n.archivo_url!} alt="" className="ficha-modal-img"/>}
+              <div className="ficha-modal-body">
+                {isEditing ? (
+                  <>
+                    <input value={editTitulo} onChange={e => setEditTitulo(e.target.value)}
+                      placeholder="Nombre de la ficha..."
+                      style={{width:'100%',border:'0.5px solid var(--border)',borderRadius:'8px',padding:'8px 10px',fontSize:'14px',fontWeight:700,color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',fontFamily:'inherit',marginBottom:'10px'}}/>
+                    <textarea value={editContenido} onChange={e => setEditContenido(e.target.value)}
+                      style={{width:'100%',border:'0.5px solid var(--border)',borderRadius:'8px',padding:'10px',fontSize:'13px',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',resize:'none',height:'160px',fontFamily:'inherit',lineHeight:'1.7',marginBottom:'10px'}}/>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
+                      <input ref={notaArchivoRef} type="file" accept="image/*,.pdf,.doc,.docx,audio/*" style={{display:'none'}}
+                        onChange={e => setArchivoNota(e.target.files?.[0] || null)}/>
+                      <button onClick={() => notaArchivoRef.current?.click()}
+                        style={{padding:'5px 10px',borderRadius:'7px',background:'var(--bg-input)',border:'0.5px solid var(--border)',fontSize:'11px',color:'var(--text-primary)',cursor:'pointer',fontFamily:'inherit'}}>
+                        📎 {archivoNota ? archivoNota.name.slice(0,18)+'...' : n.archivo_nombre ? 'Cambiar archivo' : 'Adjuntar'}
+                      </button>
+                      {n.archivo_url && !archivoNota && (
+                        <a href={n.archivo_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'11px',color:'var(--accent)',fontWeight:600}}>Ver actual</a>
+                      )}
+                    </div>
+                    <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
+                      <button onClick={() => { setEditandoNota(null); setArchivoNota(null) }}
+                        style={{padding:'7px 14px',borderRadius:'8px',border:'0.5px solid var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-secondary)',cursor:'pointer',fontFamily:'inherit'}}>
+                        Cancelar
+                      </button>
+                      <button onClick={() => guardarEdicionNota(n)} disabled={subiendoNotaArchivo}
+                        style={{padding:'7px 14px',borderRadius:'8px',border:'none',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:subiendoNotaArchivo?0.6:1}}>
+                        {subiendoNotaArchivo ? 'Guardando...' : 'Guardar'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 style={{fontSize:'18px',fontWeight:800,color:'var(--text-primary)',marginBottom:'12px',fontFamily:"'Manrope',sans-serif"}}>{n.titulo}</h3>
+                    {n.contenido && (
+                      <div style={{fontSize:'13px',color:'var(--text-primary)',lineHeight:'1.8',whiteSpace:'pre-wrap',marginBottom:'16px'}}>
+                        {n.contenido}
+                      </div>
+                    )}
+                    {n.archivo_url && !tieneImagen && (
+                      <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
+                        style={{display:'inline-block',fontSize:'12px',color:'var(--accent)',fontWeight:600,marginBottom:'16px'}}>
+                        📎 {n.archivo_nombre || 'Ver archivo'}
+                      </a>
+                    )}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'0.5px solid var(--border-light)',paddingTop:'12px',marginTop:'8px'}}>
+                      <span style={{fontSize:'10px',color:'var(--text-muted)'}}>
+                        {new Date(n.created_at).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}
+                      </span>
+                      <div style={{display:'flex',gap:'6px'}}>
+                        <button onClick={() => { setEditandoNota(n.id); setEditTitulo(n.titulo); setEditContenido(n.contenido||''); setArchivoNota(null) }}
+                          style={{width:'26px',height:'26px',border:'0.5px solid var(--border)',borderRadius:'7px',background:'var(--bg-input)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--accent)'}}>
+                          <Pencil size={10}/>
+                        </button>
+                        <button onClick={() => { borrarNota(n.id); setNotaModalAbierta(null) }}
+                          style={{width:'26px',height:'26px',border:'0.5px solid #EF4444',borderRadius:'7px',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#EF4444'}}>
+                          <Trash2 size={10}/>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {modalNuevo && (
         <div className="mo-overlay" onClick={() => setModalNuevo(false)}>

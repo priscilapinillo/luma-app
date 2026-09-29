@@ -130,6 +130,9 @@ html.dark .sb-mobile {
   background: rgba(20,12,40,0.85);
   border-color: rgba(139,92,246,0.35);
 }
+body.modal-ficha-abierto .sb-mobile {
+  display: none;
+}
 .sb-mob-item {
   display: flex;
   flex-direction: column;
