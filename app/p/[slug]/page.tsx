@@ -583,7 +583,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         body{background:${t.bg} !important;color:${t.text} !important;font-family:var(--font-body);overflow-x:hidden;width:100%}
         html.dark body{background:${t.bg} !important;color:${t.text} !important}
 
-        .nav{position:fixed;top:0;left:0;right:0;width:100%;z-index:100;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;background:${t.navBg};${!t.dark?'border-bottom:0.5px solid var(--border);backdrop-filter:blur(12px);':''}}
+        .nav{position:fixed;top:0;left:0;right:0;width:100%;z-index:100;padding:calc(16px + env(safe-area-inset-top)) 24px 16px;display:flex;justify-content:space-between;align-items:center;background:${t.navBg};${!t.dark?'border-bottom:0.5px solid var(--border);backdrop-filter:blur(12px);':''}}
         .nav-logo{font-family:var(--font-title);font-size:clamp(11px,2.5vw,20px);font-weight:600;color:var(--primary);letter-spacing:1px;overflow:hidden;max-width:55vw;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
         .nav-cta{padding:8px 20px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);letter-spacing:1px;text-transform:uppercase;transition:all 0.3s}
 
