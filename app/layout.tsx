@@ -1,4 +1,13 @@
 import "./globals.css";
+import type { Viewport } from "next";
+import Script from "next/script";
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+}
 
 export default function RootLayout({
   children,
@@ -17,14 +26,14 @@ export default function RootLayout({
   <meta name="apple-mobile-web-app-title" content="Luma"/>
   <meta name="theme-color" content="#8B5CF6"/>
   <link rel="manifest" href="/manifest.json"/>
-  <script dangerouslySetInnerHTML={{__html: `
-    try {
-      const theme = localStorage.getItem('luma-theme');
-      if (theme === 'dark') document.documentElement.classList.add('dark');
-    } catch(e) {}
-  `}}/>
-</head>
-<body>
+  </head>
+  <body>
+        <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{__html: `
+          try {
+            const theme = localStorage.getItem('luma-theme');
+            if (theme === 'dark') document.documentElement.classList.add('dark');
+          } catch(e) {}
+        `}}/>
         {children}
         <script dangerouslySetInnerHTML={{__html: `
           if ('serviceWorker' in navigator) {

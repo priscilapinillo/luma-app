@@ -142,6 +142,9 @@ html[data-page="public"].dark body * {
     width: 100% !important;
     max-width: 100% !important;
   }
+  @media(max-width:767px){
+    .app-container { padding-left: 0 !important; }
+  }
 }
 body.modal-open .sb-mobile {
   display: none !important;

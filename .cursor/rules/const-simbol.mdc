@@ -1,0 +1,342 @@
+---
+alwaysApply: true
+---
+
+const SIMBOLOS_MONEDA: Record<string, string> = Object.fromEntries(MONEDAS.map(m => [m.codigo, m.simbolo]))
+type Tab = 'perfil' | 'pagina' | 'seguridad' | 'datos' | 'preferencias'
+
+export default function AjustesPage() {
+  const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [tab, setTab] = useState<Tab>('perfil')
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { cargarDatos() }, [])
+  const [guardando, setGuardando] = useState(false)
+  const [notificacionesActivas, setNotificacionesActivas] = useState(false)
+  
+  const [loadingNoti, setLoadingNoti] = useState(false)
+
+  async function toggleNotificaciones() {
+    setLoadingNoti(true)
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      alert('Tu navegador no soporta notificaciones. Agregá Luma a tu pantalla de inicio primero.')
+      return
+    }
+    if (notificacionesActivas) {
+      setNotificacionesActivas(false)
+      return
+    }
+    try {
+      const permiso = await Notification.requestPermission()
+      if (permiso !== 'granted') {
+        alert('Permiso denegado. Habilitá las notificaciones desde la configuración de tu celular.')
+        return
+      }
+      const registration = await navigator.serviceWorker.ready
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      })
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub, userId: user.id }),
+      })
+      setNotificacionesActivas(true)
+    } catch(err) {
+      console.error('Error activando notificaciones:', err)
+      alert('Hubo un error al activar las notificaciones.')
+    } finally {
+      setLoadingNoti(false)
+    }
+  }
+  const [subiendoAvatar, setSubiendoAvatar] = useState(false)
+  const [email, setEmail] = useState('')
+  const [ultimoAcceso, setUltimoAcceso] = useState('')
+  const [suscripcion, setSuscripcion] = useState<any>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState(false)
+  const [msgExito, setMsgExito] = useState('')
+  const perfilGuardadoRef = useRef<string>('')
+
+  const [perfil, setPerfil] = useState<Perfil>({
+    nombre_profesional: '', nombre_completo: '', especialidad: '',
+    bio: '', whatsapp: '', zona_horaria: 'America/Argentina/Buenos_Aires',
+    moneda: 'ARS', formato_fecha: 'dd/mm/yyyy', avatar_url: '',
+    pagina_activa: false, mensaje_bienvenida: '', tipo_pago: 'libre', slug: '',
+    template: 'luna',
+    secciones: { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
+    faq: [],
+    mp_access_token: '',
+    mp_activo: false,
+    valores: [
+      {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
+      {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
+      {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
+    ],
+    testimonios: [],
+    links: [],
+  })
+
+  useEffect(() => {
+    function avisarSalida(e: BeforeUnloadEvent) {
+      if (JSON.stringify(perfil) !== perfilGuardadoRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', avisarSalida)
+    return () => window.removeEventListener('beforeunload', avisarSalida)
+  }, [perfil])
+
+  const [passForm, setPassForm] = useState({
+    nueva: '', confirmar: '', showNueva: false, showConfirmar: false,
+  })
+  const [passError, setPassError] = useState('')
+  const [passExito, setPassExito] = useState(false)
+
+  
+
+  async function cargarDatos() {
+    console.log('cargarDatos inicio')
+    try {
+      const supabase = createClient()
+      console.log('supabase creado')
+      const { data: { user } } = await supabase.auth.getUser()
+      console.log('user:', user?.email)
+      if (!user || !user.email) {
+        window.location.href = '/auth/login'
+        return
+      }
+      setEmail(user.email || '')
+      setUltimoAcceso(user.last_sign_in_at || '')
+      const [{ data: prof }, { data: subs }] = await Promise.all([
+        supabase.from('therapist_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
+      ])
+      if (prof) {
+        const perfilCargado = {
+          id: prof.id,
+        nombre_profesional: prof.nombre_profesional || '',
+        nombre_completo: prof.nombre_completo || '',
+        especialidad: prof.especialidad || '',
+        bio: prof.bio || '',
+        whatsapp: prof.whatsapp || '',
+        zona_horaria: prof.zona_horaria || 'America/Argentina/Buenos_Aires',
+        moneda: prof.moneda || 'ARS',
+        formato_fecha: prof.formato_fecha || 'dd/mm/yyyy',
+        avatar_url: prof.avatar_url || '',
+        pagina_activa: prof.pagina_activa || false,
+        mensaje_bienvenida: prof.mensaje_bienvenida || '',
+        tipo_pago: prof.tipo_pago || 'libre',
+        slug: prof.slug || prof.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        template: prof.template || 'luna',
+        secciones: prof.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
+        faq: prof.faq || [],
+        mp_access_token: prof.mp_access_token || '',
+        mp_activo: prof.mp_activo || false,
+        acepta_transferencia: prof.acepta_transferencia || false,
+        alias_pago: prof.alias_pago || '',
+        cbu: prof.cbu || '',
+        titular_cuenta: prof.titular_cuenta || '',
+        banco: prof.banco || '',
+        instrucciones_pago: prof.instrucciones_pago || '',
+        valores: prof.valores || [
+          {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
+          {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
+          {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
+        ],
+        testimonios: prof.testimonios || [],
+        links: prof.links || [],
+      }
+      setPerfil(perfilCargado)
+      perfilGuardadoRef.current = JSON.stringify(perfilCargado)
+      }
+      if (subs) setSuscripcion(subs)
+
+        // Verificar si ya tiene notificaciones activas
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          const { data: pushSub } = await supabase
+            .from('push_subscriptions')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          if (pushSub) setNotificacionesActivas(true)
+        }
+  
+      } catch (err) {
+        console.error('Error cargando:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+  async function guardarPerfil() {
+    setGuardando(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const datos = {
+        user_id: user.id,
+        nombre_profesional: perfil.nombre_profesional,
+        nombre_completo: perfil.nombre_completo,
+        especialidad: perfil.especialidad,
+        bio: perfil.bio, whatsapp: perfil.whatsapp,
+        zona_horaria: perfil.zona_horaria, moneda: perfil.moneda,
+        formato_fecha: perfil.formato_fecha, avatar_url: perfil.avatar_url,
+        pagina_activa: perfil.pagina_activa,
+        mensaje_bienvenida: perfil.mensaje_bienvenida,
+        tipo_pago: perfil.tipo_pago,
+        slug: perfil.slug || perfil.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        template: perfil.template,
+        secciones: perfil.secciones,
+        faq: perfil.faq,
+        mp_access_token: perfil.mp_access_token,
+        mp_activo: perfil.mp_activo,
+        acepta_transferencia: perfil.acepta_transferencia || false,
+        alias_pago: perfil.alias_pago || '',
+        cbu: perfil.cbu || '',
+        titular_cuenta: perfil.titular_cuenta || '',
+        banco: perfil.banco || '',
+        instrucciones_pago: perfil.instrucciones_pago || '',
+        valores: perfil.valores,
+        testimonios: perfil.testimonios,
+        links: perfil.links,
+        updated_at: new Date().toISOString(),
+      }
+      if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
+        else await supabase.from('therapist_profiles').insert(datos)
+        perfilGuardadoRef.current = JSON.stringify(perfil)
+        setMsgExito('Perfil guardado correctamente')
+      setTimeout(() => setMsgExito(''), 3000)
+    } catch (err) {
+      console.error('Error guardando:', err)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function subirAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSubiendoAvatar(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const ext = file.name.split('.').pop()
+      const path = `${user.id}/avatar.${ext}`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+        const newUrl = urlData.publicUrl + '?t=' + Date.now()
+        setPerfil(prev => ({ ...prev, avatar_url: newUrl }))
+        await supabase.from('therapist_profiles')
+          .update({ avatar_url: newUrl })
+          .eq('user_id', user.id)
+      }
+    } catch(err) {
+      console.error('Error subiendo avatar:', err)
+    } finally {
+      setSubiendoAvatar(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function cambiarPassword() {
+    setPassError('')
+    if (passForm.nueva.length < 6) { setPassError('La contraseña debe tener al menos 6 caracteres'); return }
+    if (passForm.nueva !== passForm.confirmar) { setPassError('Las contraseñas no coinciden'); return }
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password: passForm.nueva })
+    if (error) { setPassError('No se pudo cambiar la contraseña'); return }
+    setPassExito(true)
+    setPassForm({ nueva: '', confirmar: '', showNueva: false, showConfirmar: false })
+    setTimeout(() => setPassExito(false), 3000)
+  }
+
+  async function cerrarSesion() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
+
+  async function exportarCSV(tipo: 'pacientes' | 'finanzas') {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    if (tipo === 'pacientes') {
+      const { data } = await supabase.from('patients').select('*').eq('user_id', user.id)
+      if (!data) return
+      const csv = ['Nombre,Apellido,Celular,Email,Cumpleaños,Contexto',...data.map(p => `${p.nombre},${p.apellido},${p.celular||''},${p.email||''},${p.fecha_nacimiento||''},${(p.contexto_general||'').replace(/,/g,' ')}`)].join('\n')
+      descargarCSV(csv, 'pacientes-luma.csv')
+    } else {
+      const { data } = await supabase.from('sessions').select('*').eq('user_id', user.id)
+      if (!data) return
+      const csv = ['Fecha,Hora,Servicio,Precio,Estado Pago,Estado Sesion',...data.map(s => `${s.fecha?.split('T')[0]||''},${s.hora||''},${s.servicio_nombre||''},${s.precio||0},${s.estado_pago||''},${s.estado_sesion||''}`)].join('\n')
+      descargarCSV(csv, 'finanzas-luma.csv')
+    }
+  }
+
+  function descargarCSV(contenido: string, nombre: string) {
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = nombre; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const iniciales = perfil.nombre_profesional
+    ? perfil.nombre_profesional.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()
+    : '?'
+
+  const diasTrial = suscripcion?.trial_ends_at
+    ? Math.max(0, Math.ceil((new Date(suscripcion.trial_ends_at).getTime() - Date.now()) / (1000*60*60*24)))
+    : 0
+
+  if (loading) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
+      Cargando...
+    </div>
+  )
+
+  return (
+    <>
+      <style>{`
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box}
+  .sw{height:100vh;display:grid;grid-template-columns:220px 1fr;font-family:'Inter',sans-serif;background:var(--bg);overflow:hidden}
+  .s-nav{background:var(--bg-card);border-right:0.5px solid var(--border-light);padding:20px 12px;display:flex;flex-direction:column;gap:2px}
+  .s-nav-title{font-size:16px;font-weight:800;color:var(--text-primary);padding:0 10px;margin-bottom:16px;letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
+  .s-nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;font-size:12px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all 0.15s;border:none;background:none;font-family:inherit;width:100%;text-align:left}
+  .s-nav-item:hover{background:var(--accent-hover);color:var(--text-primary)}
+  .s-nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600}
+  .s-content{overflow-y:auto;padding:24px 28px}
+  .s-section-title{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;margin-bottom:4px;font-family:'Manrope',sans-serif}
+  .s-section-sub{font-size:12px;color:var(--text-muted);margin-bottom:24px}
+  .s-card{background:var(--bg-card);border-radius:18px;padding:20px 22px;border:0.5px solid var(--border-light);box-shadow:0 2px 12px var(--shadow);margin-bottom:16px}
+  .s-card-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:14px;display:flex;align-items:center;gap:7px;font-family:'Manrope',sans-serif}
+  .avatar-wrap{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+  .avatar-img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
+  .avatar-placeholder{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:white;flex-shrink:0}
+  .avatar-name{font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:2px;font-family:'Manrope',sans-serif}
+  .avatar-spec{font-size:12px;color:var(--text-muted)}
+  .avatar-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--accent-light);color:var(--accent);border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px;transition:all 0.15s}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .field.full{grid-column:1/-1}
+  .field label{font-size:11px;font-weight:600;color:var(--text-primary)}
+  .field input,.field select,.field textarea{padding:9px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+  .field textarea{min-height:70px;resize:none}
+  .field-hint{font-size:10px;color:var(--text-muted);margin-top:2px}
+  .save-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s}
+  .save-btn:hover{box-shadow:0 6px 16px rgba(139,92,246,0.4);transform:translateY(-1px)}
+  .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .msg-exito{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#059669;background:#DCFCE7;padding:7px 12px;border-radius:8px;border:0.5px solid #BBF7D0;margin-left:10px}
+  .pass-field{position:relative;margin-bottom:12px}
+  .pass-field label{font-size:11px;font-weight:600;color:var(--text-primary);display:block;margin-bottom:5px}
+  .pass-input-wrap{position:relative}
+  .pass-input{width:100%;padding:9px 38px 9px 11px;border-rad

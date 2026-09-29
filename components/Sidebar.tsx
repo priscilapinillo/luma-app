@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { calcularAcceso } from '@/lib/acceso'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -13,7 +14,7 @@ export default function Sidebar() {
   const [perfil, setPerfil] = useState({ nombre: '', plan: 'Trial activo' })
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
-  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null} | null>(null)
+  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string} | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
@@ -32,7 +33,7 @@ export default function Sidebar() {
       if (!user) return
       const [{ data: prof }, { data: sub }] = await Promise.all([
         supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
-        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan').eq('user_id', user.id).maybeSingle(),
       ])
       const planLabel = sub?.status === 'active' ? 'Plan activo' : sub?.status === 'trial' ? 'Trial activo' : 'Sin plan'
       setPerfil({
@@ -64,6 +65,8 @@ export default function Sidebar() {
   }
 
   const iniciales = perfil.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?'
+
+  const tieneAccesoCursos = calcularAcceso(sub) === 'premium'
 
   const links = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
@@ -102,14 +105,14 @@ export default function Sidebar() {
             gap: 4px;
             font-family: 'Inter', sans-serif;
           }
-          .sb-mobile {
+        .sb-mobile {
   position: fixed;
   bottom: 12px;
   bottom: calc(12px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 24px);
-  max-width: 420px;
+  width: calc(100% - 12px);
+  max-width: 480px;
   z-index: 200;
   backdrop-filter: blur(16px) saturate(200%);
   -webkit-backdrop-filter: blur(16px) saturate(200%);
@@ -135,9 +138,9 @@ html.dark .sb-mobile {
   min-width: 0;
  color: rgb(140 110 185 / 85%);
   text-decoration: none;
-  padding: 8px 4px;
+  padding: 8px 2px;
   border-radius: 999rem;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
   transition: all 0.18s ease;
   -webkit-tap-highlight-color: transparent;
@@ -257,6 +260,12 @@ html.dark .sb-mobile {
           }
 
           /* ── TOGGLE THEME ── */
+          .sb-plan-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(167,139,250,0.6);margin-bottom:3px}
+          html:not(.dark) .sb-plan-label{color:rgba(107,63,160,0.5)}
+          .sb-plan-status{font-size:12px;font-weight:600;color:rgba(255,255,255,0.9)}
+          html:not(.dark) .sb-plan-status{color:rgba(60,20,100,0.85)}
+          .sb-plan-status.ok{color:#6EE7B7}
+          html:not(.dark) .sb-plan-status.ok{color:#059669}
           .sb-mob-toggle-wrap {
             display: flex;
             align-items: center;
@@ -299,10 +308,22 @@ html.dark .sb-mobile {
 
         {/* NAV BOTTOM */}
         <nav className="sb-mobile">
-          {links.map(({ href, icon: Icon, label }) => (
+          {links.slice(0,4).map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}
               className={`sb-mob-item${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
-              <div className="sb-mob-icon"><Icon size={17}/></div>
+              <div className="sb-mob-icon"><Icon size={15}/></div>
+              <span>{label}</span>
+            </Link>
+          ))}
+          <Link href="/courses" className={`sb-mob-item${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`} style={{position:'relative'}}>
+            <div className="sb-mob-icon"><BookOpen size={15}/></div>
+            <span>Cursos</span>
+            {!tieneAccesoCursos && <Lock size={8} style={{position:'absolute',top:'4px',right:'22%',opacity:0.7}}/>}
+          </Link>
+          {links.slice(4).map(({ href, icon: Icon, label }) => (
+            <Link key={href} href={href}
+              className={`sb-mob-item${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
+              <div className="sb-mob-icon"><Icon size={15}/></div>
               <span>{label}</span>
             </Link>
           ))}
@@ -327,9 +348,38 @@ html.dark .sb-mobile {
               </div>
             </div>
 
+            {sub && (() => {
+              const ahora = new Date()
+              const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
+              const esTrial = sub.status === 'trial' && sub.trial_ends_at
+              const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
+              return (
+                <>
+                  <hr className="sb-dropdown-sep"/>
+                  <div style={{padding:'8px 18px'}}>
+                    <div className="sb-plan-label">Mi plan</div>
+                    <div className={`sb-plan-status${esActivo ? ' ok' : ''}`}>
+                      {esActivo ? '✓ Plan activo' : esTrial ? `✦ ${diasRestantes} días de prueba` : '⚠️ Prueba vencida'}
+                    </div>
+                    {!esActivo && !esTrial && (
+                      <a href="/suscripcion" onClick={() => setMenuMobile(false)} style={{fontSize:'11px',color:'#C4A8FF',fontWeight:600,textDecoration:'none',display:'block',marginTop:'4px'}}>
+                        Activar ahora →
+                      </a>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+
             <hr className="sb-dropdown-sep"/>
 
             <ul className="sb-dropdown-list">
+              <li>
+                <Link href="/courses" className="sb-dropdown-item" onClick={() => setMenuMobile(false)} style={{position:'relative'}}>
+                  <BookOpen size={16}/> <span>Cursos</span>
+                  {!tieneAccesoCursos && <Lock size={11} style={{marginLeft:'auto',opacity:0.6}}/>}
+                </Link>
+              </li>
               <li>
                 <Link href="/roadmap" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
                   <Map size={16}/> <span>Novedades</span>
@@ -372,7 +422,9 @@ html.dark .sb-mobile {
           flex-shrink:0;overflow:hidden;
           transition:all 0.2s;
           font-family:'Inter',sans-serif;
+          position:fixed;top:0;left:0;z-index:200;
         }
+        @media(max-width:767px){.sb{display:none !important;}}
         html.dark .sb{
           background:linear-gradient(160deg,#1A1628 0%,#1E1A2E 40%,#211828 70%,#1E1520 100%);
           border-right-color:rgba(100,80,180,0.2);
@@ -411,6 +463,16 @@ html.dark .sb-mobile {
         .sb-user-plan{font-size:9px;color:var(--text-muted);margin-top:1px}
         .sb-logout{width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0;cursor:pointer;border-radius:5px;border:none;background:transparent;padding:0}
         .sb-logout:hover{color:#EF4444}
+        @media(max-width:767px){
+       .sb{ display:none !important; }
+}
+       @media(min-width:768px){
+  :root { --sidebar-width: 200px; }
+}
+@media(max-width:767px){
+  .sb { display: none; }
+  :root { --sidebar-width: 0px; }
+}
       `}</style>
 
       <aside className="sb">
@@ -423,7 +485,19 @@ html.dark .sb-mobile {
 
         <div className="sb-section">Principal</div>
 
-        {links.slice(0,5).map(({ href, icon: Icon, label }) => (
+        {links.slice(0,4).map(({ href, icon: Icon, label }) => (
+          <Link key={href} href={href}
+            className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
+            <Icon size={13}/>{label}
+          </Link>
+        ))}
+
+        <Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
+          <BookOpen size={13}/>Cursos
+          {!tieneAccesoCursos && <Lock size={10} style={{marginLeft:'auto',opacity:0.6}}/>}
+        </Link>
+
+        {links.slice(4,5).map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}
             className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
             <Icon size={13}/>{label}
