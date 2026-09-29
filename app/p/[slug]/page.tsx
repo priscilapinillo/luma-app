@@ -51,6 +51,10 @@ function formatDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+function sinTildes(str: string) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 const TEMPLATES = {
   luna: {
     bg: '#0D0B14', bg2: '#12101C', bg3: '#1A1628',
@@ -265,6 +269,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [cursos, setCursos] = useState<Curso[]>([])
   const [tabActiva, setTabActiva] = useState<'servicios' | 'cursos' | 'links'>('servicios')
   const [cursoPageIdx, setCursoPageIdx] = useState(0)
+  const [busqueda, setBusqueda] = useState('')
 
   // flujo de reserva
   const [paso, setPaso] = useState(0) // 0=inicial 2=horarios 3=form
@@ -341,6 +346,21 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     }
     setDiasSel(proximos)
   }, [disponibilidad])
+
+  // saltar automáticamente a la categoría donde hay resultados al buscar
+  useEffect(() => {
+    if (!busqueda.trim()) return
+    const q = sinTildes(busqueda.trim())
+    const hayServicios = servicios.some(s => sinTildes(s.nombre).includes(q) || sinTildes(s.descripcion||'').includes(q))
+    const hayCursos = cursos.some(c => sinTildes(c.titulo).includes(q) || sinTildes(c.descripcion_corta||'').includes(q))
+    const hayLinks = (terapeuta?.links||[]).some(l => sinTildes(l.titulo).includes(q) || sinTildes(l.descripcion||'').includes(q) || sinTildes(l.tipo||'').includes(q))
+    if (tabActiva === 'servicios' && hayServicios) return
+    if (tabActiva === 'cursos' && hayCursos) return
+    if (tabActiva === 'links' && hayLinks) return
+    if (hayServicios) setTabActiva('servicios')
+    else if (hayCursos) setTabActiva('cursos')
+    else if (hayLinks) setTabActiva('links')
+  }, [busqueda])
 
   // ── carga de datos ────────────────────────────────────────────────────────
 
@@ -557,6 +577,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const mostrarTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const requierePago = terapeuta?.tipo_pago === 'sena' || terapeuta?.tipo_pago === 'completo'
   const formularioListo = !!(form.nombre.trim() && form.whatsapp.trim())
+
+  const qBusqueda = sinTildes(busqueda.trim())
+  const serviciosFiltrados = !qBusqueda ? servicios : servicios.filter(s => sinTildes(s.nombre).includes(qBusqueda) || sinTildes(s.descripcion||'').includes(qBusqueda))
+  const cursosFiltrados = !qBusqueda ? cursos : cursos.filter(c => sinTildes(c.titulo).includes(qBusqueda) || sinTildes(c.descripcion_corta||'').includes(qBusqueda))
+  const linksFiltrados = !qBusqueda ? (terapeuta?.links||[]) : (terapeuta?.links||[]).filter(l => sinTildes(l.titulo).includes(qBusqueda) || sinTildes(l.descripcion||'').includes(qBusqueda) || sinTildes(l.tipo||'').includes(qBusqueda))
 
   // ── renders de carga/error ────────────────────────────────────────────────
 
@@ -992,12 +1017,24 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div className="tabs-glider"/>
         </div>
 
+        <div style={{position:'relative',maxWidth:'420px',margin:'0 auto 24px'}}>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar servicios, cursos o links..."
+            style={{width:'100%',padding:'12px 16px',borderRadius:'50px',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--cream)',fontSize:'14px',fontFamily:'var(--font-body)',outline:'none'}}
+          />
+        </div>
+
         {tabActiva === 'links' && (
           !terapeuta.links || terapeuta.links.length === 0 ? (
             <div className="links-placeholder">{t.deco} Todavía no hay links cargados {t.deco}</div>
+          ) : linksFiltrados.length === 0 ? (
+            <div className="links-placeholder">{t.deco} No se encontraron resultados {t.deco}</div>
           ) : (
             <div>
-              {terapeuta.links.map((link, i) => {
+              {linksFiltrados.map((link, i) => {
                 const IconComp = link.tipo === 'tiktok' ? Music2
                 : link.tipo === 'instagram' ? Camera
                 : link.tipo === 'podcast' ? Mic
@@ -1025,9 +1062,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
               Próximamente disponibles {t.deco}
             </div>
+          ) : cursosFiltrados.length === 0 ? (
+            <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
+              No se encontraron resultados {t.deco}
+            </div>
           ) : (<>
             <div className="cursos-mobile">
-              {cursos.map(c => (
+              {cursosFiltrados.map(c => (
                 <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
                   <div className="curso-overlay"/>
                   {c.nivel && <div className="curso-badge">{c.nivel}</div>}
@@ -1042,7 +1083,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             </div>
 
             <div className="cursos-desktop">
-              {cursos.slice(cursoPageIdx*3, cursoPageIdx*3+3).map(c => (
+              {cursosFiltrados.slice(cursoPageIdx*3, cursoPageIdx*3+3).map(c => (
                 <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
                   <div className="curso-overlay"/>
                   {c.nivel && <div className="curso-badge">{c.nivel}</div>}
@@ -1055,9 +1096,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 </a>
               ))}
             </div>
-            {cursos.length > 3 && (
+            {cursosFiltrados.length > 3 && (
               <div className="cursos-dots">
-                {Array.from({length: Math.ceil(cursos.length/3)}).map((_,i) => (
+                {Array.from({length: Math.ceil(cursosFiltrados.length/3)}).map((_,i) => (
                   <button key={i} className={`cursos-dot${cursoPageIdx===i?' act':''}`} onClick={() => setCursoPageIdx(i)}/>
                 ))}
               </div>
@@ -1065,14 +1106,18 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </>)
         )}
 
-        {tabActiva === 'servicios' && (
+{tabActiva === 'servicios' && (
         servicios.length === 0 ? (
           <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
             Próximamente disponibles {t.deco}
           </div>
+        ) : serviciosFiltrados.length === 0 ? (
+          <div style={{textAlign:'center',color:'var(--text-dim)',padding:'40px',fontFamily:'var(--font-subtitle)',fontSize:'16px'}}>
+            No se encontraron resultados {t.deco}
+          </div>
         ) : (
           <div className="serv-list">
-            {servicios.map(s => (
+            {serviciosFiltrados.map(s => (
               <div key={s.id} className={`serv-card${servicioSel?.id===s.id?' sel':''}`} 
               onClick={() => entregasLlenas && s.tipo_servicio === 'entrega' ? null : abrirModal(s)}
               style={{cursor: entregasLlenas && s.tipo_servicio === 'entrega' ? 'default' : 'pointer'}}>
