@@ -60,7 +60,7 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
   const pasados = encuentros.filter(e => new Date(e.fecha_hora) < ahora)
 
   return (
-    <div style={{padding:'20px',maxWidth:'720px'}}>
+    <div style={{padding:'20px',paddingBottom:'calc(40px + env(safe-area-inset-bottom))',maxWidth:'720px'}}>
       <style>{`
         .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
         .field label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
