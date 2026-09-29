@@ -81,7 +81,18 @@ export default function CourseEditPage() {
   return (
     <div style={{minHeight:'100vh',background:'var(--bg)'}}>
       <style>{`
-        .tab-bar{display:flex;gap:4px;padding:0 20px;border-bottom:0.5px solid var(--border-light);background:var(--bg-card);position:sticky;top:0;z-index:10}
+        .tab-bar-wrap{position:relative}
+        .tab-bar{display:flex;gap:4px;padding:0 20px;border-bottom:0.5px solid var(--border-light);background:var(--bg-card);position:sticky;top:0;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        .tab-bar::-webkit-scrollbar{display:none}
+        .tab-bar-fade{
+          position:absolute;top:0;right:0;bottom:0;width:56px;
+          background:linear-gradient(to right,transparent,var(--bg-card));
+          pointer-events:none;z-index:11;
+          display:none;
+        }
+        @media(max-width:640px){
+          .tab-bar-fade{display:block}
+        }
         .tab-btn{display:flex;align-items:center;gap:6px;padding:14px 16px;font-size:12.5px;font-weight:600;color:var(--text-muted);border:none;background:transparent;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap}
         .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
         .tab-btn:hover{color:var(--text-primary)}
@@ -109,22 +120,25 @@ export default function CourseEditPage() {
       </div>
 
       {/* TABS */}
-      <div className="tab-bar">
-        <button className={`tab-btn${tab==='info'?' active':''}`} onClick={() => setTab('info')}>
-          <Info size={13}/>Información
-        </button>
-        <button className={`tab-btn${tab==='contenido'?' active':''}`} onClick={() => setTab('contenido')}>
-          <BookOpen size={13}/>Contenido
-        </button>
-        <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')}>
-          <Users size={13}/>Alumnas
-        </button>
-        <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
-          <GraduationCap size={13}/>Examen
-        </button>
-        <button className={`tab-btn${tab==='encuentros'?' active':''}`} onClick={() => setTab('encuentros')}>
-          <Video size={13}/>Encuentros
-        </button>
+      <div className="tab-bar-wrap">
+        <div className="tab-bar">
+          <button className={`tab-btn${tab==='info'?' active':''}`} onClick={() => setTab('info')}>
+            <Info size={13}/>Información
+          </button>
+          <button className={`tab-btn${tab==='contenido'?' active':''}`} onClick={() => setTab('contenido')}>
+            <BookOpen size={13}/>Contenido
+          </button>
+          <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')}>
+            <Users size={13}/>Alumnas
+          </button>
+          <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
+            <GraduationCap size={13}/>Examen
+          </button>
+          <button className={`tab-btn${tab==='encuentros'?' active':''}`} onClick={() => setTab('encuentros')}>
+            <Video size={13}/>Encuentros
+          </button>
+        </div>
+        <div className="tab-bar-fade"/>
       </div>
 
       {/* CONTENIDO */}

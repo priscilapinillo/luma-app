@@ -11,6 +11,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [esCuentaLinks, setEsCuentaLinks] = useState(false)
   const [loading, setLoading] = useState(false)
   const [nombre, setNombre] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -28,11 +29,23 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setEsCuentaLinks(false)
     const supabase = createClient()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
 
     const userId = data.user?.id
+
+    const { data: linksProfile } = await supabase
+      .from('luma_links_profiles').select('id').eq('auth_user_id', userId).maybeSingle()
+
+      if (linksProfile) {
+        await supabase.auth.signOut({ scope: 'local' })
+      setEsCuentaLinks(true)
+      setLoading(false)
+      return
+    }
+
     const { data: sub } = await supabase
       .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
 
@@ -86,7 +99,7 @@ export default function AuthPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;font-family:'Geist',sans-serif}
 
@@ -98,87 +111,72 @@ export default function AuthPage() {
 
         /* LADO IZQUIERDO — decorativo */
         .auth-left{
-          background:#0A0A0A;
+          background-image:
+            linear-gradient(160deg,rgba(30,27,46,0.82),rgba(13,11,20,0.9)),
+            url('/landing/hero-bgg.png');
+          background-size:cover;
+          background-position:center;
           position:relative;overflow:hidden;
           display:flex;flex-direction:column;
           justify-content:space-between;
           padding:48px;
         }
-        .auth-left-glow1{
-          position:absolute;width:500px;height:500px;border-radius:50%;
-          background:radial-gradient(circle,rgba(139,92,246,0.2),transparent 70%);
-          top:-150px;left:-150px;pointer-events:none;
-        }
-        .auth-left-glow2{
-          position:absolute;width:400px;height:400px;border-radius:50%;
-          background:radial-gradient(circle,rgba(236,72,153,0.12),transparent 70%);
-          bottom:-100px;right:-100px;pointer-events:none;
-        }
         .auth-left-top{position:relative;z-index:1}
         .auth-left-logo{
-          font-size:24px;font-weight:900;color:white;
-          letter-spacing:-1px;text-decoration:none;display:inline-block;
+          font-family:'Cormorant Garamond',serif;
+          font-size:26px;font-weight:600;color:#F9F6F0;
+          letter-spacing:0.5px;text-decoration:none;display:inline-block;
         }
-        .auth-left-logo span{color:#8B5CF6}
+        .auth-left-logo span{color:#C9A84C}
         .auth-left-center{
           position:relative;z-index:1;
           flex:1;display:flex;flex-direction:column;
-          justify-content:center;padding:40px 0;
-        }
-        .auth-left-tag{
-          font-size:11px;font-weight:700;color:#525252;
-          letter-spacing:3px;text-transform:uppercase;
-          margin-bottom:20px;display:block;
+          justify-content:center;padding:32px 0;
         }
         .auth-left-title{
-          font-size:clamp(36px,4vw,52px);font-weight:900;
-          color:white;letter-spacing:-2px;line-height:1.05;
-          margin-bottom:20px;
+          font-family:'Cormorant Garamond',serif;
+          font-size:clamp(26px,2.8vw,34px);
+          line-height:1.4;
+          color:#F9F6F0;
+          margin-bottom:36px;
+          max-width:420px;
         }
-        .auth-left-title .grad{
-          background:linear-gradient(135deg,#8B5CF6,#EC4899,#F59E0B);
-          -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        .auth-left-title .accent{
+          font-style:italic;color:#C9A84C;
         }
-        .auth-left-sub{
-          font-size:15px;color:#525252;line-height:1.65;
-          max-width:380px;
-        }
-        .auth-left-features{
-          display:flex;flex-direction:column;gap:12px;margin-top:32px;
-        }
-        .auth-left-feat{
-          display:flex;align-items:center;gap:10px;
-          font-size:14px;color:#737373;
-        }
-        .auth-left-feat-dot{
-          width:6px;height:6px;border-radius:50%;
-          background:linear-gradient(135deg,#8B5CF6,#EC4899);
-          flex-shrink:0;
+        .auth-left-title .highlight{
+          font-style:normal;color:#F9F6F0;
+          background:rgba(139,92,246,0.3);
+          padding:1px 8px;border-radius:4px;
         }
         .auth-left-bottom{
           position:relative;z-index:1;
-          font-size:13px;color:#404040;
+          font-size:13px;color:#8B7FA8;
         }
 
-        /* DASHBOARD PREVIEW */
-        .dash-preview{
-          position:absolute;
-          right:-40px;bottom:80px;
-          width:340px;
-          border-radius:14px;
-          overflow:hidden;
-          border:1px solid #1F1F1F;
-          box-shadow:0 24px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.03);
-          transform:perspective(1000px) rotateY(-8deg) rotateX(4deg);
-          transition:transform 0.3s;
-          z-index:2;
+        /* MOCKUP CON NOTIFICACIÓN */
+        .auth-phone-wrap{
+          position:relative;z-index:1;
+          width:min(300px,80%);
+          margin-top:8px;
         }
-        .dash-preview:hover{transform:perspective(1000px) rotateY(-4deg) rotateX(2deg)}
-        .dash-preview img{width:100%;display:block;opacity:0.85}
-        .dash-preview-fade{
-          position:absolute;bottom:0;left:0;right:0;height:120px;
-          background:linear-gradient(to bottom,transparent,#0A0A0A);
-          pointer-events:none;
+        .auth-phone-img{
+          width:100%;display:block;
+          border-radius:20px;
+          box-shadow:0 30px 70px rgba(0,0,0,0.5);
+        }
+        .auth-notif-img{
+          position:absolute;top:-6%;left:50%;
+          width:82%;max-width:280px;
+          animation:authNotifCaer 4s ease-in-out infinite;
+          filter:drop-shadow(0 12px 24px rgba(0,0,0,0.4));
+        }
+        @keyframes authNotifCaer{
+          0%{ transform:translate(-50%,-120%); opacity:0; }
+          15%{ transform:translate(-50%,0%); opacity:1; }
+          75%{ transform:translate(-50%,0%); opacity:1; }
+          92%{ transform:translate(-50%,-20%); opacity:0; }
+          100%{ transform:translate(-50%,-120%); opacity:0; }
         }
 
         /* LADO DERECHO — formulario */
@@ -305,45 +303,24 @@ export default function AuthPage() {
 
         {/* IZQUIERDA */}
         <div className="auth-left">
-          <div className="auth-left-glow1"/>
-          <div className="auth-left-glow2"/>
-
           <div className="auth-left-top">
             <Link href="/" className="auth-left-logo">Luma<span>.</span></Link>
           </div>
 
           <div className="auth-left-center">
-            <span className="auth-left-tag">Para profesionales del bienestar</span>
             <h2 className="auth-left-title">
-              Tu trabajo,<br/>
-              <span className="grad">organizado<br/>de verdad.</span>
+              Tu consultante ideal está buscando <span className="accent">dónde reservar</span> ahora mismo.<br/><br/>
+              <span className="highlight">¿Tiene dónde hacerlo?</span>
             </h2>
-            <p className="auth-left-sub">
-              Agenda, historial, cobros y página de reservas — todo en un solo lugar.
-            </p>
-            <div className="auth-left-features">
-              {[
-                'Historial completo de cada consultante',
-                'Página de reservas con Mercado Pago',
-                'Dashboard de finanzas en tiempo real',
-                '7 días gratis · Sin tarjeta',
-              ].map((f,i) => (
-                <div key={i} className="auth-left-feat">
-                  <div className="auth-left-feat-dot"/>
-                  {f}
-                </div>
-              ))}
-            </div>
 
-            {/* DASHBOARD PREVIEW */}
-            <div className="dash-preview" style={{position:'relative',right:'unset',bottom:'unset',width:'100%',marginTop:'32px',transform:'none'}}>
-              <img src="/screenshots/dashboard.png" alt="Dashboard"/>
-              <div className="dash-preview-fade"/>
+            <div className="auth-phone-wrap">
+              <img src="/landing/hero-dashboard.png" alt="Dashboard de Luma" className="auth-phone-img"/>
+              <img src="/landing/hero-notif.png" alt="" className="auth-notif-img"/>
             </div>
           </div>
 
           <div className="auth-left-bottom">
-            ARS $9.900/mes · Cancelás cuando querés
+            Sin tarjeta · 7 días gratis · Cancelás cuando querés
           </div>
         </div>
 
@@ -380,6 +357,12 @@ export default function AuthPage() {
                       </div>
                     </div>
                     {error && <div className="form-error">{error}</div>}
+                    {esCuentaLinks && (
+                      <div style={{fontSize:'12px',color:'#92400E',marginBottom:'12px',padding:'10px 12px',background:'#FFFBEB',borderRadius:'8px',border:'1px solid #FDE68A'}}>
+                        Esta es una cuenta de <strong>Luma Links</strong>, no de terapeuta. Entrá desde{' '}
+                        <Link href="/links/login" style={{color:'#92400E',fontWeight:700,textDecoration:'underline'}}>acá</Link>.
+                      </div>
+                    )}
 {!recuperando ? (
   <div style={{textAlign:'right',marginBottom:'12px'}}>
     <button type="button" className="form-switch-link"
@@ -430,6 +413,11 @@ export default function AuthPage() {
                       onClick={() => { setFlipped(true); setError('') }}>
                       Registrate gratis
                     </button>
+                  </div>
+                  <div className="form-switch" style={{marginTop:'8px'}}>
+                  <Link href="/links/login" className="form-switch-link" style={{textDecoration:'underline', color:'#C9A84C'}}>
+                      Tengo cuenta Luma Links
+                    </Link>
                   </div>
                 </div>
 

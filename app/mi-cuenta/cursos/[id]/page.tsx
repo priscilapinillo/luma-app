@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap } from 'lucide-react'
+import { tieneAccesoCurso } from '@/lib/acceso'
 
 type Leccion = {
   id: string; titulo: string; tipo: string; contenido_url: string | null
@@ -61,11 +62,15 @@ export default function AulaCursoPage() {
       setPersonaId(persona.id)
 
       const { data: enrollment, error: errorEnroll } = await supabase
-        .from('enrollments').select('id, estado')
+        .from('enrollments').select('id, estado, modalidad, fecha_vencimiento')
         .eq('course_id', courseId).eq('person_id', persona.id).maybeSingle()
 
-      if (!enrollment || enrollment.estado !== 'activa') {
-        setDebugInfo(enrollment ? `Encontró la inscripción pero el estado es "${enrollment.estado}", no "activa".` : `No se encontró inscripción. Error: ${errorEnroll ? JSON.stringify(errorEnroll) : 'ninguno'}`)
+      if (!enrollment || !tieneAccesoCurso(enrollment)) {
+        setDebugInfo(
+          !enrollment ? `No se encontró inscripción. Error: ${errorEnroll ? JSON.stringify(errorEnroll) : 'ninguno'}`
+          : enrollment.estado !== 'activa' ? `Encontró la inscripción pero el estado es "${enrollment.estado}", no "activa".`
+          : `El acceso venció el ${enrollment.fecha_vencimiento}. Pedile a tu terapeuta que te renueve el acceso.`
+        )
         setSinAcceso(true); setLoading(false); return
       }
       setEnrollmentId(enrollment.id)

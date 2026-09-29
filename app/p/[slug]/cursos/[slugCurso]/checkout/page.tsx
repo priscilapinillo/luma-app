@@ -39,6 +39,7 @@ export default function CheckoutCursoPage() {
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [celular, setCelular] = useState('')
   const [metodoPago, setMetodoPago] = useState<'mp' | 'transferencia' | null>(null)
 
   const [enviandoTransferencia, setEnviandoTransferencia] = useState(false)
@@ -66,7 +67,13 @@ export default function CheckoutCursoPage() {
 
       const p = new URLSearchParams(window.location.search)
       if (p.get('status') === 'approved' && p.get('enrollment_id')) {
-        await supabase.from('enrollments').update({ estado: 'activa' }).eq('id', p.get('enrollment_id'))
+        const updateData: any = { estado: 'activa' }
+        if (cursoData.modalidad === 'suscripcion') {
+          const vence = new Date()
+          vence.setDate(vence.getDate() + 30)
+          updateData.fecha_vencimiento = vence.toISOString()
+        }
+        await supabase.from('enrollments').update(updateData).eq('id', p.get('enrollment_id'))
         setEnviado(true)
       }
     } catch (e) { console.error(e) }
@@ -114,6 +121,7 @@ export default function CheckoutCursoPage() {
       nombre: partes[0],
       apellido: partes.slice(1).join(' ') || '',
       auth_user_id: userId,
+      celular: celular.trim() || null,
     }).select('id').single()
     if (error) { console.error('Error creando persona:', error); return null }
     return nueva?.id || null
@@ -121,15 +129,21 @@ export default function CheckoutCursoPage() {
 
   async function crearOActualizarInscripcion(personaId: string, estado: string) {
     const supabase = createClient()
+    const datos: any = {
+      course_id: curso!.id,
+      person_id: personaId,
+      terapeuta_id: curso!.user_id,
+      modalidad: curso!.modalidad,
+      estado,
+    }
+    if (estado === 'activa' && curso!.modalidad === 'suscripcion') {
+      const vence = new Date()
+      vence.setDate(vence.getDate() + 30)
+      datos.fecha_vencimiento = vence.toISOString()
+    }
     const { data, error } = await supabase
       .from('enrollments')
-      .upsert({
-        course_id: curso!.id,
-        person_id: personaId,
-        terapeuta_id: curso!.user_id,
-        modalidad: curso!.modalidad,
-        estado,
-      }, { onConflict: 'course_id,person_id' })
+      .upsert(datos, { onConflict: 'course_id,person_id' })
       .select().single()
     if (error) { console.error('Error creando inscripción:', error); return null }
     return data
@@ -264,6 +278,13 @@ export default function CheckoutCursoPage() {
               <label>Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com"/>
             </div>
+            {curso.modalidad === 'suscripcion' && (
+              <div className="field">
+                <label>WhatsApp</label>
+                <input type="tel" value={celular} onChange={e => setCelular(e.target.value)} placeholder="Ej: 2236789012 (sin 0 ni 15)"/>
+                <div className="field-hint">Este curso es de suscripción mensual — lo usamos para avisarte cuando se acerque el vencimiento.</div>
+              </div>
+            )}
             <div className="field">
               <label>Contraseña</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres"/>

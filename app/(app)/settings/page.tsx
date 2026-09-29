@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { User, Shield, Database, Settings, Camera, Eye, EyeOff, Download, Trash2, LogOut } from 'lucide-react'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -265,12 +266,12 @@ export default function AjustesPage() {
     if (!file) return
     setSubiendoAvatar(true)
     try {
+      const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const ext = file.name.split('.').pop()
-      const path = `${user.id}/avatar.${ext}`
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      const path = `${user.id}/avatar.jpg`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, archivoComprimido, { upsert: true })
       if (!uploadError) {
         const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
         const newUrl = urlData.publicUrl + '?t=' + Date.now()
@@ -279,8 +280,9 @@ export default function AjustesPage() {
           .update({ avatar_url: newUrl })
           .eq('user_id', user.id)
       }
-    } catch(err) {
+    } catch(err: any) {
       console.error('Error subiendo avatar:', err)
+      alert(err?.message || 'No se pudo procesar la imagen.')
     } finally {
       setSubiendoAvatar(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -349,12 +351,12 @@ export default function AjustesPage() {
       <style>{`
   @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
   *{box-sizing:border-box}
-  .sw{height:100vh;display:grid;grid-template-columns:220px 1fr;font-family:'Inter',sans-serif;background:var(--bg);overflow:hidden}
-  .s-nav{background:var(--bg-card);border-right:0.5px solid var(--border-light);padding:20px 12px;display:flex;flex-direction:column;gap:2px}
-  .s-nav-title{font-size:16px;font-weight:800;color:var(--text-primary);padding:0 10px;margin-bottom:16px;letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
-  .s-nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;font-size:12px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all 0.15s;border:none;background:none;font-family:inherit;width:100%;text-align:left}
-  .s-nav-item:hover{background:var(--accent-hover);color:var(--text-primary)}
-  .s-nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600}
+  .sw{height:100vh;display:grid;grid-template-columns:240px 1fr;font-family:'Inter',sans-serif;background:var(--bg);overflow:hidden}
+  .s-toggle-wrap{background:var(--bg-card);border-right:0.5px solid var(--border-light);padding:20px 14px;display:flex;flex-direction:column;gap:6px}
+  .s-toggle-title{font-size:16px;font-weight:800;color:var(--text-primary);padding:0 4px;margin-bottom:10px;letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
+  .s-toggle-item{display:flex;align-items:center;gap:10px;padding:13px 14px;border-radius:14px;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all 0.18s;border:1.5px solid transparent;background:var(--bg-input);font-family:inherit;width:100%;text-align:left}
+  .s-toggle-item:hover{border-color:var(--border)}
+  .s-toggle-item.active{background:var(--accent-light);color:var(--accent);font-weight:700;border-color:var(--accent)}
   .s-content{overflow-y:auto;padding:24px 28px}
   .s-section-title{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;margin-bottom:4px;font-family:'Manrope',sans-serif}
   .s-section-sub{font-size:12px;color:var(--text-muted);margin-bottom:24px}
@@ -420,11 +422,12 @@ export default function AjustesPage() {
   .info-item{background:var(--bg-input);border-radius:10px;padding:12px;border:0.5px solid var(--border-light)}
   .info-lbl{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px}
   .info-val{font-size:13px;font-weight:600;color:var(--text-primary)}
-  .s-nav-mobile-wrap{display:none}
+  .s-toggle-mobile-wrap{display:none}
   @media(max-width:768px){
     .sw{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible;display:flex;flex-direction:column}
-    .s-nav{display:none}
-    .s-nav-mobile-wrap{display:block;padding:12px 12px 0}
+    .s-toggle-wrap{display:none}
+    .s-toggle-mobile-wrap{display:flex;gap:8px;overflow-x:auto;padding:12px 12px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .s-toggle-mobile-wrap::-webkit-scrollbar{display:none}
     .s-content{overflow:visible;padding:12px 12px 80px}
     .field-grid{grid-template-columns:1fr}
     .field.full{grid-column:1}
@@ -434,37 +437,40 @@ export default function AjustesPage() {
     .pref-row{flex-direction:column;align-items:flex-start;gap:8px}
     .pref-select{width:100%}
   }
+  .s-toggle-mobile-item{flex-shrink:0;padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--text-secondary);background:var(--bg-input);border:1.5px solid var(--border);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .s-toggle-mobile-item.active{background:var(--accent);color:white;border-color:var(--accent)}
 `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={subirAvatar}/>
 
       <div className="sw">
-        <div className="s-nav">
-          <div className="s-nav-title">Ajustes</div>
+      <div className="s-toggle-wrap">
+          <div className="s-toggle-title">Ajustes</div>
           {([
             { id: 'perfil', icon: User, label: 'Perfil profesional' },
-            { id: 'pagina', icon: Settings, label: 'Página pública' },
+            { id: 'pagina', icon: Settings, label: 'Página de reservas' },
             { id: 'seguridad', icon: Shield, label: 'Seguridad' },
             { id: 'datos', icon: Database, label: 'Datos y respaldo' },
             { id: 'preferencias', icon: Settings, label: 'Preferencias' },
           ] as const).map(({ id, icon: Icon, label }) => (
-            <button key={id} className={`s-nav-item${tab===id?' active':''}`} onClick={() => setTab(id)}>
-              <Icon size={14}/>{label}
+            <button key={id} className={`s-toggle-item${tab===id?' active':''}`} onClick={() => setTab(id)}>
+              <Icon size={15}/>{label}
             </button>
           ))}
         </div>
 
-        <div className="s-nav-mobile-wrap">
-  <select 
-    style={{width:'100%',padding:'10px 14px',borderRadius:'12px',border:'0.5px solid var(--border)',fontSize:'14px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',marginBottom:'14px',cursor:'pointer'}}
-    value={tab}
-    onChange={e => setTab(e.target.value as Tab)}>
-    <option value="perfil">👤 Perfil profesional</option>
-    <option value="pagina">🌐 Página pública</option>
-    <option value="seguridad">🔒 Seguridad</option>
-    <option value="datos">💾 Datos y respaldo</option>
-    <option value="preferencias">⚙️ Preferencias</option>
-  </select>
+        <div className="s-toggle-mobile-wrap">
+  {([
+    { id: 'perfil', label: 'Perfil' },
+    { id: 'pagina', label: 'Página de reservas' },
+    { id: 'seguridad', label: 'Seguridad' },
+    { id: 'datos', label: 'Datos' },
+    { id: 'preferencias', label: 'Preferencias' },
+  ] as const).map(({ id, label }) => (
+    <button key={id} className={`s-toggle-mobile-item${tab===id?' active':''}`} onClick={() => setTab(id)}>
+      {label}
+    </button>
+  ))}
 </div>
 
         <div className="s-content">
@@ -570,8 +576,8 @@ export default function AjustesPage() {
           </>)}
 
           {tab === 'pagina' && (<>
-  <div className="s-section-title">Página pública</div>
-  <div className="s-section-sub">Tu espacio de reservas personalizado</div>
+            <div className="s-section-title">Página de reservas</div>
+            <div className="s-section-sub">Tu espacio de reservas personalizado</div>
 
   {/* TEMPLATE */}
   <div className="s-card">

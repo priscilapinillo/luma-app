@@ -72,6 +72,13 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
         .section-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;margin-top:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border-light)}
       `}</style>
 
+<div style={{background:'var(--accent-light)',border:'0.5px solid var(--border)',borderRadius:'12px',padding:'14px 16px',marginBottom:'20px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
+        <Video size={16} color="var(--accent)" style={{flexShrink:0,marginTop:'1px'}}/>
+        <div style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:1.6}}>
+          Programá encuentros en vivo por Zoom (o la plataforma que uses) para tus alumnas de este curso. Vos organizás el link acá, y a tus alumnas les va a aparecer un aviso con la fecha y el botón para unirse, tanto en el aula del curso como en su lista de "Mis cursos" — así no se pierden ningún encuentro.
+        </div>
+      </div>
+
       {proximos.length === 0 && pasados.length === 0 && (
         <div style={{textAlign:'center',padding:'32px 20px',color:'var(--text-muted)'}}>
           <Video size={28} color="var(--text-muted)" style={{marginBottom:'10px'}}/>

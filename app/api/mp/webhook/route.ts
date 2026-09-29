@@ -45,6 +45,33 @@ async function actualizarDesdePreapproval(preapprovalId: string) {
   else console.log(`Webhook: subscriptions actualizada para user ${userId} → status=${status}, plan=${plan}`)
 }
 
+function validarFirma(req: NextRequest, dataId: string): boolean {
+  const secret = process.env.MP_WEBHOOK_SECRET
+  if (!secret) {
+    console.warn('Webhook: MP_WEBHOOK_SECRET no configurada, se salta la validación (inseguro)')
+    return true
+  }
+  const signatureHeader = req.headers.get('x-signature')
+  const requestId = req.headers.get('x-request-id')
+  if (!signatureHeader) return false
+
+  const partes = Object.fromEntries(
+    signatureHeader.split(',').map(p => {
+      const [k, v] = p.split('=')
+      return [k?.trim(), v?.trim()]
+    })
+  )
+  const ts = partes.ts
+  const hash = partes.v1
+  if (!ts || !hash) return false
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
+  const crypto = require('crypto')
+  const hashCalculado = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
+
+  return hashCalculado === hash
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
@@ -58,6 +85,11 @@ export async function POST(req: NextRequest) {
     if (!type || !dataId) {
       console.warn('Webhook: notificación sin type/id reconocible, la ignoro')
       return NextResponse.json({ recibido: true })
+    }
+
+    if (!validarFirma(req, dataId)) {
+      console.error('Webhook: firma inválida, se rechaza la notificación')
+      return NextResponse.json({ error: 'Firma inválida' }, { status: 401 })
     }
 
     if (type === 'preapproval' || type === 'subscription_preapproval') {

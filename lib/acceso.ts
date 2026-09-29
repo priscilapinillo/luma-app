@@ -20,8 +20,8 @@ export function calcularAcceso(sub: SubscriptionRow | null): NivelAcceso {
   if (!sub) return 'sin_acceso'
   const ahora = new Date()
 
-  // Trial vigente: acceso completo a todo, sin importar plan/status
-  if (sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora) {
+  // Trial vigente: acceso completo a todo — pero solo si el status realmente es 'trial'
+  if (sub.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora) {
     return 'premium'
   }
 
@@ -40,4 +40,24 @@ export function calcularAcceso(sub: SubscriptionRow | null): NivelAcceso {
 export function pareceDesactualizado(sub: SubscriptionRow | null): boolean {
   if (!sub) return false
   return calcularAcceso(sub) === 'sin_acceso' && sub.status === 'active'
+}
+
+export type EnrollmentRow = {
+  estado: string | null
+  modalidad: string | null
+  fecha_vencimiento: string | null
+}
+
+/**
+ * Única fuente de verdad para "¿esta alumna puede entrar al curso?"
+ * Nunca confía solo en `estado` — si es suscripción, siempre revisa
+ * también la fecha real de vencimiento, aunque `estado` diga 'activa'.
+ */
+export function tieneAccesoCurso(e: EnrollmentRow | null): boolean {
+  if (!e) return false
+  if (e.estado !== 'activa') return false
+  if (e.modalidad === 'suscripcion' && e.fecha_vencimiento) {
+    return new Date(e.fecha_vencimiento) > new Date()
+  }
+  return true
 }

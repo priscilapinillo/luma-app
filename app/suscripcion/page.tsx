@@ -36,6 +36,8 @@ const PLANES = [
 export default function SuscripcionPage() {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [transferAbierta, setTransferAbierta] = useState(false)
+  const [planTransfer, setPlanTransfer] = useState<'basico' | 'premium'>('basico')
   const router = useRouter()
 
   async function handlePagar(planId: string) {
@@ -136,6 +138,18 @@ export default function SuscripcionPage() {
         .sus-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
 
         .sus-seguro{font-size:11px;color:#B8A8DE;margin-top:24px;text-align:center;display:flex;align-items:center;justify-content:center;gap:5px}
+        .sus-transfer-link{display:block;margin:14px auto 0;font-size:11.5px;color:#9B8EC4;background:none;border:none;cursor:pointer;font-family:'Jost',sans-serif;text-decoration:underline;text-align:center}
+        .sus-transfer-link:hover{color:#C4B5FD}
+        .sus-transfer-box{max-width:440px;margin:16px auto 0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:20px 22px}
+        .sus-transfer-tabs{display:flex;gap:8px;margin-bottom:16px}
+        .sus-transfer-tab{flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:transparent;color:#B8A8DE;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif}
+        .sus-transfer-tab.act{background:rgba(139,92,246,0.3);border-color:#8B5CF6;color:white}
+        .sus-transfer-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-size:12.5px}
+        .sus-transfer-row:last-of-type{border-bottom:none}
+        .sus-transfer-lbl{color:#9B8EC4}
+        .sus-transfer-val{color:white;font-weight:600}
+        .sus-transfer-nota{font-size:11.5px;color:#B8A8DE;line-height:1.6;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.1)}
+        .sus-transfer-nota a{color:#C4B5FD}
         .sus-divider{border:none;border-top:0.5px solid rgba(255,255,255,0.1);margin:16px auto;max-width:200px}
         .sus-logout{font-size:12px;color:#C4B5FD;cursor:pointer;background:none;border:none;font-family:'Jost',sans-serif;padding:0;display:block;margin:0 auto;transition:color 0.2s}
         .sus-logout:hover{color:white}
@@ -175,6 +189,27 @@ export default function SuscripcionPage() {
           </div>
 
           <div className="sus-seguro">🔒 Pago seguro con Mercado Pago</div>
+
+          {!transferAbierta ? (
+            <button className="sus-transfer-link" onClick={() => setTransferAbierta(true)}>
+              ¿Preferís pagar por transferencia?
+            </button>
+          ) : (
+            <div className="sus-transfer-box">
+              <div className="sus-transfer-tabs">
+                <button className={`sus-transfer-tab${planTransfer==='basico'?' act':''}`} onClick={() => setPlanTransfer('basico')}>Básico — $9.900</button>
+                <button className={`sus-transfer-tab${planTransfer==='premium'?' act':''}`} onClick={() => setPlanTransfer('premium')}>Premium — $28.000</button>
+              </div>
+              <div className="sus-transfer-row"><span className="sus-transfer-lbl">Alias</span><span className="sus-transfer-val">Luma.app</span></div>
+              <div className="sus-transfer-row"><span className="sus-transfer-lbl">CBU</span><span className="sus-transfer-val">0170094740000040824239</span></div>
+              <div className="sus-transfer-row"><span className="sus-transfer-lbl">Titular</span><span className="sus-transfer-val">Priscila Nair Soledad Pinillo</span></div>
+              <div className="sus-transfer-row"><span className="sus-transfer-lbl">Banco</span><span className="sus-transfer-val">BBVA</span></div>
+              <div className="sus-transfer-nota">
+                Una vez que transferís, mandanos el comprobante a <a href="mailto:lumaapp.soporte@gmail.com">lumaapp.soporte@gmail.com</a> junto con el email con el que te registraste en Luma. Activamos tu cuenta en menos de 24hs.
+              </div>
+            </div>
+          )}
+
           <hr className="sus-divider"/>
           <button className="sus-logout" onClick={handleLogout}>Cerrar sesión</button>
         </div>

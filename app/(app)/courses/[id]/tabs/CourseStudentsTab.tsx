@@ -10,6 +10,7 @@ type Alumna = {
   nombre: string
   apellido: string
   email: string
+  celular: string | null
   estado: string
   modalidad: string
   fechaInicio: string
@@ -49,7 +50,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
 
       const personIds = enrollments.map(e => e.person_id)
       const { data: personas } = await supabase
-        .from('persons').select('id, nombre, apellido, email').in('id', personIds)
+        .from('persons').select('id, nombre, apellido, email, celular').in('id', personIds)
 
       const { data: progreso } = await supabase
         .from('lesson_progress').select('enrollment_id, completada')
@@ -64,6 +65,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
           nombre: persona?.nombre || '',
           apellido: persona?.apellido || '',
           email: persona?.email || '',
+          celular: persona?.celular || null,
           estado: e.estado,
           modalidad: e.modalidad,
           fechaInicio: e.fecha_inicio,
@@ -78,15 +80,41 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
     finally { setLoading(false) }
   }
 
-  async function confirmarPago(enrollmentId: string) {
+  async function confirmarPago(enrollmentId: string, modalidad: string) {
     setConfirmando(enrollmentId)
     try {
       const supabase = createClient()
+      const datos: any = { estado: 'activa' }
+      if (modalidad === 'suscripcion') {
+        const vence = new Date()
+        vence.setDate(vence.getDate() + 30)
+        datos.fecha_vencimiento = vence.toISOString()
+      }
       const { error } = await supabase.from('enrollments')
-        .update({ estado: 'activa' }).eq('id', enrollmentId)
+        .update(datos).eq('id', enrollmentId)
       if (error) { console.error(error); return }
-      setAlumnas(prev => prev.map(a => a.enrollmentId === enrollmentId ? { ...a, estado: 'activa', fechaConfirmacion: new Date().toISOString() } : a))
+      setAlumnas(prev => prev.map(a => a.enrollmentId === enrollmentId
+        ? { ...a, estado: 'activa', fechaConfirmacion: new Date().toISOString(), fechaVencimiento: datos.fecha_vencimiento || a.fechaVencimiento }
+        : a))
     } finally { setConfirmando(null) }
+  }
+
+  async function renovarMes(enrollmentId: string) {
+    setConfirmando(enrollmentId)
+    try {
+      const supabase = createClient()
+      const vence = new Date()
+      vence.setDate(vence.getDate() + 30)
+      const { error } = await supabase.from('enrollments')
+        .update({ fecha_vencimiento: vence.toISOString() }).eq('id', enrollmentId)
+      if (error) { console.error(error); return }
+      setAlumnas(prev => prev.map(a => a.enrollmentId === enrollmentId ? { ...a, fechaVencimiento: vence.toISOString() } : a))
+    } finally { setConfirmando(null) }
+  }
+
+  function diasParaVencer(fecha: string | null) {
+    if (!fecha) return null
+    return Math.ceil((new Date(fecha).getTime() - Date.now()) / (1000*60*60*24))
   }
 
   function formatFecha(f: string | null) {
@@ -153,10 +181,38 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
             </>)}
 
             {a.estado !== 'activa' && (
-              <button className="al-btn-confirmar" onClick={() => confirmarPago(a.enrollmentId)} disabled={confirmando === a.enrollmentId}>
+              <button className="al-btn-confirmar" onClick={() => confirmarPago(a.enrollmentId, a.modalidad)} disabled={confirmando === a.enrollmentId}>
                 <Check size={12}/> {confirmando === a.enrollmentId ? 'Confirmando...' : 'Confirmar pago recibido'}
               </button>
             )}
+
+            {a.estado === 'activa' && a.modalidad === 'suscripcion' && (() => {
+              const dias = diasParaVencer(a.fechaVencimiento)
+              if (dias === null || dias > 5) return null
+              const vencido = dias < 0
+              const linkWa = a.celular
+                ? `https://wa.me/${a.celular.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola ${a.nombre}! Te escribo porque ${vencido ? 'tu acceso al curso venció' : `tu acceso al curso vence en ${dias} día${dias!==1?'s':''}`}. ¿Me pasás el comprobante del próximo mes para renovarte el acceso?`)}`
+                : null
+              return (
+                <div style={{marginTop:'10px',padding:'10px 12px',borderRadius:'10px',background: vencido ? '#FEF2F2' : '#FFFBEB',border:`0.5px solid ${vencido ? '#FECACA' : '#FDE68A'}`}}>
+                  <div style={{fontSize:'11.5px',fontWeight:600,color: vencido ? '#991B1B' : '#92400E',marginBottom:'8px'}}>
+                    {vencido ? '⚠️ El acceso ya venció' : `⏳ Vence en ${dias} día${dias!==1?'s':''}`}
+                  </div>
+                  <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                    {linkWa && (
+                      <a href={linkWa} target="_blank" rel="noopener noreferrer"
+                        style={{fontSize:'11px',fontWeight:700,padding:'7px 12px',borderRadius:'8px',background:'#25D366',color:'white',textDecoration:'none'}}>
+                        💬 Avisar por WhatsApp
+                      </a>
+                    )}
+                    <button onClick={() => renovarMes(a.enrollmentId)} disabled={confirmando === a.enrollmentId}
+                      style={{fontSize:'11px',fontWeight:700,padding:'7px 12px',borderRadius:'8px',border:'none',background:'#166534',color:'white',cursor:'pointer',fontFamily:'inherit'}}>
+                      {confirmando === a.enrollmentId ? '...' : '✓ Habilitar mes siguiente'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )
       })}

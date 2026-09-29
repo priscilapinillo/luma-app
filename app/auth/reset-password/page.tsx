@@ -75,22 +75,28 @@ export default function ResetPasswordPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800;900&family=Cormorant+Garamond:wght@600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
-        html,body{height:100%;font-family:'Geist',sans-serif;background:#FAFAFA}
-        .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-        .card{width:100%;max-width:400px;background:white;border-radius:16px;padding:32px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
-        .logo{font-size:20px;font-weight:900;color:#0A0A0A;margin-bottom:4px}
+        html,body{height:100%;font-family:'Geist',sans-serif}
+        .wrap{
+          min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+          background-image:
+            linear-gradient(160deg,rgba(30,27,46,0.85),rgba(13,11,20,0.92)),
+            url('/landing/hero-bgg.png');
+          background-size:cover;background-position:center;
+        }
+        .card{width:100%;max-width:400px;background:#F9F6F0;border-radius:20px;padding:36px 32px;box-shadow:0 30px 70px rgba(0,0,0,0.4)}
+        .logo{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#1E1B2E;margin-bottom:4px}
         .logo span{color:#8B5CF6}
-        .title{font-size:24px;font-weight:900;color:#0A0A0A;letter-spacing:-0.5px;margin:24px 0 6px}
+        .title{font-size:22px;font-weight:800;color:#0A0A0A;letter-spacing:-0.5px;margin:24px 0 6px}
         .sub{font-size:14px;color:#737373;margin-bottom:24px;line-height:1.5}
         .form-input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #E5E5E5;font-size:14px;color:#0A0A0A;outline:none;transition:all 0.2s;font-family:'Geist',sans-serif;background:white;margin-bottom:12px;display:block}
         .form-input:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.1)}
-        .form-btn{width:100%;padding:13px;background:#0A0A0A;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',sans-serif;transition:all 0.2s;margin-top:4px}
-        .form-btn:hover{background:#262626;transform:translateY(-1px)}
+        .form-btn{width:100%;padding:13px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',sans-serif;transition:all 0.2s;margin-top:4px;box-shadow:0 8px 24px rgba(139,92,246,0.35)}
+        .form-btn:hover{transform:translateY(-1px)}
         .form-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
         .form-error{font-size:12px;color:#DC2626;margin-bottom:12px;padding:10px 12px;background:#FEF2F2;border-radius:8px;border:1px solid #FECACA}
-        .notice{font-size:13px;color:#737373;padding:12px;background:#F5F5F5;border-radius:8px;margin-bottom:20px;line-height:1.5}
+        .notice{font-size:13px;color:#7C6BAA;padding:12px;background:#EDE8FF;border-radius:8px;margin-bottom:20px;line-height:1.5}
       `}</style>
       <div className="wrap">
         <div className="card">

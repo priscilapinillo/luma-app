@@ -105,14 +105,14 @@ export default function Sidebar() {
             gap: 4px;
             font-family: 'Inter', sans-serif;
           }
-          .sb-mobile {
+        .sb-mobile {
   position: fixed;
   bottom: 12px;
   bottom: calc(12px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 24px);
-  max-width: 420px;
+  width: calc(100% - 12px);
+  max-width: 480px;
   z-index: 200;
   backdrop-filter: blur(16px) saturate(200%);
   -webkit-backdrop-filter: blur(16px) saturate(200%);
@@ -138,9 +138,9 @@ html.dark .sb-mobile {
   min-width: 0;
  color: rgb(140 110 185 / 85%);
   text-decoration: none;
-  padding: 8px 4px;
+  padding: 8px 2px;
   border-radius: 999rem;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
   transition: all 0.18s ease;
   -webkit-tap-highlight-color: transparent;
@@ -308,10 +308,22 @@ html.dark .sb-mobile {
 
         {/* NAV BOTTOM */}
         <nav className="sb-mobile">
-          {links.map(({ href, icon: Icon, label }) => (
+          {links.slice(0,4).map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}
               className={`sb-mob-item${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
-              <div className="sb-mob-icon"><Icon size={17}/></div>
+              <div className="sb-mob-icon"><Icon size={15}/></div>
+              <span>{label}</span>
+            </Link>
+          ))}
+          <Link href="/courses" className={`sb-mob-item${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`} style={{position:'relative'}}>
+            <div className="sb-mob-icon"><BookOpen size={15}/></div>
+            <span>Cursos</span>
+            {!tieneAccesoCursos && <Lock size={8} style={{position:'absolute',top:'4px',right:'22%',opacity:0.7}}/>}
+          </Link>
+          {links.slice(4).map(({ href, icon: Icon, label }) => (
+            <Link key={href} href={href}
+              className={`sb-mob-item${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
+              <div className="sb-mob-icon"><Icon size={15}/></div>
               <span>{label}</span>
             </Link>
           ))}
@@ -473,7 +485,19 @@ html.dark .sb-mobile {
 
         <div className="sb-section">Principal</div>
 
-        {links.slice(0,5).map(({ href, icon: Icon, label }) => (
+        {links.slice(0,4).map(({ href, icon: Icon, label }) => (
+          <Link key={href} href={href}
+            className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
+            <Icon size={13}/>{label}
+          </Link>
+        ))}
+
+        <Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
+          <BookOpen size={13}/>Cursos
+          {!tieneAccesoCursos && <Lock size={10} style={{marginLeft:'auto',opacity:0.6}}/>}
+        </Link>
+
+        {links.slice(4,5).map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}
             className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
             <Icon size={13}/>{label}
@@ -481,11 +505,6 @@ html.dark .sb-mobile {
         ))}
 
         <hr className="sb-div"/>
-
-        <Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
-          <BookOpen size={13}/>Cursos
-          {!tieneAccesoCursos && <Lock size={10} style={{marginLeft:'auto',opacity:0.6}}/>}
-        </Link>
 
         <Link href="/settings" className={`sb-link${pathname==='/settings'?' active':''}`}>
           <Settings size={13}/>Configuración

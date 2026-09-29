@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Plus, X, Video, Trash2 } from 'lucide-react'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 
 type Curso = {
   id: string; titulo: string; slug: string
@@ -48,12 +49,14 @@ type Testimonio = {
   async function subirImagen(file: File) {
     setSubiendoImagen(true)
     try {
+      const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
-      const ext = file.name.split('.').pop()
-      const nombre = `${Date.now()}.${ext}`
-      await supabase.storage.from('course-images').upload(nombre, file, { upsert: true })
+      const nombre = `${Date.now()}.jpg`
+      await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo procesar la imagen.')
     } finally { setSubiendoImagen(false) }
   }
 
@@ -72,7 +75,6 @@ type Testimonio = {
   async function agregarTestimonio() {
     if (nuevoTesti.tipo === 'texto' && !nuevoTesti.texto.trim()) return
     if (nuevoTesti.tipo === 'imagen' && !nuevoTesti.avatar_url) return
-    if (nuevoTesti.tipo === 'video' && !nuevoTesti.video_url) return
     setGuardandoTesti(true)
     try {
       const supabase = createClient()
@@ -168,17 +170,17 @@ type Testimonio = {
       <div className="section-title">Información básica</div>
       <div className="field">
         <label>Título *</label>
-        <input value={form.titulo} onChange={e => setForm({...form, titulo: e.target.value})}/>
+        <input value={form.titulo || ''} onChange={e => setForm({...form, titulo: e.target.value})}/>
       </div>
       <div className="field">
         <label>Descripción corta</label>
-        <textarea value={form.descripcion_corta} maxLength={150}
+        <textarea value={form.descripcion_corta || ''} maxLength={150}
           onChange={e => setForm({...form, descripcion_corta: e.target.value})}/>
         <span className="field-hint">{form.descripcion_corta?.length || 0}/150</span>
       </div>
       <div className="field">
         <label>Descripción completa</label>
-        <textarea value={form.descripcion_larga} style={{minHeight:'120px'}}
+        <textarea value={form.descripcion_larga || ''} style={{minHeight:'120px'}}
           onChange={e => setForm({...form, descripcion_larga: e.target.value})}/>
       </div>
       <div className="field">
@@ -205,7 +207,7 @@ type Testimonio = {
       <div className="precio-row">
         <div className="field">
         <label>Precio base (sin puntos ni comas, ej: 15000) *</label>
-          <input type="number" min="0" value={form.precio}
+        <input type="number" min="0" value={form.precio ?? ''}
             onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
         </div>
         <div className="field">
@@ -287,25 +289,22 @@ type Testimonio = {
 
       {testimonios.map(ti => (
         <div key={ti.id} className="testi-card">
-          {ti.tipo === 'video'
-            ? <div className="testi-card-thumb" style={{display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px'}}>🎬</div>
-            : ti.avatar_url
-              ? <img src={ti.avatar_url} className="testi-card-thumb"/>
-              : <div className="testi-card-thumb"/>
+          {ti.avatar_url
+            ? <img src={ti.avatar_url} className="testi-card-thumb"/>
+            : <div className="testi-card-thumb"/>
           }
           <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-primary)'}}>{ti.nombre || 'Sin nombre'}</div>
-            <div className="testi-card-texto">{ti.tipo === 'video' ? 'Video subido' : ti.texto}</div>
+            <div className="testi-card-texto">{ti.texto}</div>
           </div>
           <button className="btn-remove" onClick={() => eliminarTestimonio(ti.id)}><X size={10}/></button>
         </div>
       ))}
 
       <div style={{border:'0.5px solid var(--border)',borderRadius:'12px',padding:'14px',marginTop:'10px'}}>
-        <div className="testi-tipo-row">
+      <div className="testi-tipo-row">
           <button className={`testi-tipo-btn${nuevoTesti.tipo==='texto'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'texto'})}>Texto</button>
           <button className={`testi-tipo-btn${nuevoTesti.tipo==='imagen'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'imagen'})}>Imagen</button>
-          <button className={`testi-tipo-btn${nuevoTesti.tipo==='video'?' act':''}`} onClick={() => setNuevoTesti({...nuevoTesti, tipo:'video'})}>Video</button>
         </div>
 
         <div className="field">
@@ -314,9 +313,9 @@ type Testimonio = {
             onChange={e => setNuevoTesti({...nuevoTesti, nombre: e.target.value})}/>
         </div>
 
-        {nuevoTesti.tipo !== 'video' && (
+        {nuevoTesti.tipo === 'texto' && (
           <div className="field">
-            <label>{nuevoTesti.tipo === 'imagen' ? 'Texto opcional (debajo de la imagen)' : 'Testimonio'}</label>
+            <label>Testimonio</label>
             <textarea value={nuevoTesti.texto} placeholder="Qué dijo la alumna..."
               onChange={e => setNuevoTesti({...nuevoTesti, texto: e.target.value})}/>
           </div>
@@ -333,16 +332,7 @@ type Testimonio = {
           </div>
         )}
 
-        {nuevoTesti.tipo === 'video' && (
-          <div className="field">
-            <label>Video</label>
-            <div className="testi-upload-box" onClick={() => document.getElementById('testi-video')?.click()}>
-              {nuevoTesti.video_url ? '✓ Video cargado' : (subiendoTesti === 'video_url' ? 'Subiendo...' : '🎬 Tocá para subir')}
-            </div>
-            <input id="testi-video" type="file" accept="video/*" style={{display:'none'}}
-              onChange={e => e.target.files?.[0] && subirArchivoTesti(e.target.files[0], 'video_url')}/>
-          </div>
-        )}
+
 
         <button className="btn-add" onClick={agregarTestimonio} disabled={guardandoTesti}>
           <Plus size={11}/>{guardandoTesti ? 'Agregando...' : 'Agregar testimonio'}

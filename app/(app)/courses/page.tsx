@@ -54,7 +54,7 @@ export default function CoursesPage() {
   )
 
   return (
-    <div style={{padding:'20px',maxWidth:'900px',margin:'0 auto'}}>
+    <div style={{padding:'20px',paddingBottom:'100px',maxWidth:'900px',margin:'0 auto'}}>
       <style>{`
         .curso-card{background:var(--bg-card);border:0.5px solid var(--border-light);border-radius:16px;overflow:hidden;transition:all 0.2s;cursor:pointer}
         .curso-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px var(--shadow)}

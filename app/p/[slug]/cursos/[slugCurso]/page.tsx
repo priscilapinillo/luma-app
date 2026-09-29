@@ -270,7 +270,14 @@ export default function CursoPublicoPage() {
         @keyframes zodiflotar{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}50%{transform:translateY(-8px) rotate(var(--rot,0deg))}}
         .destello{position:absolute;z-index:1;color:var(--accent-light);opacity:0;pointer-events:none;animation:destellar 2.8s ease-in-out infinite}
         @keyframes destellar{0%,100%{opacity:0;transform:scale(.6) rotate(0deg)}50%{opacity:.85;transform:scale(1) rotate(90deg)}}
-        .mandala{position:absolute;z-index:0;pointer-events:none;opacity:${t.dark ? 0.14 : 0.09};}
+        .mandala{
+          position:absolute;inset:0;z-index:0;pointer-events:none;
+          opacity:${t.dark ? 0.2 : 0.16};
+          background-image:url('${['tierra','rosa','aura'].includes((terapeuta?.template as string) || 'luna') ? '/landing/fondo-claro.png' : '/landing/fondo-pagina-publica.png'}');
+          background-size:cover;
+          background-position:center;
+          background-repeat:no-repeat;
+        }
 
         .nav{position:sticky;top:0;z-index:100;background:${t.navBg};backdrop-filter:blur(10px);padding:14px 20px;border-bottom:1px solid var(--border)}
         .nav-inner{max-width:1040px;margin:0 auto;width:100%;display:flex;justify-content:space-between;align-items:center}
@@ -328,6 +335,7 @@ export default function CursoPublicoPage() {
         .testi-card{background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:32px 26px;box-shadow:0 16px 40px rgba(0,0,0,${t.dark?0.4:0.1});position:relative;overflow:hidden}
         .testi-card::after{content:'';position:absolute;width:140px;height:140px;background:var(--accent-dim);border-radius:50%;filter:blur(30px);top:-50px;right:-50px;z-index:-1}
         .testi-quote{font-size:52px;color:var(--primary-dim);font-family:serif;line-height:0.6;margin-bottom:10px}
+        .testi-img{width:100%;max-height:280px;object-fit:cover;border-radius:16px;margin-bottom:16px;display:block}
         .testi-texto{font-size:16px;color:var(--cream);line-height:1.5;margin-bottom:16px}
         .testi-nombre{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--primary);font-weight:700}
         .testi-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px}
@@ -386,21 +394,9 @@ export default function CursoPublicoPage() {
 
       {/* HERO — gradientes en capas + blobs + esoterismo (estrellas, zodiaco, destellos, mandala) + grano */}
       <div className="hero grano">
-        <svg className="mandala" style={{top:'50%',left:'50%',width:'620px',height:'620px',transform:'translate(-50%,-50%)'}} viewBox="0 0 200 200" fill="none">
-          <circle cx="100" cy="100" r="98" stroke="var(--primary)" strokeWidth="0.5"/>
-          <circle cx="100" cy="100" r="76" stroke="var(--accent-light)" strokeWidth="0.5"/>
-          <circle cx="100" cy="100" r="54" stroke="var(--primary)" strokeWidth="0.5"/>
-        </svg>
+      <div className="mandala"/>
 
-        {t.dark && ESTRELLAS_HERO.map((s, i) => (
-          <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.6}s`}}/>
-        ))}
-        {ZODIACOS_HERO.map((z, i) => (
-          <div key={i} className="zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot} as React.CSSProperties}>{z.simbolo}</div>
-        ))}
-        {DESTELLOS_HERO.map((d, i) => (
-          <Sparkles key={i} size={d.size} className="destello" style={{top:d.top,left:d.left,animationDelay:d.delay}}/>
-        ))}
+
         <svg className="hero-shape" style={{top:'8%',left:'6%',width:'46px'}} viewBox="0 0 24 24" fill="none">
           <path d="M12 2l2.2 6.8H21l-5.6 4.1 2.2 6.9L12 15.7 6.4 19.8l2.2-6.9L3 8.8h6.8z" fill="var(--primary)"/>
         </svg>
@@ -475,9 +471,13 @@ export default function CursoPublicoPage() {
         <div className="seccion testi-sec">
           <h2 className="seccion-titulo">Testimonios</h2>
           <div className="testi-carousel" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-            <div className="testi-card">
-              <div className="testi-quote">"</div>
-              <p className="testi-texto">{testimonios[testiIdx].texto}</p>
+          <div className="testi-card">
+              {testimonios[testiIdx].avatar_url ? (
+                <img src={testimonios[testiIdx].avatar_url} alt="" className="testi-img"/>
+              ) : (
+                <div className="testi-quote">"</div>
+              )}
+              {testimonios[testiIdx].texto && <p className="testi-texto">{testimonios[testiIdx].texto}</p>}
               <div className="testi-nombre">— {testimonios[testiIdx].nombre || 'Alumna'}</div>
             </div>
             {testimonios.length > 1 && (
@@ -583,15 +583,7 @@ export default function CursoPublicoPage() {
 
       {/* CTA FINAL — fuerte: estrellas + zodiaco + grano */}
       <div className="cta-sec grano">
-        {t.dark && ESTRELLAS_CTA.map((s, i) => (
-          <div key={i} className="estrella-fija" style={{top:s.top,left:s.left,animationDelay:`${i*0.8}s`}}/>
-        ))}
-        {ZODIACOS_CTA.map((z, i) => (
-          <div key={i} className="zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot,color:'var(--primary-light)'} as React.CSSProperties}>{z.simbolo}</div>
-        ))}
-        {DESTELLOS_CTA.map((d, i) => (
-          <Sparkles key={i} size={d.size} className="destello" style={{top:d.top,left:d.left,animationDelay:d.delay}}/>
-        ))}
+
         <div className="cta-inner">
           {curso.imagen_url && (
             <div className="cta-foto-frame"><img src={curso.imagen_url} alt={curso.titulo} className="cta-foto"/></div>

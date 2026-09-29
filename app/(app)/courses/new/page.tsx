@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, X } from 'lucide-react'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 
 export default function NewCoursePage() {
   const router = useRouter()
@@ -39,12 +40,14 @@ export default function NewCoursePage() {
   async function subirImagen(file: File) {
     setSubiendoImagen(true)
     try {
+      const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
-      const ext = file.name.split('.').pop()
-      const nombre = `${Date.now()}.${ext}`
-      await supabase.storage.from('course-images').upload(nombre, file, { upsert: true })
+      const nombre = `${Date.now()}.jpg`
+      await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo procesar la imagen.')
     } finally { setSubiendoImagen(false) }
   }
 

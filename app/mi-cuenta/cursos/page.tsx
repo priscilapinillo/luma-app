@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { LogOut, Clock } from 'lucide-react'
+import { tieneAccesoCurso } from '@/lib/acceso'
 
 type Inscripcion = {
   id: string
   estado: string
+  modalidad: string
   fecha_inicio: string
+  fecha_vencimiento: string | null
   course: {
     id: string
     titulo: string
@@ -18,6 +21,11 @@ type Inscripcion = {
   terapeuta: {
     nombre_profesional: string
     slug: string
+    whatsapp: string | null
+    alias_pago: string | null
+    cbu: string | null
+    titular_cuenta: string | null
+    banco: string | null
   } | null
   proximoEncuentro: { fecha_hora: string } | null
 }
@@ -27,6 +35,7 @@ export default function MisCursosPage() {
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([])
   const [loading, setLoading] = useState(true)
   const [debugInfo, setDebugInfo] = useState('')
+  const [datosAbiertos, setDatosAbiertos] = useState<string | null>(null)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -45,7 +54,7 @@ export default function MisCursosPage() {
 
       const { data: enrollments, error: errorEnroll } = await supabase
         .from('enrollments')
-        .select('id, estado, fecha_inicio, course_id')
+        .select('id, estado, modalidad, fecha_inicio, fecha_vencimiento, course_id')
         .eq('person_id', persona.id)
         .order('fecha_inicio', { ascending: false })
 
@@ -66,7 +75,7 @@ export default function MisCursosPage() {
 
       const terapeutaIds = [...new Set((cursos || []).map(c => c.user_id))]
       const { data: terapeutas } = await supabase
-        .from('therapist_profiles').select('user_id, nombre_profesional, slug')
+        .from('therapist_profiles').select('user_id, nombre_profesional, slug, whatsapp, alias_pago, cbu, titular_cuenta, banco')
         .in('user_id', terapeutaIds)
 
         const { data: encuentros } = await supabase
@@ -81,9 +90,11 @@ export default function MisCursosPage() {
         return {
           id: e.id,
           estado: e.estado,
+          modalidad: e.modalidad,
           fecha_inicio: e.fecha_inicio,
+          fecha_vencimiento: e.fecha_vencimiento,
           course: curso as Inscripcion['course'],
-          terapeuta: terapeuta ? { nombre_profesional: terapeuta.nombre_profesional, slug: terapeuta.slug } : null,
+          terapeuta: terapeuta ? { nombre_profesional: terapeuta.nombre_profesional, slug: terapeuta.slug, whatsapp: terapeuta.whatsapp, alias_pago: terapeuta.alias_pago, cbu: terapeuta.cbu, titular_cuenta: terapeuta.titular_cuenta, banco: terapeuta.banco } : null,
           proximoEncuentro,
         }
       }).filter(i => i.course)
@@ -132,6 +143,9 @@ export default function MisCursosPage() {
         .mc-badge.pendiente_pago{background:#FEF9C3;color:#92400E}
         .mc-ver-btn{margin-top:10px;font-size:12px;font-weight:700;color:#8B5CF6}
         .mc-empty{text-align:center;padding:60px 20px;color:#737373}
+        .mc-btn-datos{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:7px 12px;border-radius:8px;background:#F0EBFF;color:#6D28D9;border:none;cursor:pointer;font-family:inherit}
+        .mc-datos-pago{margin-top:10px;padding:12px;background:#FAFAFA;border:1px solid #E5E5E5;border-radius:10px;font-size:12px}
+        .mc-datos-row{display:flex;justify-content:space-between;padding:4px 0}
       `}</style>
 
       <nav className="mc-nav">
@@ -150,15 +164,17 @@ export default function MisCursosPage() {
           <div className="mc-empty">Todavía no compraste ningún curso.</div>
         ) : (
           <div className="mc-grid">
-            {inscripciones.map(i => (
+            {inscripciones.map(i => {
+              const acceso = tieneAccesoCurso({ estado: i.estado, modalidad: i.modalidad, fecha_vencimiento: i.fecha_vencimiento })
+              return (
               <div key={i.id}
-                className={`mc-card${i.estado !== 'activa' ? ' pendiente' : ''}`}
-                onClick={() => { if (i.estado === 'activa') router.push(`/mi-cuenta/cursos/${i.course.id}`) }}>
+                className={`mc-card${!acceso ? ' pendiente' : ''}`}
+                onClick={() => { if (acceso) router.push(`/mi-cuenta/cursos/${i.course.id}`) }}>
                 {i.course.imagen_url && <img src={i.course.imagen_url} className="mc-card-img"/>}
                 <div className="mc-card-body">
                   <div className="mc-card-titulo">{i.course.titulo}</div>
                   {i.terapeuta && <div className="mc-card-terapeuta">{i.terapeuta.nombre_profesional}</div>}
-                  {i.estado === 'activa' ? (<>
+                  {acceso ? (<>
                     <span className="mc-badge activa">✓ Acceso activo</span>
                     {i.proximoEncuentro && (
                       <div style={{fontSize:'11px',fontWeight:700,color:'#EC4899',marginTop:'6px'}}>
@@ -166,12 +182,39 @@ export default function MisCursosPage() {
                       </div>
                     )}
                     <div className="mc-ver-btn">Ver curso →</div>
-                  </>) : (
+                  </>) : i.estado !== 'activa' ? (
                     <span className="mc-badge pendiente_pago">⏳ Esperando confirmación de pago</span>
-                  )}
+                  ) : (<>
+                    <span className="mc-badge pendiente_pago">⚠️ Acceso vencido</span>
+                    <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}}>
+                      {(i.terapeuta?.alias_pago || i.terapeuta?.cbu) && (
+                        <button className="mc-btn-datos"
+                          onClick={e => { e.stopPropagation(); setDatosAbiertos(datosAbiertos === i.id ? null : i.id) }}>
+                          🏦 Ver datos de pago
+                        </button>
+                      )}
+                      {i.terapeuta?.whatsapp && (
+                        <a href={`https://wa.me/${i.terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Te paso el comprobante del próximo mes de "${i.course.titulo}" para que me renueves el acceso.`)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          style={{display:'inline-flex',alignItems:'center',gap:'6px',fontSize:'11px',fontWeight:700,padding:'7px 12px',borderRadius:'8px',background:'#25D366',color:'white',textDecoration:'none'}}>
+                          💬 Enviar comprobante
+                        </a>
+                      )}
+                    </div>
+                    {datosAbiertos === i.id && (
+                      <div className="mc-datos-pago" onClick={e => e.stopPropagation()}>
+                        {i.terapeuta?.alias_pago && <div className="mc-datos-row"><span>Alias</span><strong>{i.terapeuta.alias_pago}</strong></div>}
+                        {i.terapeuta?.cbu && <div className="mc-datos-row"><span>CBU</span><strong>{i.terapeuta.cbu}</strong></div>}
+                        {i.terapeuta?.titular_cuenta && <div className="mc-datos-row"><span>Titular</span><strong>{i.terapeuta.titular_cuenta}</strong></div>}
+                        {i.terapeuta?.banco && <div className="mc-datos-row"><span>Banco</span><strong>{i.terapeuta.banco}</strong></div>}
+                      </div>
+                    )}
+                  </>)}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

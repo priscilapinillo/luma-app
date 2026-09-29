@@ -353,6 +353,19 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .from('therapist_profiles').select('*')
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
+
+      const { data: sub } = await supabase
+        .from('subscriptions').select('status, trial_ends_at, current_period_ends_at')
+        .eq('user_id', perfil.user_id).maybeSingle()
+
+      const ahora = new Date()
+      const accesoActivo = !!sub && (
+        sub.status === 'active' ||
+        (sub.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora) ||
+        (sub.status === 'cancelled' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora)
+      )
+      if (!accesoActivo) { setLoading(false); return }
+
       setTerapeuta(perfil)
       const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
@@ -595,7 +608,14 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hero-grano::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
           opacity:${t.dark ? 0.14 : 0.09};
           background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
-        .hero-mandala{position:absolute;z-index:0;pointer-events:none;opacity:${t.dark ? 0.14 : 0.09};top:50%;left:50%;width:640px;height:640px;transform:translate(-50%,-50%)}
+        .hero-mandala{
+          position:absolute;inset:0;z-index:0;pointer-events:none;
+          opacity:${t.dark ? 0.2 : 0.16};
+          background-image:url('${['tierra','rosa','aura'].includes((terapeuta?.template as string) || 'luna') ? '/landing/fondo-claro.png' : '/landing/fondo-pagina-publica.png'}');
+          background-size:cover;
+          background-position:center;
+          background-repeat:no-repeat;
+        }
         .hero-zodiaco{position:absolute;z-index:0;color:var(--primary-light);opacity:.28;font-family:serif;pointer-events:none;user-select:none;text-shadow:0 0 10px var(--primary-dim);animation:zodiflotar 7s ease-in-out infinite}
         @keyframes zodiflotar{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}50%{transform:translateY(-8px) rotate(var(--rot,0deg))}}
         .hero-destello{position:absolute;z-index:0;color:var(--accent-light);opacity:0;pointer-events:none;animation:destellar 2.8s ease-in-out infinite}
@@ -610,7 +630,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .carta-name{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary-light);letter-spacing:3px;text-transform:uppercase}
         .hero-nombre{font-family:var(--font-title);font-size:clamp(24px,5vw,64px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1.15;margin-bottom:8px;word-break:break-word;overflow-wrap:break-word}
         .hero-esp{font-size:13px;font-weight:600;color:var(--primary);letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;font-family:var(--font-subtitle)}
-        .hero-bio{font-size:17px;line-height:1.8;color:var(--text);max-width:340px;font-weight:400;margin-bottom:32px;font-family:var(--font-subtitle)}
+        .hero-bio{font-size:17px;line-height:1.5;color:var(--text);max-width:340px;margin-left:auto;margin-right:auto;font-weight:400;margin-bottom:24px;font-family:var(--font-subtitle)}
         .hero-cta{display:inline-flex;align-items:center;gap:10px;padding:16px 36px;background:var(--btn-bg);color:var(--btn-color);border:0.5px solid var(--primary-dim);border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body);letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 32px var(--accent-dim);transition:all 0.3s;margin-bottom:16px}
         .hero-cta:hover{transform:translateY(-2px)}
         .hero-ctas{display:flex;flex-direction:column;align-items:center}
@@ -725,7 +745,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         .links-placeholder{text-align:center;padding:48px 20px;color:var(--text-dim);font-family:var(--font-subtitle);font-size:14px;line-height:1.7}
 
-        .link-card{display:flex;align-items:stretch;border-radius:20px;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb, var(--accent-light) 35%, white) 0%,color-mix(in srgb, var(--primary-light) 35%, white) 100%);margin-bottom:14px;box-shadow:0 10px 26px rgba(0,0,0,0.1);text-decoration:none;max-width:520px}
+        .link-card{display:flex;align-items:stretch;border-radius:20px;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb, var(--accent-light) 35%, white) 0%,color-mix(in srgb, var(--primary-light) 35%, white) 100%);margin-bottom:14px;box-shadow:0 10px 26px rgba(0,0,0,0.1);text-decoration:none;max-width:520px;margin-left:auto;margin-right:auto}
         .link-icono-wrap{width:38%;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:16px}
         .link-icono{width:100%;aspect-ratio:1/1;border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.5);box-shadow:0 4px 14px rgba(0,0,0,0.08)}
         .link-body{flex:1;padding:16px 18px 16px 4px;display:flex;flex-direction:column;justify-content:center;min-width:0}
@@ -880,11 +900,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       </nav>
 
       <section className="hero hero-grano">
-        <svg className="hero-mandala" viewBox="0 0 200 200" fill="none">
-          <circle cx="100" cy="100" r="98" stroke="var(--primary)" strokeWidth="0.5"/>
-          <circle cx="100" cy="100" r="76" stroke="var(--accent-light)" strokeWidth="0.5"/>
-          <circle cx="100" cy="100" r="54" stroke="var(--primary)" strokeWidth="0.5"/>
-        </svg>
+      <div className="hero-mandala"/>
         {ZODIACOS_HERO.map((z, i) => (
           <div key={i} className="hero-zodiaco" style={{top:z.top,left:z.left,fontSize:z.size,'--rot':z.rot} as React.CSSProperties}>{z.simbolo}</div>
         ))}
