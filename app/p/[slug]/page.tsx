@@ -353,19 +353,6 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .from('therapist_profiles').select('*')
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
-
-      const { data: sub } = await supabase
-        .from('subscriptions').select('status, trial_ends_at, current_period_ends_at')
-        .eq('user_id', perfil.user_id).maybeSingle()
-
-      const ahora = new Date()
-      const accesoActivo = !!sub && (
-        sub.status === 'active' ||
-        (sub.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) > ahora) ||
-        (sub.status === 'cancelled' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora)
-      )
-      if (!accesoActivo) { setLoading(false); return }
-
       setTerapeuta(perfil)
       const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
