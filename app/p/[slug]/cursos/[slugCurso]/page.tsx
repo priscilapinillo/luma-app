@@ -138,6 +138,55 @@ const DESTELLOS_CTA = [
   { top: '92%', left: '30%', size: 7, delay: '0.8s' },
 ]
 
+type VideoInfo = { tipo: 'youtube' | 'vimeo' | 'directo' | 'desconocido'; url: string }
+
+function detectarVideo(url: string): VideoInfo {
+  const shortLink = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/)
+  if (shortLink) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${shortLink[1]}` }
+
+  const pathLink = url.match(/youtube\.com\/(?:embed|shorts)\/([a-zA-Z0-9_-]{11})/)
+  if (pathLink) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${pathLink[1]}` }
+
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname.includes('youtube.com')) {
+      const v = parsed.searchParams.get('v')
+      if (v) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${v}` }
+    }
+  } catch {}
+
+  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
+  if (vimeo) return { tipo: 'vimeo', url: `https://player.vimeo.com/video/${vimeo[1]}` }
+
+  if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) {
+    return { tipo: 'directo', url }
+  }
+
+  return { tipo: 'desconocido', url }
+}
+
+function renderizarReproductor(url: string) {
+  const video = detectarVideo(url)
+  if (video.tipo === 'youtube' || video.tipo === 'vimeo') {
+    return <iframe src={video.url} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+  }
+  if (video.tipo === 'directo') {
+    return (
+      <video controls autoPlay style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}>
+        <source src={video.url}/>
+        Tu navegador no soporta este video.
+      </video>
+    )
+  }
+  return (
+    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',textAlign:'center'}}>
+      <a href={video.url} target="_blank" rel="noopener noreferrer" style={{color:'var(--primary-light)',fontSize:'14px',textDecoration:'underline'}}>
+        No pudimos reconocer este link. Abrilo directamente acá →
+      </a>
+    </div>
+  )
+}
+
 export default function CursoPublicoPage() {
   const params = useParams()
   const router = useRouter()
@@ -152,6 +201,7 @@ export default function CursoPublicoPage() {
   const [testiIdx, setTestiIdx] = useState(0)
   const [loading, setLoading] = useState(true)
   const [debugInfo, setDebugInfo] = useState('')
+  const [previewVideo, setPreviewVideo] = useState<string | null>(null)
 
   const touchStartX = useRef(0)
   const touchEndX = useRef(0)
@@ -187,7 +237,7 @@ export default function CursoPublicoPage() {
         .eq('course_id', cursoData.id).order('orden')
       if (mods) {
         const { data: lecs } = await supabase
-          .from('lessons')
+          .from('lessons_publicas')
           .select('id,titulo,tipo,duracion_min,es_preview,contenido_url,module_id')
           .in('module_id', mods.map(m => m.id)).order('orden')
         setModulos(mods.map(m => ({
@@ -531,16 +581,30 @@ export default function CursoPublicoPage() {
                   <div className="modulo-count">{m.lecciones?.length || 0} lec.</div>
                   {moduloAbierto === m.id ? <ChevronUp size={16} color="var(--text-dim)"/> : <ChevronDown size={16} color="var(--text-dim)"/>}
                 </div>
-                {moduloAbierto === m.id && m.lecciones?.map(l => (
-                  <div key={l.id} className="leccion-item">
-                    <div className="tipo-icon">
-                      {l.tipo === 'video' ? <Play size={11} color="var(--primary)"/> : l.tipo === 'pdf' ? <FileText size={11} color="var(--primary)"/> : l.tipo === 'audio' ? <Music size={11} color="var(--primary)"/> : <StickyNote size={11} color="var(--primary)"/>}
+                {moduloAbierto === m.id && m.lecciones?.map(l => {
+                  const esVideoPreview = l.es_preview && l.tipo === 'video' && l.contenido_url
+                  const esOtroPreview = l.es_preview && l.tipo !== 'video' && l.contenido_url
+                  return (
+                    <div key={l.id} className="leccion-item">
+                      <div className="tipo-icon">
+                        {l.tipo === 'video' ? <Play size={11} color="var(--primary)"/> : l.tipo === 'pdf' ? <FileText size={11} color="var(--primary)"/> : l.tipo === 'audio' ? <Music size={11} color="var(--primary)"/> : <StickyNote size={11} color="var(--primary)"/>}
+                      </div>
+                      <div style={{flex:1,fontSize:'13px',color:'var(--text)'}}>{l.titulo}</div>
+                      {esVideoPreview && (
+                        <button onClick={() => setPreviewVideo(l.contenido_url!)} className="preview-badge" style={{border:'none',cursor:'pointer'}}>
+                          Ver ▶
+                        </button>
+                      )}
+                      {esOtroPreview && (
+                        <a href={l.contenido_url!} target="_blank" rel="noopener noreferrer" className="preview-badge" style={{textDecoration:'none'}}>
+                          Ver
+                        </a>
+                      )}
+                      {l.es_preview && !l.contenido_url && <span className="preview-badge">GRATIS</span>}
+                      {l.duracion_min && <span style={{fontSize:'11px',color:'var(--text-dim)'}}>{l.duracion_min}min</span>}
                     </div>
-                    <div style={{flex:1,fontSize:'13px',color:'var(--text)'}}>{l.titulo}</div>
-                    {l.es_preview && <span className="preview-badge">GRATIS</span>}
-                    {l.duracion_min && <span style={{fontSize:'11px',color:'var(--text-dim)'}}>{l.duracion_min}min</span>}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ))}
           </div>
@@ -556,7 +620,7 @@ export default function CursoPublicoPage() {
           <h2 className="seccion-titulo">{tituloVideo}</h2>
           <div className="video-wrap-frame">
             <div className="video-wrap">
-              <iframe src={videoUrl.replace('watch?v=', 'embed/')} allowFullScreen/>
+              {renderizarReproductor(videoUrl!)}
             </div>
           </div>
           <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" style={{height:'34px',position:'absolute',bottom:'-1px',left:0}}>
@@ -628,6 +692,24 @@ export default function CursoPublicoPage() {
       <div className="footer-curso">
         Creado con <a href="https://lumaapp.lat" style={{color:'var(--primary)',textDecoration:'none',fontWeight:700}}>Luma</a>
       </div>
+
+      {/* MODAL DE PREVIEW GRATIS */}
+      {previewVideo && (
+        <div
+          onClick={() => setPreviewVideo(null)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{width:'100%',maxWidth:'720px',position:'relative'}}>
+            <button
+              onClick={() => setPreviewVideo(null)}
+              style={{position:'absolute',top:'-38px',right:0,background:'transparent',border:'none',color:'#fff',fontSize:'28px',cursor:'pointer',lineHeight:1}}
+            >×</button>
+            <div style={{position:'relative',paddingBottom:'56.25%',height:0,borderRadius:'12px',overflow:'hidden',background:'#000'}}>
+              {renderizarReproductor(previewVideo)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
