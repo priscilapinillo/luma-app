@@ -21,6 +21,48 @@ type OpcionExamen = { id: string; texto: string }
 type PreguntaExamen = { id: string; pregunta: string; tipo: string; opciones: OpcionExamen[] }
 type ExamenInfo = { id: string; titulo: string; puntaje_minimo: number; max_intentos: number }
 
+type VideoInfo = { tipo: 'youtube' | 'vimeo' | 'directo' | 'desconocido'; url: string }
+
+function detectarVideo(urlOriginal: string): VideoInfo {
+  const url = urlOriginal.trim()
+  const si = url.match(/[?&]si=([a-zA-Z0-9_-]+)/)
+  const extra = si ? `?si=${si[1]}` : ''
+
+  const ytId = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/)
+  if (ytId) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${ytId[1]}${extra}` }
+
+  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
+  if (vimeo) return { tipo: 'vimeo', url: `https://player.vimeo.com/video/${vimeo[1]}` }
+
+  if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) {
+    return { tipo: 'directo', url }
+  }
+
+  return { tipo: 'desconocido', url }
+}
+
+function renderizarReproductorAula(url: string) {
+  const video = detectarVideo(url)
+  if (video.tipo === 'youtube' || video.tipo === 'vimeo') {
+    return <iframe src={video.url} title="Video de la lección" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+  }
+  if (video.tipo === 'directo') {
+    return (
+      <video controls style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}>
+        <source src={video.url}/>
+        Tu navegador no soporta este video.
+      </video>
+    )
+  }
+  return (
+    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',textAlign:'center'}}>
+      <a href={video.url} target="_blank" rel="noopener noreferrer" style={{color:'#8B5CF6',fontSize:'13px',textDecoration:'underline'}}>
+        No pudimos reconocer este link. Abrilo directamente acá →
+      </a>
+    </div>
+  )
+}
+
 export default function AulaCursoPage() {
   const params = useParams()
   const router = useRouter()
@@ -398,7 +440,7 @@ export default function AulaCursoPage() {
           ) : leccionActiva ? (<>
             {leccionActiva.tipo === 'video' && leccionActiva.contenido_url && (
               <div className="aula-video-wrap">
-                <iframe src={leccionActiva.contenido_url.replace('watch?v=', 'embed/')} allowFullScreen/>
+                {renderizarReproductorAula(leccionActiva.contenido_url)}
               </div>
             )}
             {leccionActiva.tipo === 'audio' && leccionActiva.contenido_url && (
