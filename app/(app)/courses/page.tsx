@@ -20,11 +20,12 @@ type Curso = {
 
 export default function CoursesPage() {
   const [cursos, setCursos] = useState<Curso[]>([])
+  const [pendientesPorCurso, setPendientesPorCurso] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-
+  
   useEffect(() => { cargarCursos() }, [])
-
+  
   async function cargarCursos() {
     try {
       const supabase = createClient()
@@ -35,14 +36,25 @@ export default function CoursesPage() {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-      if (data) setCursos(data)
+      if (data) {
+        setCursos(data)
+        const { data: pendientes } = await supabase
+          .from('enrollments')
+          .select('course_id')
+          .eq('terapeuta_id', user.id)
+          .eq('estado', 'pendiente_pago')
+        if (pendientes) {
+          const conteo: Record<string, number> = {}
+          pendientes.forEach(p => { conteo[p.course_id] = (conteo[p.course_id] || 0) + 1 })
+          setPendientesPorCurso(conteo)
+        }
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
   }
-
   const borradores = cursos.filter(c => c.estado === 'borrador')
   const publicados = cursos.filter(c => c.estado === 'publicado')
   const archivados = cursos.filter(c => c.estado === 'archivado')
@@ -106,7 +118,7 @@ export default function CoursesPage() {
         <>
           <div className="section-label">Publicados</div>
           <div className="cursos-grid">
-            {publicados.map(c => <CursoCard key={c.id} curso={c} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
+          {publicados.map(c => <CursoCard key={c.id} curso={c} pendientes={pendientesPorCurso[c.id] || 0} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
           </div>
         </>
       )}
@@ -115,7 +127,7 @@ export default function CoursesPage() {
         <>
           <div className="section-label">Borradores</div>
           <div className="cursos-grid">
-            {borradores.map(c => <CursoCard key={c.id} curso={c} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
+          {borradores.map(c => <CursoCard key={c.id} curso={c} pendientes={pendientesPorCurso[c.id] || 0} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
           </div>
         </>
       )}
@@ -124,7 +136,7 @@ export default function CoursesPage() {
         <>
           <div className="section-label">Archivados</div>
           <div className="cursos-grid">
-            {archivados.map(c => <CursoCard key={c.id} curso={c} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
+          {archivados.map(c => <CursoCard key={c.id} curso={c} pendientes={pendientesPorCurso[c.id] || 0} onEdit={() => router.push(`/courses/${c.id}`)}/>)}
           </div>
         </>
       )}
@@ -132,9 +144,14 @@ export default function CoursesPage() {
   )
 }
 
-function CursoCard({ curso, onEdit }: { curso: Curso; onEdit: () => void }) {
+function CursoCard({ curso, pendientes, onEdit }: { curso: Curso; pendientes: number; onEdit: () => void }) {
   return (
-    <div className="curso-card" onClick={onEdit}>
+    <div className="curso-card" onClick={onEdit} style={{position:'relative'}}>
+      {pendientes > 0 && (
+        <span style={{position:'absolute',top:'10px',right:'10px',zIndex:2,background:'#EF4444',color:'white',fontSize:'10px',fontWeight:700,borderRadius:'20px',padding:'3px 9px',boxShadow:'0 2px 8px rgba(0,0,0,0.3)'}}>
+          {pendientes} pendiente{pendientes !== 1 ? 's' : ''}
+        </span>
+      )}
       {curso.imagen_url
         ? <img src={curso.imagen_url} alt={curso.titulo} className="curso-img"/>
         : <div className="curso-img" style={{display:'flex',alignItems:'center',justifyContent:'center'}}>

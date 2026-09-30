@@ -15,6 +15,7 @@ export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
   const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string} | null>(null)
+  const [cursosPendientes, setCursosPendientes] = useState(0)
 
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
@@ -41,11 +42,17 @@ export default function Sidebar() {
         plan: planLabel
       })
       if (sub) setSub(sub)
-    } catch (err) {
-      console.error('Error perfil:', err)
-    }
-  }
 
+        const { count } = await supabase
+          .from('enrollments')
+          .select('id', { count: 'exact', head: true })
+          .eq('terapeuta_id', user.id)
+          .eq('estado', 'pendiente_pago')
+        setCursosPendientes(count || 0)
+      } catch (err) {
+        console.error('Error perfil:', err)
+      }
+    }
   function toggleTheme() {
     const newDark = !dark
     setDark(newDark)
@@ -322,6 +329,11 @@ body.modal-ficha-abierto .sb-mobile {
             <div className="sb-mob-icon"><BookOpen size={15}/></div>
             <span>Cursos</span>
             {!tieneAccesoCursos && <Lock size={8} style={{position:'absolute',top:'4px',right:'22%',opacity:0.7}}/>}
+            {tieneAccesoCursos && cursosPendientes > 0 && (
+              <span style={{position:'absolute',top:'2px',right:'20%',background:'#EF4444',color:'white',fontSize:'8px',fontWeight:700,borderRadius:'10px',minWidth:'13px',height:'13px',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>
+                {cursosPendientes}
+              </span>
+            )}
           </Link>
           {links.slice(4).map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}
@@ -495,9 +507,14 @@ body.modal-ficha-abierto .sb-mobile {
           </Link>
         ))}
 
-        <Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
+<Link href="/courses" className={`sb-link${pathname==='/courses'||pathname.startsWith('/courses/')?' active':''}`}>
           <BookOpen size={13}/>Cursos
           {!tieneAccesoCursos && <Lock size={10} style={{marginLeft:'auto',opacity:0.6}}/>}
+          {tieneAccesoCursos && cursosPendientes > 0 && (
+            <span style={{marginLeft:'auto',background:'#EF4444',color:'white',fontSize:'9px',fontWeight:700,borderRadius:'10px',padding:'1px 6px',lineHeight:1.4}}>
+              {cursosPendientes}
+            </span>
+          )}
         </Link>
 
         {links.slice(4,5).map(({ href, icon: Icon, label }) => (

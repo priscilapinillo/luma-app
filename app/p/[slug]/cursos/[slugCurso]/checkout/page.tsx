@@ -155,6 +155,19 @@ export default function CheckoutCursoPage() {
       .upsert(datos, { onConflict: 'course_id,person_id' })
       .select().single()
     if (error) { console.error('Error creando inscripción:', error); return null }
+
+    try {
+      await fetch('/api/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: curso!.user_id,
+          titulo: '✦ Nueva compra en Luma',
+          cuerpo: `${nombre || 'Alguien'} se inscribió a ${curso!.titulo}`,
+        }),
+      })
+    } catch(e) { console.error('Error notificación:', e) }
+
     return data
   }
 

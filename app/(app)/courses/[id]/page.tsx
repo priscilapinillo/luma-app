@@ -39,6 +39,7 @@ export default function CourseEditPage() {
   const [curso, setCurso] = useState<Curso | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas' | 'examen' | 'encuentros'>('info')
+  const [alumnasPendientes, setAlumnasPendientes] = useState(0)
 
   useEffect(() => { cargarCurso() }, [id])
 
@@ -59,6 +60,13 @@ export default function CourseEditPage() {
         return
       }
       setCurso(data)
+
+      const { count } = await supabase
+        .from('enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('course_id', id)
+        .eq('estado', 'pendiente_pago')
+      setAlumnasPendientes(count || 0)
     } catch (err) {
       console.error(err)
     } finally {
@@ -128,8 +136,13 @@ export default function CourseEditPage() {
           <button className={`tab-btn${tab==='contenido'?' active':''}`} onClick={() => setTab('contenido')}>
             <BookOpen size={13}/>Contenido
           </button>
-          <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')}>
+          <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')} style={{position:'relative'}}>
             <Users size={13}/>Alumnas
+            {alumnasPendientes > 0 && (
+              <span style={{background:'#EF4444',color:'white',fontSize:'9px',fontWeight:700,borderRadius:'10px',minWidth:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>
+                {alumnasPendientes}
+              </span>
+            )}
           </button>
           <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
             <GraduationCap size={13}/>Examen
