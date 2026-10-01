@@ -323,12 +323,20 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     const p = new URLSearchParams(window.location.search)
     const status = p.get('status')
     const sessionId = p.get('session_id')
-    if (status === 'approved' && sessionId) {
-      const supabase = createClient()
-      Promise.all([
-        supabase.from('sessions').update({ estado_pago: 'pagado' }).eq('id', sessionId),
-        supabase.from('public_bookings').update({ estado: 'confirmada' }).eq('session_id', sessionId),
-      ]).then(() => setEnviado(true))
+    const paymentId = p.get('payment_id') || p.get('collection_id')
+    if (status === 'approved' && sessionId && paymentId) {
+      fetch('/api/mp/confirmar-pago-reserva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, paymentId }),
+      })
+        .then(r => r.json())
+        .then(r => {
+          window.history.replaceState(null, '', window.location.pathname)
+          if (r.ok) setEnviado(true)
+          else alert('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta y te confirma el turno.')
+        })
+        .catch(() => alert('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta y te confirma el turno.'))
     }
   }, [])
 
@@ -537,6 +545,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           precio: servicioSel.precio_base,
           monto,
           therapistId: terapeuta.user_id,
+          externalReference: sesion.id,
           successUrl: `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`,
           failureUrl: `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`,
         }),
