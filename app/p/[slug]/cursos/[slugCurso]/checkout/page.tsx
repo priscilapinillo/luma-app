@@ -66,15 +66,18 @@ export default function CheckoutCursoPage() {
       setCurso(cursoData)
 
       const p = new URLSearchParams(window.location.search)
-      if (p.get('status') === 'approved' && p.get('enrollment_id')) {
-        const updateData: any = { estado: 'activa' }
-        if (cursoData.modalidad === 'suscripcion') {
-          const vence = new Date()
-          vence.setDate(vence.getDate() + 30)
-          updateData.fecha_vencimiento = vence.toISOString()
-        }
-        await supabase.from('enrollments').update(updateData).eq('id', p.get('enrollment_id'))
-        setEnviado(true)
+      const enrollmentId = p.get('enrollment_id')
+      const paymentId = p.get('payment_id') || p.get('collection_id')
+      if (p.get('status') === 'approved' && enrollmentId && paymentId) {
+        const res = await fetch('/api/mp/confirmar-pago-curso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId, paymentId }),
+        })
+        const r = await res.json().catch(() => ({ ok: false }))
+        window.history.replaceState(null, '', window.location.pathname)
+        if (r.ok) setEnviado(true)
+        else setErrorMsg('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta con el comprobante y te habilita el acceso.')
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
