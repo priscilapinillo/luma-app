@@ -140,20 +140,13 @@ const DESTELLOS_CTA = [
 
 type VideoInfo = { tipo: 'youtube' | 'vimeo' | 'directo' | 'desconocido'; url: string }
 
-function detectarVideo(url: string): VideoInfo {
-  const shortLink = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/)
-  if (shortLink) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${shortLink[1]}` }
+function detectarVideo(urlOriginal: string): VideoInfo {
+  const url = urlOriginal.trim()
+  const si = url.match(/[?&]si=([a-zA-Z0-9_-]+)/)
+  const extra = si ? `?si=${si[1]}` : ''
 
-  const pathLink = url.match(/youtube\.com\/(?:embed|shorts)\/([a-zA-Z0-9_-]{11})/)
-  if (pathLink) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${pathLink[1]}` }
-
-  try {
-    const parsed = new URL(url)
-    if (parsed.hostname.includes('youtube.com')) {
-      const v = parsed.searchParams.get('v')
-      if (v) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${v}` }
-    }
-  } catch {}
+  const ytId = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/)
+  if (ytId) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${ytId[1]}${extra}` }
 
   const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
   if (vimeo) return { tipo: 'vimeo', url: `https://player.vimeo.com/video/${vimeo[1]}` }
@@ -168,7 +161,7 @@ function detectarVideo(url: string): VideoInfo {
 function renderizarReproductor(url: string) {
   const video = detectarVideo(url)
   if (video.tipo === 'youtube' || video.tipo === 'vimeo') {
-    return <iframe src={video.url} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+    return <iframe src={video.url} title="Video del curso" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
   }
   if (video.tipo === 'directo') {
     return (

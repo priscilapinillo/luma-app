@@ -63,10 +63,26 @@ export default function AjustesPage() {
     setLoadingNoti(true)
     if (!('Notification' in window) || !('serviceWorker' in navigator)) {
       alert('Tu navegador no soporta notificaciones. Agregá Luma a tu pantalla de inicio primero.')
+      setLoadingNoti(false)
       return
     }
     if (notificacionesActivas) {
-      setNotificacionesActivas(false)
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const subActual = await registration.pushManager.getSubscription()
+        if (subActual) await subActual.unsubscribe()
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { error } = await supabase.from('push_subscriptions').delete().eq('user_id', user.id)
+          if (error) console.error('Error borrando suscripción push:', error)
+        }
+        setNotificacionesActivas(false)
+      } catch (err) {
+        console.error('Error desactivando notificaciones:', err)
+      } finally {
+        setLoadingNoti(false)
+      }
       return
     }
     try {

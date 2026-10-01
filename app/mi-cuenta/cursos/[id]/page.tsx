@@ -89,8 +89,21 @@ export default function AulaCursoPage() {
   const [personaId, setPersonaId] = useState<string | null>(null)
   const [certificadoCodigo, setCertificadoCodigo] = useState<string | null>(null)
   const [proximoEncuentro, setProximoEncuentro] = useState<{titulo: string; fecha_hora: string; link_zoom: string} | null>(null)
+  const [adjuntos, setAdjuntos] = useState<{id: string; nombre: string; url: string}[]>([])
 
   useEffect(() => { cargarDatos() }, [])
+
+  useEffect(() => {
+    if (!leccionActiva) { setAdjuntos([]); return }
+    let cancelado = false
+    const supabase = createClient()
+    supabase.from('lesson_attachments').select('id, nombre, url').eq('lesson_id', leccionActiva.id)
+      .then(({ data, error }) => {
+        if (error) console.error('Error cargando adjuntos:', error)
+        if (!cancelado) setAdjuntos(data || [])
+      })
+    return () => { cancelado = true }
+  }, [leccionActiva?.id])
 
   async function cargarDatos() {
     try {
@@ -466,6 +479,20 @@ export default function AulaCursoPage() {
 
             {leccionActiva.notas && (
               <div className="aula-notas"><strong>Notas:</strong> {leccionActiva.notas}</div>
+            )}
+
+            {adjuntos.length > 0 && (
+              <div className="aula-notas">
+                <strong>Material descargable</strong>
+                <div style={{display:'flex',flexDirection:'column',gap:'8px',marginTop:'10px'}}>
+                  {adjuntos.map(a => (
+                    <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                      style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 14px',borderRadius:'10px',border:'1px solid #E5E5E5',background:'#FAFAFA',color:'#0A0A0A',fontWeight:600,fontSize:'13px',textDecoration:'none'}}>
+                      <FileText size={15} color="#8B5CF6"/> {a.nombre}
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
           </>) : (
             <div style={{color:'#737373',fontSize:'14px'}}>Elegí una lección del menú para empezar.</div>
