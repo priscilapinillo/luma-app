@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
   try {
-    const { servicioNombre, precio, monto, therapistId, successUrl, failureUrl } = await req.json()
+    const { servicioNombre, precio, monto, therapistId, successUrl, failureUrl, externalReference } = await req.json()
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
           excluded_payment_types: [],
         },
         auto_return: 'approved',
+        ...(externalReference ? { external_reference: String(externalReference) } : {}),
 binary_mode: true,
       }),
     })

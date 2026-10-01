@@ -218,6 +218,7 @@ export default function CheckoutCursoPage() {
           precio: curso!.precio,
           monto: curso!.precio,
           therapistId: curso!.user_id,
+          externalReference: insc.id,
           successUrl: `${origin}/p/${slug}/cursos/${slugCurso}/checkout?status=approved&enrollment_id=${insc.id}`,
           failureUrl: `${origin}/p/${slug}/cursos/${slugCurso}/checkout?status=failure&enrollment_id=${insc.id}`,
         }),
