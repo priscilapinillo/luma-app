@@ -1062,7 +1062,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                   <div className="curso-h2">{c.titulo}</div>
                   {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
                   <div className="curso-bottom">
-                    <div className="curso-precio">${c.precio?.toLocaleString()}</div>
+                  <div className="curso-precio">{c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}</div>
                     <div className="curso-btn">{t.deco} Ver detalle</div>
                   </div>
                 </a>
@@ -1077,7 +1077,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                   <div className="curso-h2">{c.titulo}</div>
                   {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
                   <div className="curso-bottom">
-                    <div className="curso-precio">${c.precio?.toLocaleString()}</div>
+                  <div className="curso-precio">{c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}</div>
                     <div className="curso-btn">{t.deco} Ver detalle</div>
                   </div>
                 </a>

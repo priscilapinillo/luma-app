@@ -46,6 +46,7 @@ export default function CheckoutCursoPage() {
   const [preparandoMP, setPreparandoMP] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [enviado, setEnviado] = useState(false)
+  const [mailRecuperoEnviado, setMailRecuperoEnviado] = useState(false)
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -87,6 +88,7 @@ export default function CheckoutCursoPage() {
   const tieneMP = !!terapeuta?.mp_activo
   const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const sinMetodoPago = !tieneMP && !tieneTransferencia
+  const esGratis = curso != null && curso.precio != null && Number(curso.precio) === 0
   const formularioListo = !!(nombre.trim() && email.trim() && password.trim().length >= 6)
 
   async function autenticarAlumna(): Promise<string | null> {
@@ -102,7 +104,7 @@ export default function CheckoutCursoPage() {
         email: email.trim(), password,
       })
       if (signInError) {
-        setErrorMsg('Ese email ya tiene una cuenta en Luma y la contraseña no coincide. Si ya compraste algo antes, usá la misma contraseña.')
+        setErrorMsg('Ese email ya tiene una cuenta en Luma y la contraseña no coincide. Si no te acordás, tocá "Olvidé mi contraseña".')
         return null
       }
       const userId = signInData.user?.id
@@ -201,6 +203,51 @@ export default function CheckoutCursoPage() {
     } finally { setEnviandoTransferencia(false) }
   }
 
+  async function handleGratis() {
+    setErrorMsg('')
+    setEnviandoTransferencia(true)
+    try {
+      const userId = await autenticarAlumna()
+      if (!userId) return
+      const personaId = await asegurarPersona(userId)
+      if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
+      const supabase = createClient()
+      const { data: resultado, error } = await supabase.rpc('inscribirme_gratis', { p_course_id: curso!.id })
+      if (error || resultado !== 'ok') {
+        console.error('Inscripción gratis:', error || resultado)
+        setErrorMsg(
+          resultado === 'no_es_gratis' ? 'Este curso ya no es gratuito. Recargá la página para ver el precio actual.'
+          : resultado === 'es_terapeuta' ? 'Este email ya tiene una cuenta de terapeuta en Luma. Para inscribirte como alumna, usá un email distinto.'
+          : 'No pudimos completar tu inscripción. Intentá de nuevo.'
+        )
+        return
+      }
+      try {
+        await fetch('/api/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: curso!.user_id,
+            titulo: '✦ Nueva alumna en Luma',
+            cuerpo: `${nombre || 'Alguien'} se inscribió gratis a ${curso!.titulo}`,
+          }),
+        })
+      } catch (e) { console.error('Error notificación:', e) }
+      setEnviado(true)
+    } finally { setEnviandoTransferencia(false) }
+  }
+
+  async function recuperarContrasena() {
+    if (!email.trim()) { setErrorMsg('Escribí tu email arriba y volvé a tocar "Olvidé mi contraseña".'); return }
+    const supabase = createClient()
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+    if (error) { setErrorMsg('No pudimos enviar el mail. Intentá de nuevo en unos minutos.'); return }
+    setErrorMsg('')
+    setMailRecuperoEnviado(true)
+  }
+
   async function handleMP() {
     setErrorMsg('')
     setPreparandoMP(true)
@@ -292,7 +339,7 @@ export default function CheckoutCursoPage() {
               {curso.imagen_url && <img src={curso.imagen_url} className="resumen-img"/>}
               <div>
                 <div className="resumen-titulo">{curso.titulo}</div>
-                <div className="resumen-precio">${curso.precio.toLocaleString()}</div>
+                <div className="resumen-precio">{esGratis ? 'Gratis' : `$${curso.precio.toLocaleString()}`}</div>
               </div>
             </div>
 
@@ -315,12 +362,25 @@ export default function CheckoutCursoPage() {
               <label>Contraseña</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres"/>
               <div className="field-hint">Con esto vas a poder entrar después a ver tu curso. Si ya compraste algo en Luma antes, usá la misma.</div>
+              <button type="button" onClick={recuperarContrasena}
+                style={{alignSelf:'flex-start',background:'none',border:'none',padding:0,fontSize:'12px',color:'var(--primary)',textDecoration:'underline',cursor:'pointer',fontFamily:'inherit'}}>
+                Olvidé mi contraseña
+              </button>
+              {mailRecuperoEnviado && (
+                <div className="field-hint" style={{color:'#10B981'}}>
+                  Te mandamos un mail a {email.trim()} para elegir una contraseña nueva. Después volvé a esta página y completá la inscripción.
+                </div>
+              )}
             </div>
 
             {errorMsg && <div className="error-msg">{errorMsg}</div>}
 
             {formularioListo && (<>
-              {sinMetodoPago ? (
+              {esGratis ? (
+                <button className="confirmar-btn" onClick={handleGratis} disabled={enviandoTransferencia}>
+                  {enviandoTransferencia ? 'Un momento...' : '✦ Inscribirme gratis'}
+                </button>
+              ) : sinMetodoPago ? (
                 <button className="confirmar-btn" onClick={handleWhatsappSinPago} disabled={enviandoTransferencia}>
                   {enviandoTransferencia ? 'Un momento...' : '💬 Continuar por WhatsApp'}
                 </button>
@@ -372,10 +432,12 @@ export default function CheckoutCursoPage() {
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={32} color="white"/></div>
             <h2 style={{fontSize:'24px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>
-              {metodoPago === 'transferencia' || sinMetodoPago ? '¡Ya casi!' : '¡Listo!'}
+            {!esGratis && (metodoPago === 'transferencia' || sinMetodoPago) ? '¡Ya casi!' : '¡Listo!'}
             </h2>
             <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
-              {metodoPago === 'transferencia'
+            {esGratis
+                ? <>Ya tenés acceso a <strong>{curso.titulo}</strong>. Entrá a tu cuenta para empezar.</>
+                : metodoPago === 'transferencia'
                 ? <>Registramos tu inscripción a <strong>{curso.titulo}</strong>. En cuanto {terapeuta.nombre_profesional} confirme tu transferencia, tenés acceso.</>
                 : sinMetodoPago
                   ? <>Registramos tu inscripción a <strong>{curso.titulo}</strong>. Coordiná el pago por WhatsApp para que te den acceso.</>
@@ -388,7 +450,7 @@ export default function CheckoutCursoPage() {
                 📎 Enviar comprobante por WhatsApp
               </a>
             )}
-            {sinMetodoPago && terapeuta.whatsapp && (
+            {sinMetodoPago && !esGratis && terapeuta.whatsapp && (
               <a className="exito-btn" style={{background:'#25D366',display:'block',marginBottom:'10px'}}
                 href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero inscribirme al curso ${curso.titulo}, ¿cómo pago?`)}`}
                 target="_blank" rel="noopener noreferrer">

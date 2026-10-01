@@ -102,6 +102,12 @@ type Testimonio = {
   }
 
   async function guardar(estado?: string) {
+    const precioNuevo = Number(form.precio)
+    const precioAnterior = curso.precio == null ? null : Number(curso.precio)
+    if (precioNuevo === 0 && precioAnterior !== 0) {
+      const ok = confirm('El precio quedó en $0: este curso va a ser GRATUITO. Las alumnas se van a inscribir sin pagar y van a tener acceso para siempre. ¿Confirmás?')
+      if (!ok) return
+    }
     setGuardando(true)
     try {
       const supabase = createClient()
@@ -209,6 +215,11 @@ type Testimonio = {
         <label>Precio base (sin puntos ni comas, ej: 15000) *</label>
         <input type="number" min="0" value={form.precio ?? ''}
             onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
+            {Number(form.precio) === 0 && (
+              <span className="field-hint" style={{color:'#059669'}}>
+                Con precio $0 el curso es gratuito: las alumnas se inscriben sin pagar ni esperar aprobación, con acceso para siempre.
+              </span>
+            )}
         </div>
         <div className="field">
         <label>Precio con oferta (el tachado que se muestra arriba)</label>
@@ -222,6 +233,9 @@ type Testimonio = {
           <option value="unico">Pago único — acceso para siempre</option>
           <option value="suscripcion">Suscripción mensual</option>
         </select>
+        {Number(form.precio) === 0 && (
+          <span className="field-hint">Al ser gratuito, las alumnas tienen acceso para siempre, sin importar la modalidad.</span>
+        )}
       </div>
 
       <div className="section-title">Detalles</div>
