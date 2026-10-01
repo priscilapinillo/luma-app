@@ -68,8 +68,20 @@ export default function ResetPasswordPage() {
       setLoading(false)
       return
     }
+    const { data: { user } } = await supabase.auth.getUser()
+    let destino = '/auth/login'
+    if (user) {
+      const [{ data: links }, { data: sub }, { data: persona }] = await Promise.all([
+        supabase.from('luma_links_profiles').select('id').eq('auth_user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('user_id').eq('user_id', user.id).maybeSingle(),
+        supabase.from('persons').select('id').eq('auth_user_id', user.id).maybeSingle(),
+      ])
+      if (links) destino = '/links/dashboard'
+      else if (sub) destino = '/dashboard'
+      else if (persona) destino = '/mi-cuenta/cursos'
+    }
     setListo(true)
-    setTimeout(() => router.push('/dashboard'), 2000)
+    setTimeout(() => router.push(destino), 2000)
   }
 
   return (
@@ -105,7 +117,7 @@ export default function ResetPasswordPage() {
             <div style={{textAlign:'center',padding:'20px 0'}}>
               <div style={{fontSize:'48px',marginBottom:'16px'}}>✓</div>
               <div style={{fontSize:'20px',fontWeight:700,color:'#0A0A0A',marginBottom:'8px'}}>¡Contraseña actualizada!</div>
-              <div style={{fontSize:'14px',color:'#737373'}}>Redirigiendo al dashboard...</div>
+              <div style={{fontSize:'14px',color:'#737373'}}>Te estamos llevando a tu cuenta...</div>
             </div>
           ) : (<>
             <div className="title">Nueva contraseña</div>
