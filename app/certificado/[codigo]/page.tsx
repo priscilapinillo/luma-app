@@ -76,7 +76,7 @@ export default function CertificadoPage() {
   const fecha = new Date(cert.fecha_emision).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
-    <div style={{minHeight:'100vh',background:'#0a0812',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',fontFamily:"'Jost',sans-serif"}}>
+    <div className="cert-pagina" style={{minHeight:'100vh',background:'#0a0812',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',fontFamily:"'Jost',sans-serif"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap');
         :root{
@@ -106,6 +106,29 @@ export default function CertificadoPage() {
         .cert-footer-val{font-size:12px;color:var(--cream);font-weight:600}
         .cert-firma{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:18px;color:var(--primary-light);border-bottom:1px solid var(--primary-dim);padding-bottom:4px;margin-bottom:4px}
         .verificado{margin-top:24px;display:flex;align-items:center;gap:8px;font-size:12px;color:#6EE7B7}
+        .btn-descargar{margin-top:16px;padding:12px 24px;border-radius:50px;border:1px solid var(--primary);background:transparent;color:var(--primary-light);font-family:'Jost',sans-serif;font-size:13px;font-weight:600;letter-spacing:1px;cursor:pointer}
+        @media print{
+          @page{size:A4 landscape;margin:0}
+          *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+          html,body{background:#0a0812 !important}
+          .cert-pagina{min-height:auto !important;height:100vh;padding:0 24px !important;box-sizing:border-box;overflow:hidden}
+          .cert{box-shadow:none}
+          .no-print{display:none !important}
+        }
+        @media (max-width:640px){
+          .cert{aspect-ratio:auto;border-radius:16px}
+          .cert-inner{padding:40px 22px 32px}
+          .cert-inner::before{inset:10px}
+          .mandala{width:320px;height:320px}
+          .cert-sello{width:44px;height:44px;font-size:17px;margin-bottom:12px}
+          .cert-tag{font-size:9px;letter-spacing:3px}
+          .cert-titulo{font-size:22px;margin-bottom:18px}
+          .cert-nombre{font-size:30px;margin-bottom:16px;line-height:1.15}
+          .cert-desc{font-size:12.5px;line-height:1.6}
+          .cert-footer{flex-direction:column;align-items:center;gap:18px;margin-top:22px}
+          .cert-footer-col.right{text-align:center}
+          .cert-footer-label{letter-spacing:1px}
+        }
       `}</style>
 
       <div className="cert">
@@ -141,7 +164,10 @@ export default function CertificadoPage() {
         </div>
       </div>
 
-      <div className="verificado">✓ Certificado verificado por Luma</div>
+      <div className="verificado no-print">✓ Certificado verificado por Luma</div>
+      <button className="btn-descargar no-print" onClick={() => { document.title = `Certificado ${cert.codigo_unico}`; window.print() }}>
+        Descargar PDF
+      </button>
     </div>
   )
 }
