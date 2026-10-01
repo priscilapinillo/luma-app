@@ -161,26 +161,19 @@ async function buscarOCrearPaciente(
   whatsapp: string,
 ) {
   try {
-    const { data: pacEx } = await supabase
-      .from('patients').select('id')
-      .eq('user_id', terapeutaId).eq('celular', whatsapp).maybeSingle()
-    if (pacEx?.id) return pacEx.id
-
     const partes = nombre.trim().split(' ')
-    const { data: np, error: errPac } = await supabase.from('patients').insert({
-      user_id: terapeutaId,
-      nombre: partes[0],
-      apellido: partes.slice(1).join(' ') || '',
-      celular: whatsapp,
-      alias: whatsapp.slice(-4),
-      contexto_general: '',
-    }).select('id').single()
+    const { data: pacienteId, error: errPac } = await supabase.rpc('buscar_o_crear_paciente', {
+      p_terapeuta: terapeutaId,
+      p_nombre: partes[0],
+      p_apellido: partes.slice(1).join(' ') || '',
+      p_celular: whatsapp,
+    })
 
     if (errPac) {
       console.error('Error creando paciente:', JSON.stringify(errPac))
       throw new Error('Error creando paciente: ' + JSON.stringify(errPac))
     }
-    return np?.id ?? null
+    return pacienteId ?? null
   } catch(e) {
     console.error('Error en buscarOCrearPaciente:', e)
     return null
@@ -385,7 +378,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
         supabase.from('availability').select('*').eq('user_id', perfil.user_id),
-        supabase.from('sessions').select('fecha,hora,duracion').eq('user_id', perfil.user_id),
+        supabase.rpc('horarios_ocupados', { p_terapeuta: perfil.user_id }),
         supabase.from('calendar_blocks').select('fecha_inicio,fecha_fin').eq('user_id', perfil.user_id),
         supabase.from('courses').select('id,titulo,slug,descripcion_corta,imagen_url,precio,nivel')
           .eq('user_id', perfil.user_id).eq('estado', 'publicado'),
@@ -393,7 +386,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       if (servs) setServicios(servs)
       if (cursosData) setCursos(cursosData)
       if (disp) setDisponibilidad(disp)
-        if (sess) setSesionesOcupadas(sess.map(s => ({
+        if (sess) setSesionesOcupadas(sess.map((s: any) => ({
           fecha: s.fecha?.split('T')[0] || '',
           hora: s.hora || '',
           duracion: s.duracion || 60,
@@ -402,16 +395,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         // Verificar límite de entregas
       if (perfil.max_entregas_activas) {
-        const { data: entregasPendientes } = await supabase
-          .from('sessions')
-          .select('id')
-          .eq('user_id', perfil.user_id)
-          .eq('realizado', false)
-          .eq('tipo_servicio', 'entrega')
+        const { data: cantidadEntregas } = await supabase
+          .rpc('contar_entregas_pendientes', { p_terapeuta: perfil.user_id })
         
         
         
-        if (entregasPendientes && entregasPendientes.length >= perfil.max_entregas_activas) {
+          if ((cantidadEntregas ?? 0) >= perfil.max_entregas_activas) {
           setEntregasLlenas(true)
         }
       }
