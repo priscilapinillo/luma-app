@@ -72,7 +72,7 @@ export default function CertificadoPage() {
   return (
     <div className="cert-pagina" style={{minHeight:'100vh',background:'#0a0812',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',fontFamily:"'Jost',sans-serif"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap');
+        
         :root{
           --bg:${t.bg};--bg2:${t.bg2};--primary:${t.primary};--primary-light:${t.primaryLight};--primary-dim:${t.primaryDim};
           --accent:${t.accent};--accent-light:${t.accentLight};--accent-dim:${t.accentDim};

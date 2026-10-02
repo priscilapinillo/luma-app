@@ -196,7 +196,7 @@ export default function RoadmapPage() {
     <>
       <style>{`
         @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+        
         .nv{min-height:100vh;position:relative;overflow-x:hidden;font-family:'Inter',sans-serif;background:#0D0B14;color:#D4C5A9}
         .nv *{box-sizing:border-box}
 

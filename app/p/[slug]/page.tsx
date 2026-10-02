@@ -631,7 +631,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   return (
     <div data-public-page="true" style={{colorScheme:'normal'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=${t.googleFonts}&display=swap');
+        `}</style>
+      <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${t.googleFonts}&display=swap`}/>
+      <style>{`
         :root {
           --bg:${t.bg};--bg2:${t.bg2};--bg3:${t.bg3};
           --primary:${t.primary};--primary-light:${t.primaryLight};--primary-dim:${t.primaryDim};

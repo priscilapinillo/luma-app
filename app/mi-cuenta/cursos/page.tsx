@@ -121,7 +121,7 @@ export default function MisCursosPage() {
   return (
     <div style={{minHeight:'100vh',background:'#FAFAFA',fontFamily:"'Geist',sans-serif"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
+        
         *{box-sizing:border-box;margin:0;padding:0}
         .mc-nav{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:white;border-bottom:1px solid #E5E5E5}
         .mc-logo{font-size:18px;font-weight:900;color:#0A0A0A}

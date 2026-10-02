@@ -26,6 +26,9 @@ export default function RootLayout({
   <meta name="apple-mobile-web-app-title" content="Luma"/>
   <meta name="theme-color" content="#8B5CF6"/>
   <link rel="manifest" href="/manifest.json"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin=""/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Geist:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Jost:wght@300;400;500;600&family=Manrope:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&family=Syne:wght@400;600;700;800&display=swap"/>
   </head>
   <body>
         <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{__html: `
