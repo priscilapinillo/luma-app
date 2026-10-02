@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap } from 'lucide-react'
+import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { tieneAccesoCurso } from '@/lib/acceso'
+import VisorContenido from '@/components/VisorContenido'
+import { detectarContenido } from '@/lib/contenido'
 
 type Leccion = {
   id: string; titulo: string; tipo: string; contenido_url: string | null
@@ -20,48 +22,6 @@ type Modulo = {
 type OpcionExamen = { id: string; texto: string }
 type PreguntaExamen = { id: string; pregunta: string; tipo: string; opciones: OpcionExamen[] }
 type ExamenInfo = { id: string; titulo: string; puntaje_minimo: number; max_intentos: number }
-
-type VideoInfo = { tipo: 'youtube' | 'vimeo' | 'directo' | 'desconocido'; url: string }
-
-function detectarVideo(urlOriginal: string): VideoInfo {
-  const url = urlOriginal.trim()
-  const si = url.match(/[?&]si=([a-zA-Z0-9_-]+)/)
-  const extra = si ? `?si=${si[1]}` : ''
-
-  const ytId = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/)
-  if (ytId) return { tipo: 'youtube', url: `https://www.youtube.com/embed/${ytId[1]}${extra}` }
-
-  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
-  if (vimeo) return { tipo: 'vimeo', url: `https://player.vimeo.com/video/${vimeo[1]}` }
-
-  if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) {
-    return { tipo: 'directo', url }
-  }
-
-  return { tipo: 'desconocido', url }
-}
-
-function renderizarReproductorAula(url: string) {
-  const video = detectarVideo(url)
-  if (video.tipo === 'youtube' || video.tipo === 'vimeo') {
-    return <iframe src={video.url} title="Video de la lección" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-  }
-  if (video.tipo === 'directo') {
-    return (
-      <video controls style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}>
-        <source src={video.url}/>
-        Tu navegador no soporta este video.
-      </video>
-    )
-  }
-  return (
-    <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',textAlign:'center'}}>
-      <a href={video.url} target="_blank" rel="noopener noreferrer" style={{color:'#8B5CF6',fontSize:'13px',textDecoration:'underline'}}>
-        No pudimos reconocer este link. Abrilo directamente acá →
-      </a>
-    </div>
-  )
-}
 
 export default function AulaCursoPage() {
   const params = useParams()
@@ -90,10 +50,12 @@ export default function AulaCursoPage() {
   const [certificadoCodigo, setCertificadoCodigo] = useState<string | null>(null)
   const [proximoEncuentro, setProximoEncuentro] = useState<{titulo: string; fecha_hora: string; link_zoom: string} | null>(null)
   const [adjuntos, setAdjuntos] = useState<{id: string; nombre: string; url: string}[]>([])
+  const [adjuntoAbierto, setAdjuntoAbierto] = useState<string | null>(null)
 
   useEffect(() => { cargarDatos() }, [])
 
   useEffect(() => {
+    setAdjuntoAbierto(null)
     if (!leccionActiva) { setAdjuntos([]); return }
     let cancelado = false
     const supabase = createClient()
@@ -451,19 +413,10 @@ export default function AulaCursoPage() {
               </button>
             </div>
           ) : leccionActiva ? (<>
-            {leccionActiva.tipo === 'video' && leccionActiva.contenido_url && (
-              <div className="aula-video-wrap">
-                {renderizarReproductorAula(leccionActiva.contenido_url)}
+            {leccionActiva.tipo !== 'texto' && leccionActiva.contenido_url && leccionActiva.contenido_url.trim() !== '' && (
+              <div style={{marginBottom:'20px'}}>
+                <VisorContenido key={leccionActiva.id} url={leccionActiva.contenido_url} tipo={leccionActiva.tipo}/>
               </div>
-            )}
-            {leccionActiva.tipo === 'audio' && leccionActiva.contenido_url && (
-              <div style={{marginBottom:'20px'}}><audio controls src={leccionActiva.contenido_url} style={{width:'100%'}}/></div>
-            )}
-            {leccionActiva.tipo === 'pdf' && leccionActiva.contenido_url && (
-              <a href={leccionActiva.contenido_url} target="_blank" rel="noopener noreferrer"
-                style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'12px 18px',borderRadius:'10px',border:'1px solid #E5E5E5',background:'white',color:'#0A0A0A',fontWeight:600,fontSize:'13px',textDecoration:'none',marginBottom:'20px'}}>
-                <FileText size={15}/> Abrir PDF
-              </a>
             )}
 
             <h1 className="aula-leccion-main-titulo">{leccionActiva.titulo}</h1>
@@ -485,12 +438,35 @@ export default function AulaCursoPage() {
               <div className="aula-notas">
                 <strong>Material descargable</strong>
                 <div style={{display:'flex',flexDirection:'column',gap:'8px',marginTop:'10px'}}>
-                  {adjuntos.map(a => (
-                    <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
-                      style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 14px',borderRadius:'10px',border:'1px solid #E5E5E5',background:'#FAFAFA',color:'#0A0A0A',fontWeight:600,fontSize:'13px',textDecoration:'none'}}>
-                      <FileText size={15} color="#8B5CF6"/> {a.nombre}
-                    </a>
-                  ))}
+                  {adjuntos.map(a => {
+                    const info = detectarContenido(a.url)
+                    if (!info) return null
+                    const sePuedeVer = info.visor !== 'link'
+                    const abierto = adjuntoAbierto === a.id
+                    return (
+                      <div key={a.id} style={{borderRadius:'10px',border:'1px solid #E5E5E5',background:'#FAFAFA',overflow:'hidden'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'10px 14px'}}>
+                          <FileText size={15} color="#8B5CF6" style={{flexShrink:0}}/>
+                          <span style={{flex:1,minWidth:0,fontWeight:600,fontSize:'13px',color:'#0A0A0A',overflowWrap:'anywhere'}}>{a.nombre}</span>
+                          {sePuedeVer && (
+                            <button type="button" onClick={() => setAdjuntoAbierto(abierto ? null : a.id)}
+                              style={{display:'inline-flex',alignItems:'center',gap:'4px',fontSize:'12px',fontWeight:600,color:'#7C3AED',background:'#F4F0FF',border:'none',borderRadius:'8px',padding:'6px 10px',cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>
+                              {abierto ? <><EyeOff size={12}/> Cerrar</> : <><Eye size={12}/> Ver acá</>}
+                            </button>
+                          )}
+                          <a href={info.abrirUrl} target="_blank" rel="noopener noreferrer"
+                            style={{display:'inline-flex',alignItems:'center',gap:'4px',fontSize:'12px',fontWeight:600,color:'#525252',textDecoration:'none',padding:'6px 8px',flexShrink:0}}>
+                            <ExternalLink size={12}/> Abrir
+                          </a>
+                        </div>
+                        {abierto && (
+                          <div style={{padding:'0 12px 12px'}}>
+                            <VisorContenido url={a.url}/>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

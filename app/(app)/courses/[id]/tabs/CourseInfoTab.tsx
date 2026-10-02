@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Plus, X, Video, Trash2 } from 'lucide-react'
 import { comprimirImagen } from '@/lib/comprimirImagen'
@@ -23,13 +23,21 @@ type Testimonio = {
   }
 
   export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
-    console.log('CURSO ESTADO:', curso.estado)
     const [form, setForm] = useState({ ...curso,
     para_quien: curso.para_quien || [''],
     que_aprenderas: curso.que_aprenderas || [''],
     requisitos: curso.requisitos || [''],
   })
   const [guardando, setGuardando] = useState(false)
+  // ── autoguardado
+  const formRef = useRef(form)
+  formRef.current = form
+  const guardadoRef = useRef(JSON.stringify(form))
+  const guardandoRef = useRef(false)
+  const repetirRef = useRef(false)
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cursoRef = useRef(curso)
+  cursoRef.current = curso
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -52,7 +60,8 @@ type Testimonio = {
       const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
       const nombre = `${Date.now()}.jpg`
-      await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
+      const { error: errSubida } = await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
+      if (errSubida) throw errSubida
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
     } catch (err: any) {
@@ -101,41 +110,119 @@ type Testimonio = {
     setTestimonios(prev => prev.filter(t => t.id !== id))
   }
 
+  // botón "Guardar cambios", "Publicar" y "Archivar"
   async function guardar(estado?: string) {
-    const precioNuevo = Number(form.precio)
-    const precioAnterior = curso.precio == null ? null : Number(curso.precio)
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+    await guardarCurso({ estado, silencioso: false })
+  }
+
+  function programarAutoguardado(ms: number) {
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+    autoTimerRef.current = setTimeout(() => { guardarCurso({ silencioso: true }) }, ms)
+  }
+
+  async function guardarCurso({ estado, silencioso }: { estado?: string; silencioso: boolean }) {
+    if (guardandoRef.current) { repetirRef.current = true; return }
+    const f = formRef.current
+    const foto = JSON.stringify(f)
+    if (silencioso && !estado && foto === guardadoRef.current) return
+
+    // precio vacío: no lo tocamos (se guarda el resto) y avisamos
+    const precioVacio = (f.precio as any) === '' || f.precio == null
+    if (precioVacio && (!silencioso || estado)) {
+      alert('Escribí el precio del curso (0 si es gratuito) antes de guardar.')
+      return
+    }
+    const precioNuevo = precioVacio ? null : Number(f.precio)
+    const precioAnterior = cursoRef.current.precio == null ? null : Number(cursoRef.current.precio)
     if (precioNuevo === 0 && precioAnterior !== 0) {
       const ok = confirm('El precio quedó en $0: este curso va a ser GRATUITO. Las alumnas se van a inscribir sin pagar y van a tener acceso para siempre. ¿Confirmás?')
-      if (!ok) return
+      if (!ok) {
+        // vuelve al precio que tenía, así no queda guardado por error
+        setForm(prev => ({ ...prev, precio: precioAnterior as any }))
+        return
+      }
     }
+
+    guardandoRef.current = true
     setGuardando(true)
+    setMsg('Guardando…')
+    let ok = false
     try {
       const supabase = createClient()
-      const datos = {
-        titulo: form.titulo,
-        descripcion_corta: form.descripcion_corta,
-        descripcion_larga: form.descripcion_larga,
-        imagen_url: form.imagen_url,
-        video_presentacion_url: form.video_presentacion_url,
-        precio: Number(form.precio),
-        precio_original: form.precio_original ? Number(form.precio_original) : null,
-        modalidad: form.modalidad,
-        nivel: form.nivel,
-        duracion_estimada_horas: form.duracion_estimada_horas ? Number(form.duracion_estimada_horas) : null,
-        politica_reembolso: form.politica_reembolso,
-        dias_garantia: form.dias_garantia ? Number(form.dias_garantia) : null,
-        para_quien: form.para_quien.filter(x => x.trim()),
-        que_aprenderas: form.que_aprenderas.filter(x => x.trim()),
-        requisitos: form.requisitos.filter(x => x.trim()),
+      const datos: any = {
+        titulo: f.titulo,
+        descripcion_corta: f.descripcion_corta,
+        descripcion_larga: f.descripcion_larga,
+        imagen_url: f.imagen_url,
+        video_presentacion_url: f.video_presentacion_url,
+        precio_original: f.precio_original ? Number(f.precio_original) : null,
+        modalidad: f.modalidad,
+        nivel: f.nivel,
+        duracion_estimada_horas: f.duracion_estimada_horas ? Number(f.duracion_estimada_horas) : null,
+        politica_reembolso: f.politica_reembolso,
+        dias_garantia: f.dias_garantia ? Number(f.dias_garantia) : null,
+        para_quien: f.para_quien.filter(x => x.trim()),
+        que_aprenderas: f.que_aprenderas.filter(x => x.trim()),
+        requisitos: f.requisitos.filter(x => x.trim()),
         updated_at: new Date().toISOString(),
         ...(estado ? { estado } : {}),
       }
-      const { data } = await supabase.from('courses').update(datos).eq('id', curso.id).select().single()
-      if (data) { onUpdate(data); setMsg('Guardado ✓') }
-      setTimeout(() => setMsg(''), 2000)
-    } catch (err) { console.error(err) }
-    finally { setGuardando(false) }
+      if (precioNuevo !== null) datos.precio = precioNuevo
+      const { data, error } = await supabase.from('courses').update(datos).eq('id', curso.id).select().single()
+      if (error || !data) {
+        console.error('Error guardando curso:', error)
+        const sinRed = typeof navigator !== 'undefined' && navigator.onLine === false
+        setMsg(sinRed ? 'Sin conexión · se guarda cuando vuelva' : 'No se pudo guardar')
+        if (!silencioso) alert('No se pudo guardar: ' + (error?.message || 'intentá de nuevo.'))
+        return
+      }
+      guardadoRef.current = precioVacio ? JSON.stringify({ ...f, precio: '' }) : foto
+      onUpdate(data)
+      ok = true
+      setMsg('✓ Guardado')
+    } catch (err) {
+      console.error(err)
+      setMsg('No se pudo guardar')
+      if (!silencioso) alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
+    } finally {
+      guardandoRef.current = false
+      setGuardando(false)
+      if (repetirRef.current) {
+        repetirRef.current = false
+        setTimeout(() => { guardarCurso({ silencioso: true }) }, 0)
+      } else if (ok) {
+        setTimeout(() => setMsg(prev => prev === '✓ Guardado' ? '' : prev), 2000)
+      }
+    }
   }
+
+  // cambios que no son escribir (modalidad, nivel, imagen, agregar o borrar ítems) se guardan solos
+  useEffect(() => {
+    if (JSON.stringify(form) === guardadoRef.current) return
+    const el = typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null
+    const tipoInput = el && el.tagName === 'INPUT' ? (el as HTMLInputElement).type : ''
+    const escribiendo = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox','radio','file','button','submit'].includes(tipoInput)))
+    if (escribiendo) return // se guarda al salir del campo
+    programarAutoguardado(700)
+  }, [form])
+
+  // si cierra la app, cambia de app o se va de la página: guardamos lo último
+  useEffect(() => {
+    function alOcultar() { if (document.visibilityState === 'hidden') guardarCurso({ silencioso: true }) }
+    function alSalir() { guardarCurso({ silencioso: true }) }
+    function alVolverRed() { programarAutoguardado(300) }
+    document.addEventListener('visibilitychange', alOcultar)
+    window.addEventListener('pagehide', alSalir)
+    window.addEventListener('online', alVolverRed)
+    return () => {
+      document.removeEventListener('visibilitychange', alOcultar)
+      window.removeEventListener('pagehide', alSalir)
+      window.removeEventListener('online', alVolverRed)
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+      guardarCurso({ silencioso: true })
+    }
+  }, [])
 
   function agregarItem(campo: 'para_quien' | 'que_aprenderas' | 'requisitos') {
     setForm(prev => ({ ...prev, [campo]: [...prev[campo], ''] }))
@@ -148,7 +235,7 @@ type Testimonio = {
   }
 
   return (
-    <div style={{padding:'20px',maxWidth:'720px',paddingBottom:'160px'}}>
+    <div style={{padding:'20px',maxWidth:'720px',paddingBottom:'160px'}} onBlurCapture={() => programarAutoguardado(300)}>
       <style>{`
         .field{display:flex;flex-direction:column;gap:4px;margin-bottom:16px}
         .field label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
@@ -168,7 +255,6 @@ type Testimonio = {
        .testi-card-thumb{width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--border-light)}
        .testi-card-texto{flex:1;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
        .testi-upload-box{border:0.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center;background:var(--bg-input);cursor:pointer;font-size:12px;color:var(--text-muted)}
-</parameter>
        .bottom-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:0;right:0;background:transparent;border-top:none;border-bottom:none;padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;align-items:center;z-index:201;flex-wrap:wrap}
 @media(min-width:768px){.bottom-bar{left:200px;bottom:0;border-bottom:none}}
       `}</style>
@@ -214,8 +300,11 @@ type Testimonio = {
         <div className="field">
         <label>Precio base (sin puntos ni comas, ej: 15000) *</label>
         <input type="number" min="0" value={form.precio ?? ''}
-            onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
-            {Number(form.precio) === 0 && (
+            onChange={e => setForm({...form, precio: (e.target.value === '' ? '' : Number(e.target.value)) as any})}/>
+            {(form.precio as any) === '' && (
+              <span className="field-hint" style={{color:'#B45309'}}>Escribí el precio (0 si es gratuito).</span>
+            )}
+            {(form.precio as any) !== '' && form.precio != null && Number(form.precio) === 0 && (
               <span className="field-hint" style={{color:'#059669'}}>
                 Con precio $0 el curso es gratuito: las alumnas se inscriben sin pagar ni esperar aprobación, con acceso para siempre.
               </span>
@@ -233,7 +322,7 @@ type Testimonio = {
           <option value="unico">Pago único — acceso para siempre</option>
           <option value="suscripcion">Suscripción mensual</option>
         </select>
-        {Number(form.precio) === 0 && (
+        {(form.precio as any) !== '' && form.precio != null && Number(form.precio) === 0 && (
           <span className="field-hint">Al ser gratuito, las alumnas tienen acceso para siempre, sin importar la modalidad.</span>
         )}
       </div>
@@ -354,7 +443,7 @@ type Testimonio = {
       </div>
 
       <div className="bottom-bar">
-        {msg && <span style={{fontSize:'12px',color:'#10B981',fontWeight:600}}>{msg}</span>}
+        {msg && <span style={{fontSize:'12px',color: msg.startsWith('✓') ? '#10B981' : msg === 'Guardando…' ? 'var(--text-muted)' : '#B45309',fontWeight:600,background:'var(--bg-card)',padding:'4px 10px',borderRadius:'20px'}}>{msg}</span>}
         {curso.estado !== 'publicado' && (
           <button onClick={() => guardar('publicado')} disabled={guardando}
             style={{padding:'10px 18px',background:'#DCFCE7',color:'#166534',border:'0.5px solid #86EFAC',borderRadius:'10px',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>

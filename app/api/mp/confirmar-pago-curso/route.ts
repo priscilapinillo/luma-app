@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     )
 
     const { data: insc } = await supabase
-      .from('enrollments').select('id, estado, course_id, terapeuta_id')
+      .from('enrollments').select('id, estado, course_id, terapeuta_id, fecha_vencimiento')
       .eq('id', enrollmentId).maybeSingle()
     if (!insc) return NextResponse.json({ ok: false, motivo: 'inscripcion_no_existe' }, { status: 404 })
     if (insc.estado === 'activa') return NextResponse.json({ ok: true })
@@ -61,6 +61,19 @@ export async function POST(req: NextRequest) {
       console.error('Error activando inscripción:', error)
       return NextResponse.json({ ok: false, motivo: 'error_guardando' }, { status: 500 })
     }
+
+    // anotar el pago en Finanzas. Si esto falla, el acceso ya quedó dado: solo se registra el error
+    const { error: errPago } = await supabase.from('course_payments').insert({
+      terapeuta_id: curso.user_id,
+      enrollment_id: insc.id,
+      course_id: insc.course_id,
+      monto: Number(pago.transaction_amount),
+      metodo: 'mercadopago',
+      tipo: insc.fecha_vencimiento ? 'renovacion' : 'compra',
+      mp_payment_id: String(pago.id),
+      fecha: pago.date_approved || new Date().toISOString(),
+    })
+    if (errPago && errPago.code !== '23505') console.error('Error registrando pago de curso:', errPago)
 
     return NextResponse.json({ ok: true })
   } catch (err) {

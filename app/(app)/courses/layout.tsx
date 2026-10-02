@@ -15,7 +15,7 @@ export default function CoursesLayout({ children }: { children: React.ReactNode 
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+      if (!user) { window.location.href = '/auth/login'; return }
 
       const { data: sub } = await supabase
         .from('subscriptions')
@@ -69,7 +69,7 @@ export default function CoursesLayout({ children }: { children: React.ReactNode 
         .cg-volver{display:block;margin-top:14px;font-size:12px;color:#A3A3A3;text-decoration:none}
       `}</style>
 
-      <div className="cg-fondo">{children}</div>
+      <div className="cg-fondo" aria-hidden="true" inert>{children}</div>
 
       <div className="cg-overlay">
         <div className="cg-card">

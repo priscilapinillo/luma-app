@@ -158,6 +158,13 @@ export default function AjustesPage() {
   const [confirmEliminar, setConfirmEliminar] = useState(false)
   const [msgExito, setMsgExito] = useState('')
   const perfilGuardadoRef = useRef<string>('')
+  // ── autoguardado: refs para leer siempre lo último y no pisar guardados en curso
+  const perfilActualRef = useRef<any>(null)
+  const cargadoRef = useRef(false)
+  const guardandoRef = useRef(false)
+  const repetirRef = useRef(false)
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [estadoGuardado, setEstadoGuardado] = useState<'idle' | 'guardando' | 'guardado' | 'error' | 'sin_conexion'>('idle')
 
   const [perfil, setPerfil] = useState<Perfil>({
     nombre_profesional: '', nombre_completo: '', especialidad: '',
@@ -179,6 +186,8 @@ export default function AjustesPage() {
     destacado: DESTACADO_VACIO,
     anuncio: ANUNCIO_VACIO,
   })
+
+  perfilActualRef.current = perfil
 
   useEffect(() => {
     function avisarSalida(e: BeforeUnloadEvent) {
@@ -273,15 +282,43 @@ export default function AjustesPage() {
       } catch (err) {
         console.error('Error cargando:', err)
       } finally {
+        cargadoRef.current = true
         setLoading(false)
       }
     }
+  // botón "Guardar": avisa con cartel y alertas
   async function guardarPerfil() {
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+    await guardar(false)
+  }
+
+  // guardado automático: sin alertas, muestra el estado en el indicador
+  function programarAutoguardado(ms: number) {
+    if (!cargadoRef.current) return
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+    autoTimerRef.current = setTimeout(() => { guardar(true) }, ms)
+  }
+
+  async function guardar(silencioso: boolean) {
+    if (!cargadoRef.current) return
+    // si ya hay un guardado en curso, lo repetimos al terminar (así no se pisan)
+    if (guardandoRef.current) { repetirRef.current = true; return }
+    const perfil = perfilActualRef.current as Perfil
+    const foto = JSON.stringify(perfil)
+    if (silencioso && foto === perfilGuardadoRef.current) return
+
+    guardandoRef.current = true
     setGuardando(true)
+    setEstadoGuardado('guardando')
+    let ok = false
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        if (!silencioso) alert('Tu sesión expiró. Volvé a iniciar sesión para guardar los cambios.')
+        return
+      }
+      const slugFijo = perfil.slug || perfil.nombre_profesional?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || ''
       const datos = {
         user_id: user.id,
         nombre_profesional: perfil.nombre_profesional,
@@ -293,7 +330,7 @@ export default function AjustesPage() {
         pagina_activa: perfil.pagina_activa,
         mensaje_bienvenida: perfil.mensaje_bienvenida,
         tipo_pago: perfil.tipo_pago,
-        slug: perfil.slug || perfil.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        slug: slugFijo,
         template: perfil.template,
         secciones: perfil.secciones,
         faq: perfil.faq,
@@ -312,21 +349,81 @@ export default function AjustesPage() {
         anuncio: perfil.anuncio,
         updated_at: new Date().toISOString(),
       }
-      const { error: errGuardar } = perfil.id
-      ? await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
-      : await supabase.from('therapist_profiles').insert(datos)
-    if (errGuardar) { alert('No se pudo guardar: ' + errGuardar.message); return }
-        
-        perfilGuardadoRef.current = JSON.stringify(perfil)
+      // .select('id') para confirmar que de verdad se guardó una fila
+      const { data: filas, error: errGuardar } = perfil.id
+        ? await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id).select('id')
+        : await supabase.from('therapist_profiles').insert(datos).select('id')
+      if (errGuardar || !filas || filas.length === 0) {
+        console.error('Error guardando perfil:', errGuardar)
+        if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
+        else alert('No se pudo guardar: ' + (errGuardar?.message || 'volvé a iniciar sesión e intentá de nuevo.'))
+        return
+      }
+
+      // perfil nuevo: guardamos su id y fijamos el link (así no se crea otro perfil ni cambia la dirección de su página)
+      const cambios: Partial<Perfil> = {}
+      if (!perfil.id && filas[0]?.id) cambios.id = filas[0].id
+      if (!perfil.slug && slugFijo) cambios.slug = slugFijo
+      if (Object.keys(cambios).length > 0) {
+        const actualizado = { ...perfil, ...cambios }
+        perfilGuardadoRef.current = JSON.stringify(actualizado)
+        setPerfil(prev => ({ ...prev, ...cambios }))
+      } else {
+        perfilGuardadoRef.current = foto
+      }
+      ok = true
+      setEstadoGuardado('guardado')
+      if (!silencioso) {
         setMsgExito('Perfil guardado correctamente')
-      setTimeout(() => setMsgExito(''), 3000)
+        setTimeout(() => setMsgExito(''), 3000)
+      }
     } catch (err) {
       console.error('Error guardando:', err)
-      alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
+      if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
+      else alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
     } finally {
+      guardandoRef.current = false
       setGuardando(false)
+      if (repetirRef.current) {
+        repetirRef.current = false
+        setTimeout(() => { guardar(true) }, 0)
+      } else if (ok) {
+        setTimeout(() => setEstadoGuardado(prev => prev === 'guardado' ? 'idle' : prev), 2000)
+      }
     }
   }
+
+  // cada cambio que NO es escribir en un campo (interruptores, plantillas, agregar o borrar, imágenes) se guarda solo
+  useEffect(() => {
+    if (!cargadoRef.current) return
+    if (JSON.stringify(perfil) === perfilGuardadoRef.current) return
+    const el = typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null
+    const tipoInput = el && el.tagName === 'INPUT' ? (el as HTMLInputElement).type : ''
+    const escribiendo = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox','radio','file','button','submit','range','color'].includes(tipoInput)))
+    if (escribiendo) return // se guarda al salir del campo
+    programarAutoguardado(700)
+  }, [perfil])
+
+  // si cierra la app, cambia de app o se va a otra sección: guardamos lo último
+  useEffect(() => {
+    function alOcultar() { if (document.visibilityState === 'hidden') guardar(true) }
+    function alSalir() { guardar(true) }
+    document.addEventListener('visibilitychange', alOcultar)
+    window.addEventListener('pagehide', alSalir)
+    return () => {
+      document.removeEventListener('visibilitychange', alOcultar)
+      window.removeEventListener('pagehide', alSalir)
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
+      guardar(true)
+    }
+  }, [])
+
+  // si vuelve internet, reintenta
+  useEffect(() => {
+    function alVolver() { programarAutoguardado(300) }
+    window.addEventListener('online', alVolver)
+    return () => window.removeEventListener('online', alVolver)
+  }, [])
 
   async function subirImagenDestacado(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -528,11 +625,16 @@ export default function AjustesPage() {
   }
   .s-toggle-mobile-item{flex-shrink:0;padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--text-secondary);background:var(--bg-input);border:1.5px solid var(--border);cursor:pointer;font-family:inherit;white-space:nowrap}
   .s-toggle-mobile-item.active{background:var(--accent);color:white;border-color:var(--accent)}
+  .autosave-pill{position:fixed;right:20px;bottom:20px;z-index:250;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.12);background:var(--bg-card);color:var(--text-secondary);border:0.5px solid var(--border);display:flex;align-items:center;gap:6px;font-family:inherit}
+  .autosave-guardado{color:#059669;border-color:#A7F3D0}
+  .autosave-error,.autosave-sin_conexion{color:#B45309;border-color:#FDE68A;background:#FFFBEB}
+  .autosave-pill button{background:none;border:none;color:inherit;font-weight:800;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:12px;padding:0}
+  @media(max-width:767px){.autosave-pill{right:50%;transform:translateX(50%);bottom:calc(84px + env(safe-area-inset-bottom));white-space:nowrap}}
 `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={subirAvatar}/>
 
-      <div className="sw">
+      <div className="sw" onBlurCapture={() => programarAutoguardado(300)}>
       <div className="s-toggle-wrap">
           <div className="s-toggle-title">Ajustes</div>
           {([
@@ -1477,6 +1579,15 @@ export default function AjustesPage() {
               }}>Eliminar cuenta</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {estadoGuardado !== 'idle' && (
+        <div className={`autosave-pill autosave-${estadoGuardado}`} role="status">
+          {estadoGuardado === 'guardando' ? 'Guardando…'
+            : estadoGuardado === 'guardado' ? '✓ Guardado'
+            : estadoGuardado === 'sin_conexion' ? 'Sin conexión · se guarda cuando vuelva'
+            : <>No se pudo guardar · <button onClick={() => guardar(true)}>Reintentar</button></>}
         </div>
       )}
     </>

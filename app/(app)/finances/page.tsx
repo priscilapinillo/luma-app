@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { TrendingUp, DollarSign, Clock, Users, Award, Target, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react'
+import { TrendingUp, DollarSign, Clock, Users, Award, Target, AlertCircle, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, List, GraduationCap } from 'lucide-react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 type Sesion = {
@@ -9,6 +10,11 @@ type Sesion = {
   servicio_nombre: string; precio: number
   estado_pago: string; sena: number; duracion: number
   patient_id: string
+}
+
+type PagoCurso = {
+  id: string; monto: number; fecha: string
+  metodo: string; tipo: string; course_id: string | null
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -22,6 +28,31 @@ function formatPesosCorto(n: number) {
   return '$' + Math.round(n)
 }
 
+// 'YYYY-MM-DD' se lee como fecha local (si no, el día 1 cae en el mes anterior por la zona horaria)
+function parseFecha(f: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(f) ? new Date(f + 'T00:00:00') : new Date(f)
+}
+
+// rango [inicio, fin] del período elegido, corrido `offset` semanas / meses / años
+function rangoPeriodo(periodo: 'semana' | 'mes' | 'anio', offset: number) {
+  const ahora = new Date()
+  if (periodo === 'semana') {
+    const inicio = new Date(ahora); inicio.setDate(ahora.getDate() - ahora.getDay() + offset * 7); inicio.setHours(0,0,0,0)
+    const fin = new Date(inicio); fin.setDate(inicio.getDate() + 6); fin.setHours(23,59,59,999)
+    return { inicio, fin }
+  }
+  if (periodo === 'mes') {
+    return {
+      inicio: new Date(ahora.getFullYear(), ahora.getMonth() + offset, 1),
+      fin: new Date(ahora.getFullYear(), ahora.getMonth() + offset + 1, 0, 23, 59, 59, 999),
+    }
+  }
+  return {
+    inicio: new Date(ahora.getFullYear() + offset, 0, 1),
+    fin: new Date(ahora.getFullYear() + offset, 11, 31, 23, 59, 59, 999),
+  }
+}
+
 function pct(actual: number, anterior: number) {
   if (anterior === 0) return actual > 0 ? 100 : 0
   return Math.round(((actual - anterior) / anterior) * 100)
@@ -33,6 +64,10 @@ export default function FinanzasPage() {
   const [pacientes, setPacientes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState<'semana' | 'mes' | 'anio'>('mes')
+  const [offset, setOffset] = useState(0)
+  const [detalleAbierto, setDetalleAbierto] = useState(false)
+  const [pagosCursos, setPagosCursos] = useState<PagoCurso[]>([])
+  const [cursosMap, setCursosMap] = useState<Record<string, string>>({})
   const [meta, setMeta] = useState<number>(0)
   const [metaInput, setMetaInput] = useState<string>('')
   const [editandoMeta, setEditandoMeta] = useState(false)
@@ -48,12 +83,22 @@ export default function FinanzasPage() {
         return
       }
 
-      const [{ data: sess }, { data: pacs }] = await Promise.all([
+      const [{ data: sess }, { data: pacs }, { data: pagosC }, { data: misCursos }] = await Promise.all([
         supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
         supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
+        supabase.from('course_payments').select('id,monto,fecha,metodo,tipo,course_id').eq('terapeuta_id', user.id),
+        supabase.from('courses').select('id,titulo').eq('user_id', user.id),
       ])
 
-      if (sess) setSesiones(sess)
+      if (pagosC) setPagosCursos(pagosC)
+      if (misCursos) {
+        const mapC: Record<string, string> = {}
+        misCursos.forEach((c: { id: string; titulo: string }) => { mapC[c.id] = c.titulo })
+        setCursosMap(mapC)
+      }
+
+      // las sesiones canceladas no cuentan (igual que en el Dashboard)
+      if (sess) setSesiones(sess.filter((s: any) => s.estado_sesion !== 'cancelada'))
       if (pacs) {
         const map: Record<string, string> = {}
         pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
@@ -79,71 +124,91 @@ export default function FinanzasPage() {
     setMetaInput('')
   }
 
-  const { sesionesActual, sesionesAnterior } = useMemo(() => {
+  function cambiarPeriodo(p: 'semana' | 'mes' | 'anio') {
+    setPeriodo(p)
+    setOffset(0)
+    setDetalleAbierto(false)
+  }
+
+  // desde la vista Año: tocar una barra abre ese mes completo
+  function abrirMes(anio: number, mes: number) {
     const ahora = new Date()
-    let inicioActual: Date, finActual: Date, inicioAnterior: Date, finAnterior: Date
+    setPeriodo('mes')
+    setOffset((anio - ahora.getFullYear()) * 12 + (mes - ahora.getMonth()))
+    setDetalleAbierto(false)
+  }
 
-    if (periodo === 'semana') {
-      const dia = ahora.getDay()
-      inicioActual = new Date(ahora); inicioActual.setDate(ahora.getDate() - dia); inicioActual.setHours(0,0,0,0)
-      finActual = new Date(ahora); finActual.setHours(23,59,59,999)
-      inicioAnterior = new Date(inicioActual); inicioAnterior.setDate(inicioActual.getDate() - 7)
-      finAnterior = new Date(inicioActual); finAnterior.setDate(inicioActual.getDate() - 1); finAnterior.setHours(23,59,59,999)
-    } else if (periodo === 'mes') {
-      inicioActual = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-      finActual = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59)
-      inicioAnterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1)
-      finAnterior = new Date(ahora.getFullYear(), ahora.getMonth(), 0, 23, 59, 59)
-    } else {
-      inicioActual = new Date(ahora.getFullYear(), 0, 1)
-      finActual = new Date(ahora.getFullYear(), 11, 31, 23, 59, 59)
-      inicioAnterior = new Date(ahora.getFullYear() - 1, 0, 1)
-      finAnterior = new Date(ahora.getFullYear() - 1, 11, 31, 23, 59, 59)
-    }
+  const rangoActual = useMemo(() => rangoPeriodo(periodo, offset), [periodo, offset])
 
+  const { sesionesActual, sesionesAnterior } = useMemo(() => {
+    const actual = rangoPeriodo(periodo, offset)
+    const anterior = rangoPeriodo(periodo, offset - 1)
     const filtrar = (ini: Date, fin: Date) =>
-      sesiones.filter(s => { const f = new Date(s.fecha); return f >= ini && f <= fin })
+      sesiones.filter(s => { const f = parseFecha(s.fecha); return f >= ini && f <= fin })
+    return { sesionesActual: filtrar(actual.inicio, actual.fin), sesionesAnterior: filtrar(anterior.inicio, anterior.fin) }
+  }, [sesiones, periodo, offset])
 
-    return { sesionesActual: filtrar(inicioActual, finActual), sesionesAnterior: filtrar(inicioAnterior, finAnterior) }
-  }, [sesiones, periodo])
+  // pagos de cursos del período (solo lo cobrado de verdad: lo pendiente no está en esta tabla)
+  const { pagosActual, pagosAnterior } = useMemo(() => {
+    const actual = rangoPeriodo(periodo, offset)
+    const anterior = rangoPeriodo(periodo, offset - 1)
+    const filtrar = (ini: Date, fin: Date) =>
+      pagosCursos.filter(p => { const f = new Date(p.fecha); return f >= ini && f <= fin })
+    return { pagosActual: filtrar(actual.inicio, actual.fin), pagosAnterior: filtrar(anterior.inicio, anterior.fin) }
+  }, [pagosCursos, periodo, offset])
+  const cursosCobrado = pagosActual.reduce((a, p) => a + (Number(p.monto) || 0), 0)
+  const cursosCobradoAnterior = pagosAnterior.reduce((a, p) => a + (Number(p.monto) || 0), 0)
 
-  const cobrado = sesionesActual.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio || 0), 0)
+  const cobradoSesiones = sesionesActual.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio || 0), 0)
+  const cobrado = cobradoSesiones + cursosCobrado
   const pendiente = sesionesActual.filter(s => s.estado_pago === 'pendiente').reduce((a, s) => a + (s.precio || 0), 0)
   const senas = sesionesActual.filter(s => s.estado_pago === 'señado').reduce((a, s) => a + (s.sena || 0), 0)
   const senasRestantes = sesionesActual.filter(s => s.estado_pago === 'señado').reduce((a, s) => a + ((s.precio || 0) - (s.sena || 0)), 0)
   const facturado = sesionesActual.reduce((a, s) => a + (s.precio || 0), 0)
   const ticketPromedio = sesionesActual.length > 0 ? facturado / sesionesActual.length : 0
   const horasTrabajadas = sesionesActual.reduce((a, s) => a + ((s.duracion || 60) / 60), 0)
-  const ingresoPorHora = horasTrabajadas > 0 ? cobrado / horasTrabajadas : 0
-  const cobradoAnterior = sesionesAnterior.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio || 0), 0)
+  const ingresoPorHora = horasTrabajadas > 0 ? cobradoSesiones / horasTrabajadas : 0
+  const cobradoAnterior = sesionesAnterior.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio || 0), 0) + cursosCobradoAnterior
+  const facturadoTotal = facturado + cursosCobrado
+  const hayCursos = Object.keys(cursosMap).length > 0 || pagosCursos.length > 0
 
   const evolucion = useMemo(() => {
-    const dias = periodo === 'semana' ? 7 : periodo === 'mes' ? 30 : 12
-    const resultado = []
-    for (let i = dias - 1; i >= 0; i--) {
-      if (periodo === 'anio') {
-        const mesIdx = new Date().getMonth() - i
-        const año = mesIdx < 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()
-        const mesReal = ((mesIdx % 12) + 12) % 12
-        const sessMes = sesiones.filter(s => { const f = new Date(s.fecha); return f.getFullYear() === año && f.getMonth() === mesReal })
+    const resultado: { label: string; cobrado: number; total: number; cursos: number; anio?: number; mes?: number }[] = []
+    if (periodo === 'anio') {
+      // los 12 meses del año elegido
+      const anio = rangoActual.inicio.getFullYear()
+      for (let mes = 0; mes < 12; mes++) {
+        const sessMes = sesiones.filter(s => { const f = parseFecha(s.fecha); return f.getFullYear() === anio && f.getMonth() === mes })
+        const cursosMes = pagosCursos.filter(p => { const f = new Date(p.fecha); return f.getFullYear() === anio && f.getMonth() === mes })
+          .reduce((a, p) => a + (Number(p.monto) || 0), 0)
         resultado.push({
-          label: MESES[mesReal].slice(0,3),
-          cobrado: sessMes.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio||0), 0),
+          label: MESES[mes].slice(0,3),
+          cobrado: sessMes.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio||0), 0) + cursosMes,
           total: sessMes.length,
-        })
-      } else {
-        const fecha = new Date(); fecha.setDate(fecha.getDate() - i); fecha.setHours(0,0,0,0)
-        const fechaFin = new Date(fecha); fechaFin.setHours(23,59,59,999)
-        const sessDia = sesiones.filter(s => { const f = new Date(s.fecha); return f >= fecha && f <= fechaFin })
-        resultado.push({
-          label: periodo === 'semana' ? ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fecha.getDay()] : String(fecha.getDate()),
-          cobrado: sessDia.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio||0), 0),
-          total: sessDia.length,
+          cursos: cursosMes,
+          anio, mes,
         })
       }
+      return resultado
+    }
+    // cada día de la semana o del mes elegido
+    const dia = new Date(rangoActual.inicio)
+    while (dia <= rangoActual.fin) {
+      const fecha = new Date(dia); fecha.setHours(0,0,0,0)
+      const fechaFin = new Date(fecha); fechaFin.setHours(23,59,59,999)
+      const sessDia = sesiones.filter(s => { const f = parseFecha(s.fecha); return f >= fecha && f <= fechaFin })
+      const cursosDia = pagosCursos.filter(p => { const f = new Date(p.fecha); return f >= fecha && f <= fechaFin })
+        .reduce((a, p) => a + (Number(p.monto) || 0), 0)
+      resultado.push({
+        label: periodo === 'semana' ? ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fecha.getDay()] : String(fecha.getDate()),
+        cobrado: sessDia.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio||0), 0) + cursosDia,
+        total: sessDia.length,
+        cursos: cursosDia,
+      })
+      dia.setDate(dia.getDate() + 1)
     }
     return resultado
-  }, [sesiones, periodo])
+  }, [sesiones, pagosCursos, periodo, rangoActual])
 
   const maxEvolucion = Math.max(...evolucion.map(e => e.cobrado), 1)
 
@@ -161,6 +226,18 @@ export default function FinanzasPage() {
 
   const maxServicio = Math.max(...porServicio.map(s => s.sesiones), 1)
 
+  const porCurso = useMemo(() => {
+    const mapa: Record<string, { pagos: number; cobrado: number }> = {}
+    pagosActual.forEach(p => {
+      const nombre = (p.course_id && cursosMap[p.course_id]) || 'Curso eliminado'
+      if (!mapa[nombre]) mapa[nombre] = { pagos: 0, cobrado: 0 }
+      mapa[nombre].pagos++
+      mapa[nombre].cobrado += Number(p.monto) || 0
+    })
+    return Object.entries(mapa).map(([nombre, data]) => ({ nombre, ...data })).sort((a, b) => b.cobrado - a.cobrado)
+  }, [pagosActual, cursosMap])
+
+
   const porCliente = useMemo(() => {
     const mapa: Record<string, { sesiones: number; cobrado: number; ultima: string }> = {}
     sesionesActual.forEach(s => {
@@ -168,7 +245,7 @@ export default function FinanzasPage() {
       if (!mapa[nombre]) mapa[nombre] = { sesiones: 0, cobrado: 0, ultima: s.fecha }
       mapa[nombre].sesiones++
       if (s.estado_pago === 'pagado') mapa[nombre].cobrado += (s.precio || 0)
-      if (new Date(s.fecha) > new Date(mapa[nombre].ultima)) mapa[nombre].ultima = s.fecha
+      if (parseFecha(s.fecha) > parseFecha(mapa[nombre].ultima)) mapa[nombre].ultima = s.fecha
     })
     return Object.entries(mapa).map(([nombre, data]) => ({ nombre, ...data })).sort((a, b) => b.cobrado - a.cobrado).slice(0, 6)
   }, [sesionesActual, pacientes])
@@ -178,7 +255,7 @@ export default function FinanzasPage() {
     for (let i = 0; i < 7; i++) {
       const fecha = new Date(); fecha.setDate(fecha.getDate() + i); fecha.setHours(0,0,0,0)
       const fechaFin = new Date(fecha); fechaFin.setHours(23,59,59,999)
-      const sessDia = sesiones.filter(s => { const f = new Date(s.fecha); return f >= fecha && f <= fechaFin })
+      const sessDia = sesiones.filter(s => { const f = parseFecha(s.fecha); return f >= fecha && f <= fechaFin })
       dias.push({
         label: i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fecha.getDay()],
         fecha: fecha.toLocaleDateString('es-AR', { day:'numeric', month:'short' }),
@@ -193,7 +270,23 @@ export default function FinanzasPage() {
   const maxAgenda = Math.max(...agendaEconomica.map(d => d.proyectado), 1)
   const pctMeta = meta > 0 ? Math.min(Math.round((cobrado / meta) * 100), 100) : 0
   const sesionesParaMeta = meta > 0 && ticketPromedio > 0 ? Math.ceil((meta - cobrado) / ticketPromedio) : 0
-  const periodoLabel = { semana: 'Esta semana', mes: MESES[hoy.getMonth()], anio: String(hoy.getFullYear()) }
+  const periodoLabel = (() => {
+    const ini = rangoActual.inicio
+    if (periodo === 'semana') {
+      if (offset === 0) return 'Esta semana'
+      if (offset === -1) return 'Semana pasada'
+      return `Semana del ${ini.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}`
+    }
+    if (periodo === 'mes') return ini.getFullYear() === hoy.getFullYear() ? MESES[ini.getMonth()] : `${MESES[ini.getMonth()]} ${ini.getFullYear()}`
+    return String(ini.getFullYear())
+  })()
+  const textoAnterior = periodo === 'semana' ? 'vs semana anterior' : periodo === 'mes' ? 'vs mes anterior' : 'vs año anterior'
+  const sesionesDetalle = [...sesionesActual].sort((a, b) => (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')))
+  const ESTADO_PAGO: Record<string, { txt: string; color: string }> = {
+    pagado: { txt: 'Pagado', color: '#059669' },
+    pendiente: { txt: 'Pendiente', color: '#D97706' },
+    'señado': { txt: 'Señado', color: '#2563EB' },
+  }
 
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
@@ -208,48 +301,53 @@ export default function FinanzasPage() {
         *{box-sizing:border-box}
         .fw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px;overflow-x:hidden}
 @media(max-width:768px){
-  .fw{height:auto;min-height:100vh;padding:14px 12px 80px;overflow-x:hidden;width:100%;box-sizing:border-box}
-  .f-header{flex-direction:column;gap:10px;align-items:flex-start}
+  .fw{height:auto;min-height:100vh;padding:14px 12px 96px;overflow-x:hidden;width:100%}
+  .f-header{flex-direction:column;gap:12px;align-items:stretch;margin-bottom:18px}
   .f-periodo{width:100%}
-  .f-per-btn{flex:1;text-align:center;padding:6px 8px;font-size:11px}
+  .f-per-btn{flex:1;text-align:center;padding:8px;font-size:12px}
+  .f-nav{justify-content:space-between}
+  .f-nav-label{flex:1;min-width:0}
+
   .resumen-grid{grid-template-columns:1fr;gap:8px}
-  .resumen-grid-2{grid-template-columns:repeat(2,1fr);gap:8px}
-  .r2-card{padding:9px 12px;min-width:0;overflow:hidden}
-  .r2-val{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.5px}
-  .r2-lbl{font-size:9px}
-  .r2-card{padding:10px 12px}
-  .r2-val{font-size:10px}
-  .r2-icon{width:26px;height:26px;margin-bottom:6px}
-  .evol-section{padding:12px;overflow:hidden}
-  .evol-section{padding:12px;overflow:hidden}
-  .evol-bars{gap:1px;height:70px;overflow-x:auto;scrollbar-width:none}
+  .r-card{padding:14px 16px}
+  .r-card-value{font-size:24px}
+
+  .resumen-grid-2{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+  .r2-card{padding:12px;min-width:0}
+  .r2-icon{width:28px;height:28px;margin-bottom:8px}
+  .r2-val{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r2-lbl{font-size:10px}
+
+  .evol-section,.serv-section,.cli-section,.agenda-section,.meta-section,.det-section{padding:14px;border-radius:16px;margin-bottom:16px}
+  .evol-bars{gap:2px;height:90px;overflow-x:auto;scrollbar-width:none;padding-top:24px}
   .evol-bars::-webkit-scrollbar{display:none}
-  .evol-bar-wrap{min-width:16px;flex-shrink:0}
-  .evol-label{font-size:6px;overflow:hidden;text-overflow:ellipsis;max-width:16px}
-  .serv-section{padding:12px}
-  .serv-item{gap:4px}
-  .serv-name{min-width:unset;width:100%;font-size:11px;margin-bottom:2px}
-  .serv-bar-wrap{min-width:40px}
-  .serv-count{min-width:30px;font-size:10px}
-  .serv-money{font-size:10px;min-width:unset}
-  .cli-section{padding:12px}
-  .cli-grid{grid-template-columns:1fr 1fr !important}
-  .cli-card{padding:10px}
-  .cli-name{font-size:11px}
-  .cli-stat-val{font-size:12px}
-  .agenda-section{padding:12px}
+  .evol-bar-wrap{min-width:18px;flex-shrink:0}
+  .evol-label{font-size:8px}
+
+  .serv-item{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 8px;align-items:center}
+  .serv-pos{grid-row:1 / span 2}
+  .serv-name{grid-column:2;grid-row:1;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .serv-money{grid-column:3;grid-row:1;min-width:0;font-size:12px}
+  .serv-bar-wrap{grid-column:2;grid-row:2;min-width:0}
+  .serv-count{grid-column:3;grid-row:2;min-width:0;font-size:10px;color:var(--text-muted)}
+
+  .cli-grid{grid-template-columns:1fr 1fr !important;gap:8px}
+  .cli-card{padding:10px;min-width:0}
+  .cli-name{font-size:12px}
+  .cli-stats{gap:12px}
+  .cli-stat-val{font-size:13px}
+
   .agenda-grid{display:flex;overflow-x:auto;gap:6px;padding-bottom:6px;scrollbar-width:none}
   .agenda-grid::-webkit-scrollbar{display:none}
-  .agenda-dia{min-width:70px;flex-shrink:0;padding:8px 6px}
-  .agenda-dia-label{font-size:10px}
-  .agenda-dia-fecha{font-size:8px}
-  .agenda-dia-monto{font-size:11px}
-  .agenda-dia-scount{font-size:9px}
-  .meta-section{padding:12px}
+  .agenda-dia{min-width:78px;flex-shrink:0;padding:10px 6px}
+  .agenda-dia-monto{font-size:12px}
+
+  .meta-row{flex-direction:column;align-items:flex-start;gap:10px}
   .meta-amounts{flex-wrap:wrap;gap:4px}
-  .meta-actual{font-size:18px}
-  .meta-info{grid-template-columns:1fr 1fr}
-  .meta-info-val{font-size:12px}
+  .meta-actual{font-size:22px}
+  .meta-info{grid-template-columns:1fr;gap:6px}
+  .meta-input-wrap{flex-wrap:wrap}
+  .meta-input{min-width:100%}
   .z-label{font-size:10px}
 }
         .f-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
@@ -303,12 +401,26 @@ export default function FinanzasPage() {
         .serv-count{font-size:12px;font-weight:600;color:var(--text-primary);min-width:60px;text-align:right}
         .serv-money{font-size:11px;color:#059669;font-weight:600;min-width:80px;text-align:right}
 
+        .rk-list{margin-top:16px;display:flex;flex-direction:column}
+        .rk-item{display:flex;gap:12px;position:relative;padding-bottom:18px}
+        .rk-item:last-child{padding-bottom:0}
+        .rk-item:not(:last-child)::before{content:'';position:absolute;left:15px;top:34px;bottom:2px;width:1.5px;background:var(--border-light)}
+        .rk-num{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary);background:var(--bg-card);flex-shrink:0;position:relative;z-index:1;font-family:'Manrope',sans-serif}
+        .rk-num.top{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border:none;color:white;box-shadow:0 3px 10px rgba(139,92,246,0.3)}
+        .rk-body{min-width:0;flex:1;padding-top:5px}
+        .rk-nombre{font-size:14px;font-weight:700;color:var(--text-primary);line-height:1.3;overflow-wrap:anywhere}
+        .rk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px}
+        .rk-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--accent-light);color:var(--accent)}
+        .rk-total{font-size:12px;font-weight:700;color:#059669}
+        .rk-pend{font-size:11px;color:#D97706;font-weight:600}
+        html.dark .rk-total{color:#6EE7B7}
+
         .cli-section{background:var(--bg-card);border-radius:20px;padding:20px 22px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
         .cli-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:14px}
-        .cli-card{background:var(--bg-input);border-radius:14px;padding:14px;border:0.5px solid var(--border-light)}
+        .cli-card{background:var(--bg-input);border-radius:14px;padding:14px;border:0.5px solid var(--border-light);text-align:left}
         .cli-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),#DDD6FE);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px}
         .cli-name{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .cli-stats{display:flex;justify-content:space-between;align-items:center}
+        .cli-stats{display:flex;justify-content:flex-start;align-items:flex-start;gap:18px;flex-wrap:wrap;text-align:left}
         .cli-stat-val{font-size:14px;font-weight:700;color:var(--text-primary)}
         .cli-stat-lbl{font-size:9px;color:var(--text-muted);margin-top:1px}
         .cli-ultima{font-size:10px;color:var(--text-muted);margin-top:8px}
@@ -346,6 +458,28 @@ export default function FinanzasPage() {
         .meta-save-btn{padding:9px 18px;border-radius:10px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
         .meta-empty{text-align:center;padding:20px;color:var(--text-muted);font-size:12px}
 
+        .f-nav{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+        .f-nav-btn{width:26px;height:26px;border-radius:8px;border:0.5px solid var(--border-light);background:var(--bg-card);color:var(--text-primary);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+        .f-nav-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .f-nav-label{font-size:13px;font-weight:700;color:var(--text-primary);min-width:110px;text-align:center;font-family:'Manrope',sans-serif}
+        .f-nav-hoy{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:none;border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit}
+        .evol-hint{font-size:10px;color:var(--text-muted);margin-top:4px}
+        .det-section{background:var(--bg-card);border-radius:20px;padding:20px 22px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
+        .det-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;background:none;border:none;padding:0;cursor:pointer;font-family:inherit}
+        .det-list{margin-top:14px;display:flex;flex-direction:column;max-height:340px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+        .lista-scroll{max-height:300px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+        .det-row{display:grid;grid-template-columns:90px 1fr 1fr 90px 80px;gap:10px;align-items:center;padding:9px 0;border-bottom:0.5px solid var(--border-light);font-size:12px;color:var(--text-primary)}
+        .det-row:last-child{border-bottom:none}
+        .det-fecha{color:var(--text-muted);font-size:11px}
+        .det-monto{text-align:right;font-weight:700;font-family:'Manrope',sans-serif}
+        .det-estado{text-align:right;font-size:11px;font-weight:700}
+        @media(max-width:768px){
+          .det-list{max-height:480px}
+          .det-row{grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0}
+          .det-row .det-serv{grid-column:1}
+          .det-row .det-monto{grid-row:1;grid-column:2}
+          .det-row .det-estado{grid-column:2}
+        }
         html.dark .r2-icon-purple{background:#2D2550 !important}
         html.dark .r2-icon-green{background:#052015 !important}
         html.dark .r2-icon-yellow{background:#1A1200 !important}
@@ -356,11 +490,21 @@ export default function FinanzasPage() {
         <div className="f-header">
           <div>
             <div className="f-title">Finanzas</div>
-            <div className="f-sub">{periodoLabel[periodo]} · Análisis de rendimiento</div>
+            <div className="f-sub">Análisis de rendimiento</div>
+            <div className="f-nav">
+              <button className="f-nav-btn" onClick={() => { setOffset(offset - 1); setDetalleAbierto(false) }} aria-label="Período anterior"><ChevronLeft size={14}/></button>
+              <div className="f-nav-label">{periodoLabel}</div>
+              <button className="f-nav-btn" onClick={() => { setOffset(offset + 1); setDetalleAbierto(false) }} aria-label="Período siguiente"><ChevronRight size={14}/></button>
+              {offset !== 0 && (
+                <button className="f-nav-hoy" onClick={() => { setOffset(0); setDetalleAbierto(false) }}>
+                  {periodo === 'semana' ? 'Esta semana' : periodo === 'mes' ? 'Este mes' : 'Este año'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="f-periodo">
             {(['semana','mes','anio'] as const).map(p => (
-              <button key={p} className={`f-per-btn${periodo===p?' active':''}`} onClick={() => setPeriodo(p)}>
+              <button key={p} className={`f-per-btn${periodo===p?' active':''}`} onClick={() => cambiarPeriodo(p)}>
                 {p === 'semana' ? 'Semana' : p === 'mes' ? 'Mes' : 'Año'}
               </button>
             ))}
@@ -376,8 +520,9 @@ export default function FinanzasPage() {
               {pct(cobrado, cobradoAnterior) >= 0
                 ? <><ChevronUp size={12} className="delta-up"/><span className="delta-up">+{pct(cobrado, cobradoAnterior)}%</span></>
                 : <><ChevronDown size={12} className="delta-down"/><span className="delta-down">{pct(cobrado, cobradoAnterior)}%</span></>}
-              <span className="delta-neutral">vs período anterior</span>
+              <span className="delta-neutral">{textoAnterior}</span>
             </div>
+            {cursosCobrado > 0 && <div className="r-card-sub">Sesiones {formatPesos(cobradoSesiones)} · Cursos {formatPesos(cursosCobrado)}</div>}
           </div>
           <div className="r-card">
             <div className="r-card-label">Pendiente de cobro</div>
@@ -394,7 +539,7 @@ export default function FinanzasPage() {
         <div className="resumen-grid-2">
   <div className="r2-card">
     <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><TrendingUp size={14} color="#7C3AED"/></div>
-    <div className="r2-val">{formatPesosCorto(facturado)}</div>
+    <div className="r2-val">{formatPesosCorto(facturadoTotal)}</div>
     <div className="r2-lbl">Total facturado</div>
   </div>
   <div className="r2-card">
@@ -416,12 +561,15 @@ export default function FinanzasPage() {
 
         <div className="evol-section">
           <div className="z-label" style={{margin:0}}><TrendingUp size={12}/>Evolución de ingresos</div>
+          {periodo === 'anio' && <div className="evol-hint">Tocá un mes para ver todo su detalle</div>}
           <div className="evol-bars">
             {evolucion.map((e, i) => (
-              <div key={i} className="evol-bar-wrap">
+              <div key={i} className="evol-bar-wrap"
+                onClick={() => { if (periodo === 'anio' && e.anio != null && e.mes != null) abrirMes(e.anio, e.mes) }}
+                style={periodo === 'anio' ? {cursor:'pointer'} : undefined}>
                 <div className={`evol-bar${e.cobrado===0?' empty':''}`}
                   style={{height:`${Math.max((e.cobrado/maxEvolucion)*100, e.cobrado>0?8:3)}px`}}>
-                  {e.cobrado > 0 && <div className="evol-tooltip">{formatPesos(e.cobrado)}<br/>{e.total} ses.</div>}
+                  {e.cobrado > 0 && <div className="evol-tooltip">{formatPesos(e.cobrado)}<br/>{e.total} ses.{e.cursos > 0 ? ` · cursos ${formatPesos(e.cursos)}` : ''}</div>}
                 </div>
                 <div className="evol-label">{e.label}</div>
               </div>
@@ -429,22 +577,50 @@ export default function FinanzasPage() {
           </div>
         </div>
 
-        
+        {hayCursos && (
+          <div className="serv-section">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+              <div className="z-label" style={{margin:0}}><GraduationCap size={12}/>Cursos · {formatPesos(cursosCobrado)}</div>
+              <Link href="/finances/cursos" className="meta-edit-btn" style={{textDecoration:'none'}}>Ver historial →</Link>
+            </div>
+            {porCurso.length === 0 ? (
+              <div style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Sin ventas de cursos en este período</div>
+            ) : (
+              <div className="rk-list">
+                {porCurso.slice(0, 5).map((c, i) => (
+                  <div key={c.nombre} className="rk-item">
+                    <div className={`rk-num${i===0?' top':''}`}>{i+1}</div>
+                    <div className="rk-body">
+                      <div className="rk-nombre">{c.nombre}</div>
+                      <div className="rk-meta">
+                        <span className="rk-pill">{c.pagos} venta{c.pagos !== 1 ? 's' : ''}</span>
+                        <span className="rk-total">{formatPesos(c.cobrado)} cobrado</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',marginBottom:'0'}}>  <div className="serv-section" style={{marginBottom:'24px'}}>
-            <div className="z-label" style={{margin:0}}><Award size={12}/>Por servicio</div>
+            <div className="z-label" style={{margin:0}}><Award size={12}/>Top 5 servicios</div>
             {porServicio.length === 0 ? (
               <div style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Sin sesiones en este período</div>
             ) : (
-              <div className="serv-list">
-                {porServicio.map((s,i) => (
-                  <div key={s.nombre} className="serv-item">
-                    <div className={`serv-pos ${i===0?'top':'rest'}`}>{i+1}</div>
-                    <div className="serv-name">{s.nombre}</div>
-                    <div className="serv-bar-wrap">
-                      <div className="serv-bar" style={{width:`${(s.sesiones/maxServicio)*100}%`}}/>
+              <div className="rk-list">
+                {porServicio.slice(0, 5).map((s,i) => (
+                  <div key={s.nombre} className="rk-item">
+                    <div className={`rk-num${i===0?' top':''}`}>{i+1}</div>
+                    <div className="rk-body">
+                      <div className="rk-nombre">{s.nombre}</div>
+                      <div className="rk-meta">
+                        <span className="rk-pill">{s.sesiones} sesi{s.sesiones !== 1 ? 'ones' : 'ón'}</span>
+                        <span className="rk-total">{formatPesos(s.cobrado)} cobrado</span>
+                        {s.pendiente > 0 && <span className="rk-pend">· {formatPesos(s.pendiente)} pendiente</span>}
+                      </div>
                     </div>
-                    <div className="serv-count">{s.sesiones} ses.</div>
-                    <div className="serv-money">{formatPesos(s.cobrado)}</div>
                   </div>
                 ))}
               </div>
@@ -479,6 +655,34 @@ export default function FinanzasPage() {
           </div>
         </div>
 
+        <div className="det-section">
+          <button className="det-toggle" onClick={() => setDetalleAbierto(!detalleAbierto)}>
+            <div className="z-label" style={{margin:0}}><List size={12}/>Detalle de sesiones · {periodoLabel} ({sesionesDetalle.length})</div>
+            {detalleAbierto ? <ChevronUp size={14} color="var(--text-muted)"/> : <ChevronDown size={14} color="var(--text-muted)"/>}
+          </button>
+          {detalleAbierto && (
+            sesionesDetalle.length === 0 ? (
+              <div style={{fontSize:'12px',color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Sin sesiones en este período</div>
+            ) : (
+              <div className="det-list">
+                {sesionesDetalle.map(s => {
+                  const est = ESTADO_PAGO[s.estado_pago] || { txt: s.estado_pago || '—', color: 'var(--text-muted)' }
+                  return (
+                    <div key={s.id} className="det-row">
+                      <div className="det-fecha">{parseFecha(s.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}{s.hora ? ` · ${s.hora.slice(0,5)}` : ''}</div>
+                      <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pacientes[s.patient_id] || 'Desconocido'}</div>
+                      <div className="det-serv" style={{color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.servicio_nombre || 'Sin servicio'}</div>
+                      <div className="det-monto">{formatPesos(s.precio || 0)}</div>
+                      <div className="det-estado" style={{color: est.color}}>{est.txt}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          )}
+        </div>
+
+        {offset === 0 && (
         <div className="agenda-section">
           <div className="z-label" style={{margin:0}}><AlertCircle size={12}/>Agenda económica — próximos 7 días</div>
           <div className="agenda-grid">
@@ -493,6 +697,7 @@ export default function FinanzasPage() {
             ))}
           </div>
         </div>
+        )}
 
         <div className="meta-section">
           <div className="z-label" style={{margin:'0 0 14px'}}><Target size={12}/>Meta mensual</div>

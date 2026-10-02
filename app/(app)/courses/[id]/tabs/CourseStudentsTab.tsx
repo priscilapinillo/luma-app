@@ -24,6 +24,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
   const [totalLecciones, setTotalLecciones] = useState(0)
   const [loading, setLoading] = useState(true)
   const [confirmando, setConfirmando] = useState<string | null>(null)
+  const [precioCurso, setPrecioCurso] = useState<number | null>(null)
 
   useEffect(() => { cargarAlumnas() }, [cursoId])
 
@@ -39,6 +40,9 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
         totalLecc = count || 0
       }
       setTotalLecciones(totalLecc)
+
+      const { data: cursoData } = await supabase.from('courses').select('precio').eq('id', cursoId).maybeSingle()
+      if (cursoData && cursoData.precio != null) setPrecioCurso(Number(cursoData.precio))
 
       const { data: enrollments } = await supabase
         .from('enrollments')
@@ -80,7 +84,43 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
     finally { setLoading(false) }
   }
 
+  // pregunta cuánto pagó (viene completo con el precio del curso). null = canceló
+  function pedirMonto(texto: string): number | null {
+    const sugerido = precioCurso != null ? String(precioCurso) : ''
+    const respuesta = window.prompt(`${texto}\n\n¿Cuánto te pagó? Se suma a tus Finanzas. Si cobraste distinto, corregilo.`, sugerido)
+    if (respuesta === null) return null
+    const limpio = respuesta.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')
+    const monto = Number(limpio)
+    if (limpio === '' || !isFinite(monto) || monto < 0) {
+      alert('Escribí un monto válido, solo con números. No se hizo ningún cambio.')
+      return null
+    }
+    return monto
+  }
+
+  // anota el pago en Finanzas. Si falla, el acceso ya quedó dado: solo avisamos
+  async function registrarPago(enrollmentId: string, monto: number, tipo: 'compra' | 'renovacion') {
+    if (monto <= 0) return
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { error } = await supabase.from('course_payments').insert({
+      terapeuta_id: user.id,
+      enrollment_id: enrollmentId,
+      course_id: cursoId,
+      monto,
+      metodo: 'manual',
+      tipo,
+    })
+    if (error) {
+      console.error('Error registrando pago:', error.message, error.code, error.details)
+      alert(`El acceso quedó habilitado, pero no se pudo anotar el pago en Finanzas.\n\nDetalle: ${error.message || error.code || 'sin detalle'}`)
+    }
+  }
+
   async function confirmarPago(enrollmentId: string, modalidad: string) {
+    const monto = pedirMonto('Vas a habilitar el acceso al curso.')
+    if (monto === null) return
     setConfirmando(enrollmentId)
     try {
       const supabase = createClient()
@@ -96,10 +136,13 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
       setAlumnas(prev => prev.map(a => a.enrollmentId === enrollmentId
         ? { ...a, estado: 'activa', fechaConfirmacion: new Date().toISOString(), fechaVencimiento: datos.fecha_vencimiento || a.fechaVencimiento }
         : a))
+      await registrarPago(enrollmentId, monto, 'compra')
     } finally { setConfirmando(null) }
   }
 
   async function renovarMes(enrollmentId: string) {
+    const monto = pedirMonto('Vas a habilitar un mes más de acceso.')
+    if (monto === null) return
     setConfirmando(enrollmentId)
     try {
       const supabase = createClient()
@@ -109,6 +152,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
         .update({ fecha_vencimiento: vence.toISOString() }).eq('id', enrollmentId)
       if (error) { console.error(error); return }
       setAlumnas(prev => prev.map(a => a.enrollmentId === enrollmentId ? { ...a, fechaVencimiento: vence.toISOString() } : a))
+      await registrarPago(enrollmentId, monto, 'renovacion')
     } finally { setConfirmando(null) }
   }
 
@@ -218,4 +262,4 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
       })}
     </div>
   )
-} 
+}

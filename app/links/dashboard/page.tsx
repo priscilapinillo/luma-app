@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { comprimirImagen } from '@/lib/comprimirImagen'
-import { Plus, X, LogOut, ExternalLink } from 'lucide-react'
+import { Plus, X, LogOut, ExternalLink, Copy, Check, Share2 } from 'lucide-react'
 
 type Link = { tipo: string; titulo: string; url: string; imagen_url?: string }
 
@@ -53,6 +53,10 @@ export default function LinksDashboardPage() {
   const [guardando, setGuardando] = useState(false)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [msgExito, setMsgExito] = useState('')
+  const [copiado, setCopiado] = useState(false)
+  const [puedeCompartir, setPuedeCompartir] = useState(false)
+
+  useEffect(() => { setPuedeCompartir(typeof navigator !== 'undefined' && !!navigator.share) }, [])
 
   useEffect(() => { cargar() }, [])
 
@@ -144,6 +148,38 @@ export default function LinksDashboardPage() {
     setPerfil({ ...perfil, promo: { ...perfil.promo, [campo]: valor } })
   }
 
+  function linkPublico() {
+    return perfil ? `${window.location.origin}/l/${perfil.slug}` : ''
+  }
+
+  async function copiarLink() {
+    const url = linkPublico()
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // navegadores viejos o sin permiso: copia a la antigua
+      const area = document.createElement('textarea')
+      area.value = url
+      area.style.position = 'fixed'
+      area.style.opacity = '0'
+      document.body.appendChild(area)
+      area.select()
+      try { document.execCommand('copy') } catch { alert('Copiá tu link: ' + url); return }
+      finally { document.body.removeChild(area) }
+    }
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2000)
+  }
+
+  async function compartirLink() {
+    const url = linkPublico()
+    if (!url || !navigator.share) return
+    try {
+      await navigator.share({ title: perfil?.nombre || 'Mis links', url })
+    } catch { /* cerró el menú de compartir: no pasa nada */ }
+  }
+
   async function cerrarSesion() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -190,12 +226,34 @@ export default function LinksDashboardPage() {
       </nav>
 
       <div className="ld-wrap">
+        <div className="ld-card" style={{padding:'16px 18px'}}>
+          <div className="ld-card-title" style={{marginBottom:'8px'}}>Tu link</div>
+          <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 200px',minWidth:0,padding:'10px 12px',borderRadius:'10px',background:'#F4F0FF',color:'#5B21B6',fontSize:'13px',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {typeof window !== 'undefined' ? window.location.host : ''}/l/{perfil.slug}
+            </div>
+            <button onClick={copiarLink}
+              style={{display:'inline-flex',alignItems:'center',gap:'6px',padding:'10px 14px',borderRadius:'10px',border:'none',background: copiado ? '#10B981' : 'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',flexShrink:0,transition:'background 0.2s'}}>
+              {copiado ? <><Check size={13}/> Copiado</> : <><Copy size={13}/> Copiar</>}
+            </button>
+            {puedeCompartir && (
+              <button onClick={compartirLink}
+                style={{display:'inline-flex',alignItems:'center',gap:'6px',padding:'10px 14px',borderRadius:'10px',border:'1px solid #DDD6FE',background:'white',color:'#7C3AED',fontSize:'12px',fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                <Share2 size={13}/> Compartir
+              </button>
+            )}
+          </div>
+          <div style={{fontSize:'11px',color:'#A3A3A3',marginTop:'8px'}}>Pegalo en tu bio de Instagram o TikTok.</div>
+        </div>
         <div className="ld-upgrade">
           <div style={{fontSize:'13px',fontWeight:700,marginBottom:'4px'}}>Esto es solo el comienzo ✦</div>
           <div style={{fontSize:'12px',opacity:0.85,marginBottom:'10px',lineHeight:1.5}}>
-            Con Luma podés transformar este link en tu página profesional completa, con reservas, servicios, pagos y gestión de consultantes.
+            Con Luma podés transformar este link en tu página profesional completa, con reservas, servicios, cursos, tus links, pagos y gestión de consultantes.
           </div>
-          <a href="/suscripcion" style={{fontSize:'12px',fontWeight:700,color:'#C4B5FD'}}>Conocé Luma →</a>
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            <a href="/" style={{fontSize:'12px',fontWeight:700,color:'white',padding:'8px 14px',borderRadius:'10px',border:'1px solid rgba(196,181,253,0.5)',textDecoration:'none'}}>Más información</a>
+            <a href="/#precio" style={{fontSize:'12px',fontWeight:700,color:'#1A1035',background:'#C4B5FD',padding:'8px 14px',borderRadius:'10px',textDecoration:'none'}}>Ver planes →</a>
+          </div>
         </div>
 
         <div className="ld-card">
