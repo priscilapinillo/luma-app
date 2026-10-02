@@ -494,7 +494,7 @@ body.modal-ficha-abierto .sb-mobile {
         <div className="sb-header">
           <div className="sb-brand">
             <div className="sb-brand-name">Luma</div>
-            <div className="sb-brand-sub">tu práctica, en orden</div>
+            <div className="sb-brand-sub">tu espacio, en orden</div>
           </div>
         </div>
 
