@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Script from 'next/script'
+import InstagramFlotante from '@/components/InstagramFlotante'
+import VideoPresentacion from '@/components/VideoPresentacion'
 
 // ─── Íconos SVG genéricos para la animación del Hero ───────────────────────
 function IconExcel() {
@@ -196,9 +198,11 @@ export default function LandingPage() {
     })
 
     // Ciclo: íconos succionados → pantalla cambia a dashboard → cae la notificación → vuelve todo
+    let activo = true
     function cicloSuccion() {
+      if (!activo) return
       const timelineSuccion = gsap.timeline({
-        onComplete: () => { gsap.delayedCall(0.3, cicloSuccion) },
+        onComplete: () => { if (activo) gsap.delayedCall(0.3, cicloSuccion) },
       })
       timelineSuccion
         .to(iconRefs.current, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.5, stagger: 0.05, ease: 'power2.in' })
@@ -214,7 +218,7 @@ export default function LandingPage() {
     }
     gsap.delayedCall(3, cicloSuccion)
 
-    return () => { orbitaTween.kill() }
+    return () => { activo = false; orbitaTween.kill(); gsap.killTweensOf(cicloSuccion) }
   }, [gsapListo])
 
   useEffect(() => {
@@ -963,8 +967,9 @@ export default function LandingPage() {
     </div>
     </section>
 
+<VideoPresentacion/>
 {/* SECCIÓN 8 — PLANES */}
-<section className="planes-section">
+<section className="planes-section" id="precio" style={{scrollMarginTop:'76px'}}>
   <div className="planes-header">
     <h2 className="planes-title">Elegí tu plan</h2>
     <p className="planes-sub">Sin contratos. Sin sorpresas.</p>
@@ -1015,7 +1020,8 @@ export default function LandingPage() {
   </div>
   </section>
 
-  {/* SECCIÓN 10 — CIERRE */}
+  <InstagramFlotante/>
+{/* SECCIÓN 10 — CIERRE */}
   <section className="cierre-section">
     <div className="cierre-blob b1"/>
     <div className="cierre-blob b2"/>
