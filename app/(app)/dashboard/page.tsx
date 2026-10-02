@@ -84,6 +84,14 @@ const [onboardingChecks, setOnboardingChecks] = useState({
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
   const [ingresosMes, setIngresosMes] = useState(0)
   const [pendientesMes, setPendientesMes] = useState(0)
+  const [cursosMes, setCursosMes] = useState(0)
+
+  // fecha puede venir como 'YYYY-MM-DD' o 'YYYY-MM-DDTHH:MM:SS': comparamos solo el día
+  function esDelMesActual(fecha: string | null | undefined) {
+    const f = (fecha || '').slice(0, 10)
+    const prefijo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-`
+    return f.startsWith(prefijo)
+  }
   const sugerenciasRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
   const [archivos, setArchivos] = useState<Archivo[]>([])
@@ -213,14 +221,24 @@ const [contextoLocal, setContextoLocal] = useState('')
         }
         if (sesiones) {
           const cobrado = sesiones
-            .filter((s: any) => s.estado_pago === 'pagado' && s.fecha >= mesInicio && s.fecha <= mesFin)
+            .filter((s: any) => s.estado_pago === 'pagado' && esDelMesActual(s.fecha))
             .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
           const pendiente = sesiones
-            .filter((s: any) => s.estado_pago === 'pendiente' && s.fecha >= mesInicio && s.fecha <= mesFin)
+            .filter((s: any) => s.estado_pago === 'pendiente' && esDelMesActual(s.fecha))
             .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
           setIngresosMes(cobrado)
           setPendientesMes(pendiente)
         }
+
+        // pagos de cursos del mes (si la tabla no existe o falla, simplemente suma 0)
+        try {
+          const inicioMesISO = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString()
+          const finMesISO = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toISOString()
+          const { data: pagosC } = await supabase
+            .from('course_payments').select('monto')
+            .eq('terapeuta_id', user.id).gte('fecha', inicioMesISO).lt('fecha', finMesISO)
+          if (pagosC) setCursosMes(pagosC.reduce((acc: number, p: any) => acc + (Number(p.monto) || 0), 0))
+        } catch (e) { console.error('Error cargando pagos de cursos:', e) }
 
         if (sesiones && pacs) {
           const convertidos: Turno[] = sesiones.map((s: any) => {
@@ -365,15 +383,13 @@ metodo_pago: s.metodo_pago || 'mercadopago',
     if (!error) {
       setTurnos(prev => prev.map(t => t.id === id ? {...t, pago} : t))
       setTurnoSeleccionado(prev => prev?.id === id ? {...prev, pago} : prev)
-      if (turno) {
+      // solo mueve los totales si la sesión es de este mes, y contempla cualquier cambio de estado (también señado)
+      if (turno && turno.pago !== pago && esDelMesActual(turno.fecha)) {
         const precio = turno.precio || 0
-        if (pago === 'pagado') {
-          setIngresosMes(prev => prev + precio)
-          if (turno.pago === 'pendiente') setPendientesMes(prev => Math.max(0, prev - precio))
-        } else if (pago === 'pendiente' && turno.pago === 'pagado') {
-          setIngresosMes(prev => Math.max(0, prev - precio))
-          setPendientesMes(prev => prev + precio)
-        }
+        if (turno.pago === 'pagado') setIngresosMes(prev => Math.max(0, prev - precio))
+        if (turno.pago === 'pendiente') setPendientesMes(prev => Math.max(0, prev - precio))
+        if (pago === 'pagado') setIngresosMes(prev => prev + precio)
+        if (pago === 'pendiente') setPendientesMes(prev => prev + precio)
       }
     }
   }
@@ -723,7 +739,7 @@ metodo_pago: s.metodo_pago || 'mercadopago',
     <div className="widget-card widget-ingresos" style={{background:'#FFFBEB',borderColor:'#FDE68A'}}>
       <div className="widget-blob" style={{width:'70px',height:'70px',background:'#F59E0B',top:'-15px',right:'-15px'}}/>
       <div className="widget-label" style={{color:'#B45309'}}>Ingresos · {mesNombre}</div>
-      <div className="widget-title" style={{color:'#92400E'}}>${ingresosMes.toLocaleString()}</div>
+      <div className="widget-title" style={{color:'#92400E'}}>${(ingresosMes + cursosMes).toLocaleString()}</div>
       <div className="widget-sub" style={{color:'#B45309'}}>cobrados · <span style={{color:'#EF4444',fontWeight:600}}>${pendientesMes.toLocaleString()} pend.</span></div>
       <button className="widget-pill" style={{background:'#FEF3C7',color:'#92400E'}} onClick={() => window.location.href='/finances'}>Ver finanzas →</button>
     </div>
@@ -847,8 +863,12 @@ metodo_pago: s.metodo_pago || 'mercadopago',
         .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
         .chk{width:24px;height:24px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all 0.15s}
         .chk.ok{background:#DCFCE7;border-color:#BBF7D0;color:#166534}
-        .ab{background:var(--bg-card);border:1.5px dashed var(--border);border-radius:14px;padding:10px;text-align:center;font-size:12px;color:var(--text-muted);cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:all 0.15s;margin-top:2px}
-        .ab:hover{border-color:var(--accent);color:var(--accent)}
+        .ab{position:relative;overflow:hidden;isolation:isolate;background:transparent;border:none;border-radius:14px;padding:10px;text-align:center;font-size:12px;font-weight:600;color:var(--text-muted);cursor:pointer;width:100%;font-family:inherit;flex-shrink:0;transition:transform 0.15s,box-shadow 0.15s,color 0.15s;margin-top:2px}
+        .ab::before{content:'';position:absolute;z-index:-2;left:50%;top:50%;width:300%;aspect-ratio:1;transform:translate(-50%,-50%);background:conic-gradient(from 0deg,var(--border) 0deg,var(--border) 250deg,rgba(139,92,246,0.25) 295deg,#A78BFA 335deg,var(--border) 360deg);animation:abGira 4s linear infinite}
+        .ab::after{content:'';position:absolute;z-index:-1;inset:1.5px;border-radius:12.5px;background:var(--bg-card)}
+        .ab:hover{color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 14px rgba(139,92,246,0.18)}
+        @keyframes abGira{to{transform:translate(-50%,-50%) rotate(360deg)}}
+        @media (prefers-reduced-motion:reduce){.ab::before{animation:none}}
         .tasks-card{background:#FFFBEB;border-radius:20px;padding:14px 16px;border:0.5px solid #FDE68A;position:relative;overflow:hidden;flex-shrink:0}
         html.dark .tasks-card{background:#1A1200;border-color:#3D2E00}
         .tasks-blob{position:absolute;border-radius:50%;background:#F59E0B;opacity:0.2;pointer-events:none}
@@ -1087,6 +1107,9 @@ setTabDetalle('contexto')
   )
 })()}
                     <span className={`tg ${PAGO_CONFIG[turno.pago].cls}`}>{PAGO_CONFIG[turno.pago].label}</span>
+                    {turno.origen === 'pagina_publica' && turno.pago === 'pendiente' && turno.metodo_pago === 'transferencia' && (
+                      <span className="tg" style={{background:'#DBEAFE',color:'#1E40AF',borderColor:'#93C5FD',fontWeight:700}}>🏦 Revisar transferencia</span>
+                    )}
                   </div>
                 </div>
                 <button className={`chk${turno.realizado?' ok':''}`}
@@ -1162,29 +1185,70 @@ setTabDetalle('contexto')
               })()}
             </div>
              
-            {turnoSeleccionado.origen === 'pagina_publica' && (
-  <div style={{
-    background:'#FEF9C3',border:'0.5px solid #FDE68A',
-    borderRadius:'12px',padding:'11px 14px',
-    fontSize:'12px',color:'#854D0E',lineHeight:'1.6',
-    flexShrink:0
-  }}>
-    ⚠️ Esta persona reservó desde tu página pública pero <strong>aún no completó el pago</strong>. Te recomendamos contactarla para confirmar.
-    {(() => {
-      const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
-      if (!pac?.celular) return null
-      const numero = pac.celular.replace(/\D/g,'')
-      const prefijo = numero.startsWith('54') ? '' : '549'
-      return (
-        <a href={`https://wa.me/${prefijo}${numero}?text=Hola%20${encodeURIComponent(turnoSeleccionado.pacienteNombre)}%2C%20te%20escribo%20por%20tu%20reserva%20pendiente%20de%20pago%20%F0%9F%99%8F`}
-          target="_blank" rel="noopener noreferrer"
-          style={{display:'block',marginTop:'8px',textAlign:'center',padding:'7px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:'600',textDecoration:'none',border:'0.5px solid #BBF7D0'}}>
-          💬 Contactar por WhatsApp
-        </a>
-      )
-    })()}
-  </div>
-)}
+            {turnoSeleccionado.origen === 'pagina_publica' && turnoSeleccionado.pago === 'pendiente' && (() => {
+              const pac = pacientes.find(p => p.id === turnoSeleccionado.pacienteDbId)
+              const numero = pac?.celular ? pac.celular.replace(/\D/g,'') : ''
+              const linkWa = (texto: string) => numero
+                ? `https://wa.me/${numero.startsWith('54') ? '' : '549'}${numero}?text=${encodeURIComponent(texto)}`
+                : null
+              const nombre = turnoSeleccionado.pacienteNombre
+              const fechaTxt = new Date(turnoSeleccionado.fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })
+              const metodo = turnoSeleccionado.metodo_pago
+
+              // transferencia: la persona tocó "Ya transferí". Puede que la plata ya esté en la cuenta
+              if (metodo === 'transferencia') {
+                const wa = linkWa(`Hola ${nombre}! Te escribo por tu reserva del ${fechaTxt}. ¿Me pasás el comprobante de la transferencia así la confirmo? 🙏`)
+                return (
+                  <div style={{background:'#EFF6FF',border:'1px solid #93C5FD',borderRadius:'12px',padding:'12px 14px',fontSize:'12px',color:'#1E3A8A',lineHeight:'1.6',flexShrink:0}}>
+                    <div style={{fontWeight:800,fontSize:'13px',marginBottom:'4px'}}>🏦 Avisó que pagó por transferencia</div>
+                    Esta persona reservó desde tu página y tocó <strong>"Ya hice la transferencia"</strong>. <strong>Revisá tu cuenta:</strong> puede que la plata ya esté ahí.
+                    <div style={{display:'flex',gap:'6px',marginTop:'10px',flexWrap:'wrap'}}>
+                      <button onClick={() => updatePago(turnoSeleccionado.id, 'pagado')}
+                        style={{flex:1,minWidth:'140px',padding:'8px',background:'#166534',color:'white',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+                        ✓ Me llegó, marcar pagado
+                      </button>
+                      {wa && (
+                        <a href={wa} target="_blank" rel="noopener noreferrer"
+                          style={{flex:1,minWidth:'140px',textAlign:'center',padding:'8px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:700,textDecoration:'none',border:'0.5px solid #BBF7D0'}}>
+                          💬 Pedir comprobante
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              // reserva libre: nunca se le pidió pagar online
+              if (metodo === 'libre') {
+                const wa = linkWa(`Hola ${nombre}! Te escribo por tu reserva del ${fechaTxt} para coordinar el pago 😊`)
+                return (
+                  <div style={{background:'var(--bg-input)',border:'0.5px solid var(--border)',borderRadius:'12px',padding:'11px 14px',fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.6',flexShrink:0}}>
+                    📅 Reservó desde tu página pública, <strong>sin pago previo</strong>. Coordiná el pago como prefieras.
+                    {wa && (
+                      <a href={wa} target="_blank" rel="noopener noreferrer"
+                        style={{display:'block',marginTop:'8px',textAlign:'center',padding:'7px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:600,textDecoration:'none',border:'0.5px solid #BBF7D0'}}>
+                        💬 Escribirle por WhatsApp
+                      </a>
+                    )}
+                  </div>
+                )
+              }
+
+              // mercado pago: empezó a pagar pero no se confirmó (si se hubiera aprobado, se marca solo)
+              const wa = linkWa(`Hola ${nombre}! Vi que reservaste para el ${fechaTxt} pero el pago no llegó a completarse. ¿Te ayudo a terminarlo? 🙏`)
+              return (
+                <div style={{background:'#FEF9C3',border:'0.5px solid #FDE68A',borderRadius:'12px',padding:'11px 14px',fontSize:'12px',color:'#854D0E',lineHeight:'1.6',flexShrink:0}}>
+                  <div style={{fontWeight:800,fontSize:'13px',marginBottom:'4px'}}>💳 El pago con Mercado Pago no se completó</div>
+                  Reservó desde tu página y empezó a pagar, pero <strong>Mercado Pago no confirmó el cobro</strong>: puede haber cerrado la ventana o tenido un problema con la tarjeta. El turno sigue reservado.
+                  {wa && (
+                    <a href={wa} target="_blank" rel="noopener noreferrer"
+                      style={{display:'block',marginTop:'8px',textAlign:'center',padding:'7px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:600,textDecoration:'none',border:'0.5px solid #BBF7D0'}}>
+                      💬 Ayudarla a completar el pago
+                    </a>
+                  )}
+                </div>
+              )
+            })()}
 
             <div className="rbadges">
             <span className="rb rb-s">

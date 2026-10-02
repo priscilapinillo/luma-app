@@ -97,7 +97,8 @@ export default function FinanzasPage() {
         setCursosMap(mapC)
       }
 
-      if (sess) setSesiones(sess)
+      // las sesiones canceladas no cuentan (igual que en el Dashboard)
+      if (sess) setSesiones(sess.filter((s: any) => s.estado_sesion !== 'cancelada'))
       if (pacs) {
         const map: Record<string, string> = {}
         pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
