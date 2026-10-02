@@ -87,7 +87,7 @@ export default function ResetPasswordPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800;900&family=Cormorant+Garamond:wght@600&display=swap');
+        
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{height:100%;font-family:'Geist',sans-serif}
         .wrap{

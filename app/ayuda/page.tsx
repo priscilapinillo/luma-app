@@ -2,7 +2,7 @@ export default function AyudaPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+        
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:#F7F4FF;font-family:'Inter',sans-serif;color:#1A1035}
         .ay-wrap{max-width:720px;margin:0 auto;padding:56px 24px 80px}

@@ -111,7 +111,7 @@ export default function Sidebar() {
     return (
       <>
         <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+          
 
           /* ── NAV PILL GLASSMORPHISM ── */
           .sb-mobile {
@@ -454,7 +454,7 @@ body.modal-ficha-abierto .sb-mobile {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+        
         .sb{
           width:200px;height:100vh;
           background:linear-gradient(160deg,#F8F0FF 0%,#EEE8FF 40%,#F5E8FF 70%,#FFE8F5 100%);

@@ -15,7 +15,7 @@ export default function BuscarCertificadoPage() {
 
   return (
     <div style={{minHeight:'100vh',background:'#0D0B14',display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',fontFamily:"'Jost',sans-serif"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Jost:wght@400;500;600&display=swap');`}</style>
+      
       <div style={{maxWidth:'420px',width:'100%',textAlign:'center'}}>
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'26px',color:'#E8D5A3',marginBottom:'8px'}}>Luma</div>
         <div style={{fontSize:'14px',color:'#C4B8DE',marginBottom:'28px'}}>Verificar un certificado</div>

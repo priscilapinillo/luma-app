@@ -8,20 +8,30 @@ self.addEventListener('install', function () {
 })
 
 self.addEventListener('activate', function (event) {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil((async function () {
+    // Pide la página en paralelo mientras el service worker se despierta (abre más rápido)
+    if (self.registration.navigationPreload) {
+      try { await self.registration.navigationPreload.enable() } catch (e) {}
+    }
+    await self.clients.claim()
+  })())
 })
 
 // Solo interviene al abrir páginas: si no hay internet muestra un aviso lindo.
 // Todo lo demás (imágenes, datos, pagos) va directo, como si no existiera.
 self.addEventListener('fetch', function (event) {
   if (event.request.mode !== 'navigate') return
-  event.respondWith(
-    fetch(event.request).catch(function () {
+  event.respondWith((async function () {
+    try {
+      const adelantada = await event.preloadResponse
+      if (adelantada) return adelantada
+      return await fetch(event.request)
+    } catch (e) {
       return new Response(PAGINA_SIN_CONEXION, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
-    })
-  )
+    }
+  })())
 })
 
 // Solo deja ir a páginas de Luma; cualquier otra cosa va al inicio

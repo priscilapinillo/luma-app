@@ -53,7 +53,7 @@ export default function CoursesLayout({ children }: { children: React.ReactNode 
   return (
     <div style={{position:'relative',minHeight:'100vh'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@700;800;900&family=Inter:wght@400;500;600&display=swap');
+        
         .cg-fondo{filter:blur(6px);opacity:0.5;pointer-events:none;user-select:none;height:100vh;overflow:hidden}
         .cg-overlay{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(10,5,25,0.35)}
         .cg-card{background:white;border-radius:20px;padding:36px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,0.35)}

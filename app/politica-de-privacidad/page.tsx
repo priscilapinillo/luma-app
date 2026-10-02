@@ -2,7 +2,7 @@ export default function PoliticaPrivacidad() {
     return (
       <>
         <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap');
+          
           *{box-sizing:border-box;margin:0;padding:0}
           body{background:#F0EEFF;font-family:'Jost',sans-serif;color:#1A1035}
           .pp-wrap{max-width:720px;margin:0 auto;padding:60px 24px 80px}

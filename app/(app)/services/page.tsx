@@ -224,7 +224,7 @@ export default function ServiciosPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+        
         *{box-sizing:border-box}
         .sw{height:100vh;overflow-y:auto;font-family:'Inter',sans-serif;background:var(--bg);padding:20px 24px;overflow-x:hidden}
 @media(max-width:768px){

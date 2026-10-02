@@ -57,7 +57,7 @@ export default function LinksPublicPage() {
   return (
     <div style={{minHeight:'100vh',position:'relative',background:t.bg,fontFamily:"'Jost',sans-serif",color:t.text}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Jost:wght@300;400;500;600&display=swap');
+        
         *{box-sizing:border-box;margin:0;padding:0}
         .lp-bg{position:fixed;inset:0;z-index:0;background-image:url('${t.fondo}');background-size:cover;background-position:center;opacity:${t.dark ? 0.22 : 0.14}}
         .lp-content{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:40px 20px 60px;display:flex;flex-direction:column;align-items:center}

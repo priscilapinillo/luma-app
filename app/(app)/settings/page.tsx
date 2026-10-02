@@ -535,7 +535,7 @@ export default function AjustesPage() {
   return (
     <>
       <style>{`
-  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+  
   *{box-sizing:border-box}
   .sw{height:100vh;display:grid;grid-template-columns:240px 1fr;font-family:'Inter',sans-serif;background:var(--bg);overflow:hidden}
   .s-toggle-wrap{background:var(--bg-card);border-right:0.5px solid var(--border-light);padding:20px 14px;display:flex;flex-direction:column;gap:6px}
