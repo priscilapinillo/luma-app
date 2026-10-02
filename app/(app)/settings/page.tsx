@@ -13,11 +13,12 @@ type Destacado = {
   descripcion: string
   texto_boton: string
   accion: 'whatsapp' | 'link' | 'curso'
+  imagen_url: string
   url: string
   curso_slug: string
   mensaje_whatsapp: string
 }
-const DESTACADO_VACIO: Destacado = { activa: false, etiqueta: 'Empezá por acá', titulo: '', descripcion: '', texto_boton: 'Quiero saber más', accion: 'whatsapp', url: '', curso_slug: '', mensaje_whatsapp: '' }
+const DESTACADO_VACIO: Destacado = { activa: false, etiqueta: 'Empezá por acá', titulo: '', descripcion: '',imagen_url: '', texto_boton: 'Quiero saber más',accion: 'whatsapp', url: '', curso_slug: '', mensaje_whatsapp: '' }
 
 type Anuncio = {
   activa: boolean
@@ -90,6 +91,7 @@ export default function AjustesPage() {
   const [tab, setTab] = useState<Tab>('perfil')
   const [loading, setLoading] = useState(true)
   const [misCursos, setMisCursos] = useState<{ titulo: string; slug: string }[]>([])
+  const [subiendoDestacado, setSubiendoDestacado] = useState(false)
   useEffect(() => { cargarDatos() }, [])
   const [guardando, setGuardando] = useState(false)
   const [notificacionesActivas, setNotificacionesActivas] = useState(false)
@@ -319,6 +321,28 @@ export default function AjustesPage() {
       console.error('Error guardando:', err)
     } finally {
       setGuardando(false)
+    }
+  }
+
+  async function subirImagenDestacado(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSubiendoDestacado(true)
+    try {
+      const comprimida = await comprimirImagen(file, 1500)
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const path = `${user.id}/destacado-${Date.now()}.jpg`
+      const { error } = await supabase.storage.from('avatars').upload(path, comprimida, { upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      setPerfil(prev => ({ ...prev, destacado: { ...prev.destacado, imagen_url: data.publicUrl } }))
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo subir la imagen.')
+    } finally {
+      setSubiendoDestacado(false)
+      e.target.value = ''
     }
   }
 
@@ -961,7 +985,28 @@ export default function AjustesPage() {
       </label>
     </div>
     <div className="field" style={{marginTop:'12px'}}>
-      <label>Etiqueta chiquita (arriba del título)</label>
+    <label>Imagen de portada (opcional)</label>
+      <div style={{width:'100%',aspectRatio:'820/312',borderRadius:'12px',overflow:'hidden',background:'var(--bg-input)',border:'1px dashed var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'8px'}}>
+        {perfil.destacado.imagen_url
+          ? <img src={perfil.destacado.imagen_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+          : <span style={{fontSize:'12px',color:'var(--text-muted)'}}>📷 Sin imagen</span>}
+      </div>
+      <div style={{display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap'}}>
+        <label style={{fontSize:'12px',fontWeight:600,color:'var(--accent, #8B5CF6)',cursor:'pointer',margin:0}}>
+          {subiendoDestacado ? 'Subiendo...' : perfil.destacado.imagen_url ? 'Cambiar imagen' : 'Subir imagen'}
+          <input type="file" accept="image/*" style={{display:'none'}} disabled={subiendoDestacado} onChange={subirImagenDestacado}/>
+        </label>
+        {perfil.destacado.imagen_url && (
+          <button type="button" onClick={() => setPerfil({...perfil, destacado: {...perfil.destacado, imagen_url: ''}})}
+            style={{fontSize:'12px',color:'#EF4444',background:'transparent',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
+            Quitar
+          </button>
+        )}
+      </div>
+      <div className="field-hint">Recomendado: 820 x 312 px (horizontal, como una portada de Facebook). Lo importante, centrado: los bordes se pueden recortar un poco en el celular. Después tocá "Guardar todo".</div>
+    </div>
+    <div className="field">
+      <label>Etiqueta chiquita (arriba de la imagen)</label>
       <input placeholder="Ej: Empezá por acá" value={perfil.destacado.etiqueta} maxLength={40}
         onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, etiqueta: e.target.value}})}/>
     </div>

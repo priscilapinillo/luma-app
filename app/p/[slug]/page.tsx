@@ -21,7 +21,7 @@ type Terapeuta = {
   instrucciones_pago?: string; acepta_transferencia?: boolean
   mp_activo?: boolean
   max_entregas_activas?: number | null
-  destacado?: { activa: boolean; etiqueta: string; titulo: string; descripcion: string; texto_boton: string; accion: 'whatsapp' | 'link' | 'curso'; url: string; curso_slug: string; mensaje_whatsapp: string } | null
+  destacado?: { imagen_url?: string; activa: boolean; etiqueta: string; titulo: string; descripcion: string; texto_boton: string; accion: 'whatsapp' | 'link' | 'curso'; url: string; curso_slug: string; mensaje_whatsapp: string } | null
   anuncio?: { activa: boolean; etiqueta: string; titulo: string; descripcion: string; fecha: string; texto_boton: string; accion: 'ninguno' | 'whatsapp' | 'link' | 'curso'; url: string; curso_slug: string; mensaje_whatsapp: string } | null
   pausa_entre_turnos?: number | null
   moneda?: string
@@ -740,16 +740,26 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hero-cta-secundario:hover{background:var(--primary-dim);color:var(--cream)}
         .hero-trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);letter-spacing:1px;font-family:var(--font-subtitle)}
 
-        .dest-card{position:relative;display:block;text-decoration:none;background:var(--card-bg);border:1px solid var(--primary-dim);border-radius:24px;padding:32px 24px;text-align:center;box-shadow:0 0 40px var(--primary-dim);transition:transform 0.3s}
+        .dest-card{position:relative;display:flex;flex-direction:column;overflow:hidden;text-decoration:none;border-radius:20px 20px 56px 56px;background:var(--card-bg);border:1px solid var(--border);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 14px 34px rgba(0,0,0,0.18),0 0 40px var(--primary-dim);transition:transform 0.3s}
+        .dest-card::before{content:'';position:absolute;inset:6px;border:1px solid var(--border);border-radius:16px 16px 46px 46px;pointer-events:none;z-index:2}
+        .dest-badge{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:3;max-width:85%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-subtitle);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#fff;background:rgba(0,0,0,0.38);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:5px 14px;border-radius:50px}
+        .dest-img{width:100%;aspect-ratio:820/312;overflow:hidden}
+        .dest-img img{width:100%;height:100%;object-fit:cover;display:block}
+        .dest-img-vacia{aspect-ratio:auto;height:120px;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,var(--primary-dim),var(--bg));color:var(--primary);font-size:34px}
+        .dest-body{padding:22px 24px 38px;text-align:center}
         .dest-card:hover{transform:translateY(-3px)}
         .dest-etiqueta{display:inline-block;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);border:0.5px solid var(--primary-dim);border-radius:50px;padding:5px 14px;margin-bottom:16px;font-family:var(--font-subtitle);font-weight:700}
         .dest-titulo{font-family:var(--font-title);font-size:clamp(28px,6vw,40px);font-weight:300;color:var(--cream);line-height:1.1;margin-bottom:12px}
         .dest-desc{font-size:15px;line-height:1.7;color:var(--text-dim);font-family:var(--font-subtitle);margin-bottom:24px}
         .dest-card .hero-cta{margin-bottom:0}
-        .anuncio-card{background:var(--card-bg);border:1px solid var(--primary-dim);border-radius:24px;padding:32px 20px;text-align:center}
+        .anuncio-card{position:relative;overflow:hidden;isolation:isolate;border-radius:24px;padding:36px 20px;text-align:center;box-shadow:0 0 28px var(--primary-dim)}
+        .anuncio-card::before{content:'';position:absolute;z-index:-2;left:50%;top:50%;width:200%;aspect-ratio:1;transform:translate(-50%,-50%);background:conic-gradient(from 0deg,transparent 0deg,var(--primary-dim) 50deg,var(--primary-light) 80deg,var(--primary-dim) 110deg,transparent 150deg,transparent 200deg,var(--primary-dim) 240deg,var(--primary) 265deg,var(--primary-dim) 290deg,transparent 330deg);opacity:0.6;animation:anuncioGira 6s linear infinite}
+        .anuncio-card::after{content:'';position:absolute;z-index:-1;inset:2px;border-radius:22px;background:radial-gradient(circle at 50% 0%,var(--primary-dim),transparent 65%),var(--bg2)}
+        @keyframes anuncioGira{to{transform:translate(-50%,-50%) rotate(360deg)}}
+        @media (prefers-reduced-motion:reduce){.anuncio-card::before{animation:none}}
         .anuncio-fecha{font-size:13px;color:var(--primary-light);font-family:var(--font-subtitle);font-weight:600;letter-spacing:1px;margin-bottom:22px;text-transform:capitalize}
         .anuncio-contador{display:flex;justify-content:center;gap:10px;margin-bottom:24px}
-        .anuncio-num{min-width:64px;padding:12px 6px;border-radius:14px;background:var(--primary-dim);border:0.5px solid var(--border)}
+        .anuncio-num{min-width:64px;padding:12px 6px;border-radius:14px;background:var(--bg3);border:0.5px solid var(--primary-dim);box-shadow:inset 0 0 18px var(--primary-dim),0 0 14px var(--primary-dim)}
         .anuncio-num b{display:block;font-family:var(--font-title);font-size:clamp(26px,7vw,36px);font-weight:400;color:var(--cream);line-height:1;font-variant-numeric:tabular-nums}
         .anuncio-num span{display:block;margin-top:6px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700}
         .anuncio-card .hero-cta{margin-bottom:0;text-decoration:none}
@@ -1013,10 +1023,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <section className="section">
           <a className="dest-card" href={destHref}
             {...(dest.accion === 'curso' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
-            {dest.etiqueta && <div className="dest-etiqueta">{t.deco} {dest.etiqueta}</div>}
+<div className="dest-badge">{t.deco} {dest.etiqueta || 'Destacado'} {t.deco}</div>
+            <div className={dest.imagen_url ? 'dest-img' : 'dest-img dest-img-vacia'}>
+              {dest.imagen_url ? <img src={dest.imagen_url} alt={dest.titulo}/> : <span>{t.deco}</span>}
+            </div>
+            <div className="dest-body">
             <h2 className="dest-titulo">{dest.titulo}</h2>
             {dest.descripcion && <p className="dest-desc">{dest.descripcion}</p>}
             <span className="hero-cta">{t.deco} {dest.texto_boton || 'Quiero saber más'}</span>
+            </div>
           </a>
         </section>
       </>)}
