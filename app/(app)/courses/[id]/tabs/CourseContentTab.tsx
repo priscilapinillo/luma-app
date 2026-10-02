@@ -3,6 +3,49 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Plus, ChevronDown, ChevronUp, Edit2, Trash2, X, Check } from 'lucide-react'
+import { detectarContenido, normalizarUrl, esRutaLocal } from '@/lib/contenido'
+
+const AYUDA_LINK: Record<string, { label: string; placeholder: string; ayuda: string }> = {
+  video: {
+    label: 'Link del video',
+    placeholder: 'https://youtube.com/watch?v=...',
+    ayuda: 'YouTube (también videos ocultos), Vimeo, Loom, Google Drive o Dropbox. Para videos largos lo más estable es YouTube como "Oculto".',
+  },
+  audio: {
+    label: 'Link del audio',
+    placeholder: 'https://drive.google.com/file/d/...',
+    ayuda: 'Google Drive, Dropbox, Spotify, SoundCloud, iVoox, Apple Podcasts o un link directo a .mp3. En Drive y Dropbox compartilo como "Cualquier persona con el enlace".',
+  },
+  pdf: {
+    label: 'Link del PDF o documento',
+    placeholder: 'https://drive.google.com/file/d/...',
+    ayuda: 'Google Drive, Dropbox, Google Docs, Google Slides, Canva o un link directo a .pdf. Compartilo como "Cualquier persona con el enlace".',
+  },
+}
+
+// muestra si Luma reconoce el link y cómo lo va a ver la alumna
+function AvisoLink({ url, tipo }: { url: string; tipo: string }) {
+  if (!url.trim()) return null
+  const c = detectarContenido(url, tipo)
+  if (!c) return null
+  if (c.visor === 'local') {
+    return (
+      <span style={{fontSize:'11px',marginTop:'4px',padding:'8px 10px',borderRadius:'8px',lineHeight:1.5,background:'#FEE2E2',color:'#991B1B'}}>
+        ✕ Ese link es de un archivo de tu computadora: solo se abre en tu compu, tus alumnas no lo pueden ver.
+        Subilo a Google Drive, tocá <strong>Compartir → Cualquier persona con el enlace → Copiar vínculo</strong> y pegá ese link acá.
+      </span>
+    )
+  }
+  const ok = c.visor !== 'link'
+  return (
+    <span style={{fontSize:'11px',marginTop:'4px',padding:'6px 10px',borderRadius:'8px',lineHeight:1.4,
+      background: ok ? '#DCFCE7' : '#FEF3C7', color: ok ? '#166534' : '#92400E'}}>
+      {ok
+        ? `✓ Tus alumnas lo van a ver dentro de Luma (${c.plataforma})`
+        : '⚠ No reconocemos este link. Tus alumnas van a ver un botón para abrirlo en otra pestaña.'}
+    </span>
+  )
+}
 
 type Modulo = {
   id: string; titulo: string; descripcion: string; orden: number
@@ -44,7 +87,7 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
       if (!mods) return
       const { data: lecs, error: lecsError } = await supabase.from('lessons').select('*')
         .in('module_id', mods.map(m => m.id)).order('orden')
-      console.log('LECCIONES:', lecs, 'ERROR:', lecsError)
+      if (lecsError) console.error('Error cargando lecciones:', lecsError)
         setModulos(mods.map((m: Modulo) => ({ ...m, lecciones: lecs?.filter((l: Leccion) => l.module_id === m.id) || [] })))
         if (mods.length > 0 && !moduloAbierto) setModuloAbierto(mods[0].id)
           // mantener el módulo abierto después de recargar
@@ -81,13 +124,21 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
 
   function agregarAdjuntoLink() {
     if (!nuevoAdjuntoNombre.trim() || !nuevoAdjuntoUrl.trim()) return
-    setAdjuntosNuevos(prev => [...prev, { nombre: nuevoAdjuntoNombre.trim(), url: nuevoAdjuntoUrl.trim(), tipo: 'link' }])
+    if (esRutaLocal(nuevoAdjuntoUrl)) {
+      alert('Ese link es de un archivo de tu computadora y tus alumnas no lo pueden abrir. Subilo a Google Drive, compartilo como "Cualquier persona con el enlace" y pegá ese link.')
+      return
+    }
+    setAdjuntosNuevos(prev => [...prev, { nombre: nuevoAdjuntoNombre.trim(), url: normalizarUrl(nuevoAdjuntoUrl), tipo: 'link' }])
     setNuevoAdjuntoNombre('')
     setNuevoAdjuntoUrl('')
   }
 
   async function guardarLeccion(moduleId: string) {
     if (!formLeccion.titulo) return
+    if (formLeccion.tipo !== 'texto' && esRutaLocal(formLeccion.contenido_url)) {
+      alert('El link de la lección es de un archivo de tu computadora y tus alumnas no lo pueden abrir. Subilo a Google Drive, compartilo como "Cualquier persona con el enlace" y pegá ese link.')
+      return
+    }
     setGuardando(true)
     try {
       const supabase = createClient()
@@ -95,29 +146,32 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
       const datos = {
         titulo: formLeccion.titulo,
         tipo: formLeccion.tipo,
-        contenido_url: formLeccion.contenido_url || null,
+        contenido_url: formLeccion.tipo !== 'texto' && formLeccion.contenido_url.trim() ? normalizarUrl(formLeccion.contenido_url) : null,
         contenido_texto: formLeccion.contenido_texto || null,
         duracion_min: formLeccion.duracion_min ? Math.round(Number(formLeccion.duracion_min)) : null,
         es_preview: formLeccion.es_preview,
         descripcion: formLeccion.descripcion || null,
         notas: formLeccion.notas || null,
       }
+      let leccionId: string | null = editandoLeccion?.id || null
       if (editandoLeccion) {
-        await supabase.from('lessons').update(datos).eq('id', editandoLeccion.id)
+        const { error } = await supabase.from('lessons').update(datos).eq('id', editandoLeccion.id)
+        if (error) { alert('No se pudo guardar la lección: ' + error.message); return }
       } else {
-        const { error: insertError } = await supabase.from('lessons').insert({ ...datos, module_id: moduleId, orden: lecciones.length })
-      console.log('INSERT ERROR:', insertError)
+        const { data: nueva, error } = await supabase.from('lessons')
+          .insert({ ...datos, module_id: moduleId, orden: lecciones.length })
+          .select('id').single()
+        if (error || !nueva) { alert('No se pudo crear la lección: ' + (error?.message || 'intentá de nuevo')); return }
+        leccionId = nueva.id
+      }
+      // Guardar adjuntos (con el id exacto de la lección, no "la última creada")
+      if (adjuntosNuevos.length > 0 && leccionId) {
+        const { error: errAdj } = await supabase.from('lesson_attachments').insert(
+          adjuntosNuevos.map(a => ({ lesson_id: leccionId, nombre: a.nombre, url: normalizarUrl(a.url), tipo: a.tipo }))
+        )
+        if (errAdj) alert('La lección se guardó, pero no se pudieron guardar los archivos descargables: ' + errAdj.message)
       }
       await cargarModulos()
-      // Guardar adjuntos
-      if (adjuntosNuevos.length > 0) {
-        const leccionId = editandoLeccion?.id || (await supabase.from('lessons').select('id').eq('module_id', moduleId).order('created_at', { ascending: false }).limit(1).single()).data?.id
-        if (leccionId) {
-          await supabase.from('lesson_attachments').insert(
-            adjuntosNuevos.map(a => ({ lesson_id: leccionId, nombre: a.nombre, url: a.url, tipo: a.tipo }))
-          )
-        }
-      }
       setModalLeccion(null)
       setAdjuntosNuevos([])
       setFormLeccion({ titulo: '', tipo: 'video', contenido_url: '', contenido_texto: '', duracion_min: '', es_preview: false, descripcion: '', notas: '' })
@@ -274,24 +328,19 @@ setModalLeccion(m.id) }}
             <div className="field">
               <label>Tipo de contenido</label>
               <select value={formLeccion.tipo} onChange={e => setFormLeccion({...formLeccion, tipo: e.target.value})}>
-                <option value="video">Video (YouTube)</option>
-                <option value="pdf">PDF</option>
+                <option value="video">Video</option>
+                <option value="pdf">PDF o documento</option>
                 <option value="audio">Audio</option>
                 <option value="texto">Texto</option>
               </select>
             </div>
-            {(formLeccion.tipo === 'video' || formLeccion.tipo === 'audio') && (
+            {AYUDA_LINK[formLeccion.tipo] && (
               <div className="field">
-                <label>{formLeccion.tipo === 'video' ? 'URL de YouTube' : 'URL del audio'}</label>
-                <input value={formLeccion.contenido_url} placeholder={formLeccion.tipo === 'video' ? 'https://youtube.com/watch?v=...' : 'https://...'}
+                <label>{AYUDA_LINK[formLeccion.tipo].label}</label>
+                <input value={formLeccion.contenido_url} placeholder={AYUDA_LINK[formLeccion.tipo].placeholder}
                   onChange={e => setFormLeccion({...formLeccion, contenido_url: e.target.value})}/>
-              </div>
-            )}
-            {formLeccion.tipo === 'pdf' && (
-              <div className="field">
-                <label>URL del PDF</label>
-                <input value={formLeccion.contenido_url} placeholder="https://..."
-                  onChange={e => setFormLeccion({...formLeccion, contenido_url: e.target.value})}/>
+                <span style={{fontSize:'10.5px',color:'var(--text-muted)',lineHeight:1.5}}>{AYUDA_LINK[formLeccion.tipo].ayuda}</span>
+                <AvisoLink url={formLeccion.contenido_url} tipo={formLeccion.tipo}/>
               </div>
             )}
             {formLeccion.tipo === 'texto' && (
@@ -333,7 +382,7 @@ setModalLeccion(m.id) }}
             <div className="field">
               <label>Archivos descargables</label>
               <span style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'6px',display:'block'}}>
-                Subí el archivo a Google Drive o Dropbox y pegá el link acá. Si después lo actualizás, tus alumnas siempre van a ver la última versión.
+                Subí el archivo a Google Drive o Dropbox (compartido como "Cualquier persona con el enlace") y pegá el link acá. Tus alumnas lo pueden ver dentro de Luma o abrirlo. Si después lo actualizás, siempre van a ver la última versión.
               </span>
               <div style={{display:'flex',gap:'6px'}}>
                 <input value={nuevoAdjuntoNombre} placeholder="Nombre (ej: Ficha de arcanos)"
@@ -358,6 +407,7 @@ setModalLeccion(m.id) }}
                   }} style={{background:'transparent',border:'none',cursor:'pointer',color:'#EF4444',fontSize:'16px',flexShrink:0}}>×</button>
                 </div>
               ))}
+              {nuevoAdjuntoUrl.trim() !== '' && <AvisoLink url={nuevoAdjuntoUrl} tipo=""/>}
               {adjuntosNuevos.map((a, i) => (
                 <div key={i} style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'6px',padding:'6px 10px',background:'var(--bg-input)',borderRadius:'8px',border:'0.5px solid var(--border)'}}>
                   <span style={{fontSize:'12px',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nombre}</span>
