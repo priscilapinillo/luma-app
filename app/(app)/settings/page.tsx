@@ -312,13 +312,17 @@ export default function AjustesPage() {
         anuncio: perfil.anuncio,
         updated_at: new Date().toISOString(),
       }
-      if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
-        else await supabase.from('therapist_profiles').insert(datos)
+      const { error: errGuardar } = perfil.id
+      ? await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
+      : await supabase.from('therapist_profiles').insert(datos)
+    if (errGuardar) { alert('No se pudo guardar: ' + errGuardar.message); return }
+        
         perfilGuardadoRef.current = JSON.stringify(perfil)
         setMsgExito('Perfil guardado correctamente')
       setTimeout(() => setMsgExito(''), 3000)
     } catch (err) {
       console.error('Error guardando:', err)
+      alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
     } finally {
       setGuardando(false)
     }
