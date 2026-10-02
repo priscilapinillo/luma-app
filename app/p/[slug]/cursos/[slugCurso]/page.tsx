@@ -256,6 +256,7 @@ export default function CursoPublicoPage() {
   const tieneMP = !!terapeuta?.mp_activo
   const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const sinMetodoPago = !tieneMP && !tieneTransferencia
+  const esGratis = curso != null && curso.precio != null && Number(curso.precio) === 0
 
   const leccionPreview = modulos
     .flatMap(m => m.lecciones || [])
@@ -466,7 +467,7 @@ export default function CursoPublicoPage() {
           <p className="hero-sub ga-subtitulo">{curso.descripcion_corta}</p>
 
           <div className="ga-boton">
-            <button className="hero-btn" onClick={irACheckout}><Sparkles size={16}/> Comprar ahora</button>
+          <button className="hero-btn" onClick={irACheckout}><Sparkles size={16}/> {esGratis ? 'Inscribirme gratis' : 'Comprar ahora'}</button>
           </div>
         </div>
 
@@ -476,7 +477,7 @@ export default function CursoPublicoPage() {
           {curso.nivel && <div className="chip"><BarChart3 size={13}/> Nivel {curso.nivel}</div>}
           {curso.idioma && <div className="chip"><Globe size={13}/> {curso.idioma}</div>}
           {modulos.length > 0 && <div className="chip"><BookOpen size={13}/> {modulos.length} módulos</div>}
-          {curso.modalidad === 'unico' && <div className="chip"><InfinityIcon size={13}/> Acceso de por vida</div>}
+          {(curso.modalidad === 'unico' || esGratis) && <div className="chip"><InfinityIcon size={13}/> Acceso de por vida</div>}
         </div>
       </div>
 
@@ -660,14 +661,14 @@ export default function CursoPublicoPage() {
           {curso.precio_original && esOferta && <div className="cta-precio-original">${curso.precio_original.toLocaleString()}</div>}
           <div className="cta-precio">${curso.precio.toLocaleString()}</div>
 
-          {sinMetodoPago ? (
+          {sinMetodoPago && !esGratis ? (
             <a className="btn-wsp"
               href={`https://wa.me/${terapeuta.whatsapp?.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero inscribirme al curso ${curso.titulo}, ¿cómo pago?`)}`}
               target="_blank" rel="noopener noreferrer">
               <MessageCircle size={18}/> Quiero inscribirme
             </a>
           ) : (
-            <button className="btn-comprar" onClick={irACheckout}><Sparkles size={16}/> Comprar curso</button>
+            <button className="btn-comprar" onClick={irACheckout}><Sparkles size={16}/> {esGratis ? 'Inscribirme gratis' : 'Comprar curso'}</button>
           )}
 
           {curso.dias_garantia && (

@@ -6,6 +6,41 @@ import { comprimirImagen } from '@/lib/comprimirImagen'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
+type Destacado = {
+  activa: boolean
+  etiqueta: string
+  titulo: string
+  descripcion: string
+  texto_boton: string
+  accion: 'whatsapp' | 'link' | 'curso'
+  imagen_url: string
+  url: string
+  curso_slug: string
+  mensaje_whatsapp: string
+}
+const DESTACADO_VACIO: Destacado = { activa: false, etiqueta: 'Empezá por acá', titulo: '', descripcion: '',imagen_url: '', texto_boton: 'Quiero saber más',accion: 'whatsapp', url: '', curso_slug: '', mensaje_whatsapp: '' }
+
+type Anuncio = {
+  activa: boolean
+  etiqueta: string
+  titulo: string
+  descripcion: string
+  fecha: string
+  texto_boton: string
+  accion: 'ninguno' | 'whatsapp' | 'link' | 'curso'
+  url: string
+  curso_slug: string
+  mensaje_whatsapp: string
+}
+const ANUNCIO_VACIO: Anuncio = { activa: false, etiqueta: 'Próximamente', titulo: '', descripcion: '', fecha: '', texto_boton: 'Quiero mi lugar', accion: 'ninguno', url: '', curso_slug: '', mensaje_whatsapp: '' }
+
+function isoAInputLocal(iso: string) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
 type Perfil = {
   id?: string
   nombre_profesional: string; nombre_completo: string
@@ -27,6 +62,8 @@ instrucciones_pago?: string
 valores: { icon: string; name: string; desc: string }[]
 testimonios: { texto: string; nombre: string }[]
 links: { tipo: string; titulo: string; url: string; descripcion?: string }[]
+destacado: Destacado
+anuncio: Anuncio
 }
 
 
@@ -53,6 +90,8 @@ export default function AjustesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [tab, setTab] = useState<Tab>('perfil')
   const [loading, setLoading] = useState(true)
+  const [misCursos, setMisCursos] = useState<{ titulo: string; slug: string }[]>([])
+  const [subiendoDestacado, setSubiendoDestacado] = useState(false)
   useEffect(() => { cargarDatos() }, [])
   const [guardando, setGuardando] = useState(false)
   const [notificacionesActivas, setNotificacionesActivas] = useState(false)
@@ -137,6 +176,8 @@ export default function AjustesPage() {
     ],
     testimonios: [],
     links: [],
+    destacado: DESTACADO_VACIO,
+    anuncio: ANUNCIO_VACIO,
   })
 
   useEffect(() => {
@@ -209,11 +250,15 @@ export default function AjustesPage() {
         ],
         testimonios: prof.testimonios || [],
         links: prof.links || [],
+        destacado: { ...DESTACADO_VACIO, ...(prof.destacado || {}) },
+        anuncio: { ...ANUNCIO_VACIO, ...(prof.anuncio || {}) },
       }
       setPerfil(perfilCargado)
       perfilGuardadoRef.current = JSON.stringify(perfilCargado)
       }
       if (subs) setSuscripcion(subs)
+      const { data: cursosPropios } = await supabase.from('courses').select('titulo,slug').eq('user_id', user.id).eq('estado', 'publicado')
+      if (cursosPropios) setMisCursos(cursosPropios)
 
         // Verificar si ya tiene notificaciones activas
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
@@ -263,17 +308,45 @@ export default function AjustesPage() {
         valores: perfil.valores,
         testimonios: perfil.testimonios,
         links: perfil.links,
+        destacado: perfil.destacado,
+        anuncio: perfil.anuncio,
         updated_at: new Date().toISOString(),
       }
-      if (perfil.id) await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
-        else await supabase.from('therapist_profiles').insert(datos)
+      const { error: errGuardar } = perfil.id
+      ? await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id)
+      : await supabase.from('therapist_profiles').insert(datos)
+    if (errGuardar) { alert('No se pudo guardar: ' + errGuardar.message); return }
+        
         perfilGuardadoRef.current = JSON.stringify(perfil)
         setMsgExito('Perfil guardado correctamente')
       setTimeout(() => setMsgExito(''), 3000)
     } catch (err) {
       console.error('Error guardando:', err)
+      alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
     } finally {
       setGuardando(false)
+    }
+  }
+
+  async function subirImagenDestacado(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSubiendoDestacado(true)
+    try {
+      const comprimida = await comprimirImagen(file, 1500)
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const path = `${user.id}/destacado-${Date.now()}.jpg`
+      const { error } = await supabase.storage.from('avatars').upload(path, comprimida, { upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      setPerfil(prev => ({ ...prev, destacado: { ...prev.destacado, imagen_url: data.publicUrl } }))
+    } catch (err: any) {
+      alert(err?.message || 'No se pudo subir la imagen.')
+    } finally {
+      setSubiendoDestacado(false)
+      e.target.value = ''
     }
   }
 
@@ -893,6 +966,204 @@ export default function AjustesPage() {
       style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
       + Agregar testimonio
     </button>
+  </div>
+
+  {/* SERVICIO DESTACADO */}
+  <div className="s-card">
+    <div className="s-card-title">✦ Servicio destacado</div>
+    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
+      Aparece arriba de todo en tu página, apenas entran. Usalo para tu puerta de entrada: una sesión diagnóstico, una mentoría, un evento, un taller o tu curso estrella. Ideal cuando antes de reservar necesitás conocer a la persona.
+    </div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Mostrar en mi página</div>
+        <div className="pref-sub">Podés apagarlo cuando quieras sin perder lo que escribiste</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.destacado.activa}
+          onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, activa: e.target.checked}})}/>
+        <span style={{position:'absolute',inset:0,background:perfil.destacado.activa?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.destacado.activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+        </span>
+      </label>
+    </div>
+    <div className="field" style={{marginTop:'12px'}}>
+    <label>Imagen de portada (opcional)</label>
+      <div style={{width:'100%',aspectRatio:'820/312',borderRadius:'12px',overflow:'hidden',background:'var(--bg-input)',border:'1px dashed var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'8px'}}>
+        {perfil.destacado.imagen_url
+          ? <img src={perfil.destacado.imagen_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+          : <span style={{fontSize:'12px',color:'var(--text-muted)'}}>📷 Sin imagen</span>}
+      </div>
+      <div style={{display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap'}}>
+        <label style={{fontSize:'12px',fontWeight:600,color:'var(--accent, #8B5CF6)',cursor:'pointer',margin:0}}>
+          {subiendoDestacado ? 'Subiendo...' : perfil.destacado.imagen_url ? 'Cambiar imagen' : 'Subir imagen'}
+          <input type="file" accept="image/*" style={{display:'none'}} disabled={subiendoDestacado} onChange={subirImagenDestacado}/>
+        </label>
+        {perfil.destacado.imagen_url && (
+          <button type="button" onClick={() => setPerfil({...perfil, destacado: {...perfil.destacado, imagen_url: ''}})}
+            style={{fontSize:'12px',color:'#EF4444',background:'transparent',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
+            Quitar
+          </button>
+        )}
+      </div>
+      <div className="field-hint">Recomendado: 820 x 312 px (horizontal, como una portada de Facebook). Lo importante, centrado: los bordes se pueden recortar un poco en el celular. Después tocá "Guardar todo".</div>
+    </div>
+    <div className="field">
+      <label>Etiqueta chiquita (arriba de la imagen)</label>
+      <input placeholder="Ej: Empezá por acá" value={perfil.destacado.etiqueta} maxLength={40}
+        onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, etiqueta: e.target.value}})}/>
+    </div>
+    <div className="field">
+      <label>Título</label>
+      <input placeholder="Ej: Sesión diagnóstico" value={perfil.destacado.titulo} maxLength={60}
+        onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, titulo: e.target.value}})}/>
+    </div>
+    <div className="field">
+      <label>Descripción</label>
+      <textarea placeholder="Ej: Antes de empezar un proceso juntas, nos conocemos en una charla de 20 minutos para ver qué necesitás." value={perfil.destacado.descripcion} maxLength={220}
+        onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, descripcion: e.target.value}})}
+        style={{minHeight:'70px',resize:'none'}}/>
+    </div>
+    <div className="field">
+      <label>Texto del botón</label>
+      <input placeholder="Ej: Quiero mi diagnóstico" value={perfil.destacado.texto_boton} maxLength={30}
+        onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, texto_boton: e.target.value}})}/>
+    </div>
+    <div className="field">
+      <label>¿Qué pasa cuando tocan el botón?</label>
+      <select value={perfil.destacado.accion}
+        onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, accion: e.target.value as Destacado['accion']}})}
+        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}>
+        <option value="whatsapp">Me escriben por WhatsApp</option>
+        <option value="link">Van a un link (formulario, Calendly, etc.)</option>
+        <option value="curso">Van a uno de mis cursos de Luma</option>
+      </select>
+    </div>
+    {perfil.destacado.accion === 'whatsapp' && (
+      <div className="field">
+        <label>Mensaje que les aparece ya escrito</label>
+        <textarea placeholder="Ej: Hola! Vi tu página y quiero saber más sobre la sesión diagnóstico." value={perfil.destacado.mensaje_whatsapp} maxLength={200}
+          onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, mensaje_whatsapp: e.target.value}})}
+          style={{minHeight:'60px',resize:'none'}}/>
+        <div className="field-hint">{perfil.whatsapp ? `Les abre WhatsApp con tu número (${perfil.whatsapp}).` : '⚠ Primero cargá tu WhatsApp en la pestaña Perfil, si no el bloque no se muestra.'}</div>
+      </div>
+    )}
+    {perfil.destacado.accion === 'link' && (
+      <div className="field">
+        <label>Link</label>
+        <input placeholder="https://..." value={perfil.destacado.url}
+          onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, url: e.target.value}})}/>
+      </div>
+    )}
+    {perfil.destacado.accion === 'curso' && (
+      <div className="field">
+        <label>Curso</label>
+        {misCursos.length === 0 ? (
+          <div className="field-hint">⚠ Todavía no tenés cursos publicados.</div>
+        ) : (
+          <select value={perfil.destacado.curso_slug}
+            onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, curso_slug: e.target.value}})}
+            style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}>
+            <option value="">Elegí un curso</option>
+            {misCursos.map(c => <option key={c.slug} value={c.slug}>{c.titulo}</option>)}
+          </select>
+        )}
+      </div>
+    )}
+  </div>
+
+  {/* ANUNCIO CON CONTADOR */}
+  <div className="s-card">
+    <div className="s-card-title">⏳ Anuncio con cuenta regresiva</div>
+    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
+      Para avisar algo que se viene: el inicio de un curso, un taller, un evento o la apertura de cupos. En tu página aparece con un contador de días, horas, minutos y segundos. Cuando llega la fecha, desaparece solo.
+    </div>
+    <div className="pref-row">
+      <div>
+        <div className="pref-label">Mostrar en mi página</div>
+        <div className="pref-sub">Se oculta automáticamente cuando pasa la fecha</div>
+      </div>
+      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
+        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+          checked={perfil.anuncio.activa}
+          onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, activa: e.target.checked}})}/>
+        <span style={{position:'absolute',inset:0,background:perfil.anuncio.activa?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.anuncio.activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+        </span>
+      </label>
+    </div>
+    <div className="field" style={{marginTop:'12px'}}>
+      <label>Etiqueta chiquita</label>
+      <input placeholder="Ej: Próximamente" value={perfil.anuncio.etiqueta} maxLength={40}
+        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, etiqueta: e.target.value}})}/>
+    </div>
+    <div className="field">
+      <label>Título</label>
+      <input placeholder="Ej: Empieza el curso de Tarot Evolutivo" value={perfil.anuncio.titulo} maxLength={70}
+        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, titulo: e.target.value}})}/>
+    </div>
+    <div className="field">
+      <label>Descripción (opcional)</label>
+      <textarea placeholder="Ej: 8 encuentros en vivo por Zoom. Cupos limitados." value={perfil.anuncio.descripcion} maxLength={200}
+        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, descripcion: e.target.value}})}
+        style={{minHeight:'60px',resize:'none'}}/>
+    </div>
+    <div className="field">
+      <label>¿Cuándo empieza? (fecha y hora)</label>
+      <input type="datetime-local" value={isoAInputLocal(perfil.anuncio.fecha)}
+        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, fecha: e.target.value ? new Date(e.target.value).toISOString() : ''}})}/>
+      <div className="field-hint">Ponela en tu horario. Cada persona ve la cuenta regresiva según el suyo.</div>
+    </div>
+    <div className="field">
+      <label>Botón</label>
+      <select value={perfil.anuncio.accion}
+        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, accion: e.target.value as Anuncio['accion']}})}
+        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}>
+        <option value="ninguno">Sin botón, solo el aviso</option>
+        <option value="curso">Va a uno de mis cursos de Luma</option>
+        <option value="whatsapp">Me escriben por WhatsApp</option>
+        <option value="link">Va a un link</option>
+      </select>
+    </div>
+    {perfil.anuncio.accion !== 'ninguno' && (
+      <div className="field">
+        <label>Texto del botón</label>
+        <input placeholder="Ej: Quiero mi lugar" value={perfil.anuncio.texto_boton} maxLength={30}
+          onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, texto_boton: e.target.value}})}/>
+      </div>
+    )}
+    {perfil.anuncio.accion === 'whatsapp' && (
+      <div className="field">
+        <label>Mensaje que les aparece ya escrito</label>
+        <textarea placeholder="Ej: Hola! Quiero anotarme al curso que empieza el 23 de octubre." value={perfil.anuncio.mensaje_whatsapp} maxLength={200}
+          onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, mensaje_whatsapp: e.target.value}})}
+          style={{minHeight:'60px',resize:'none'}}/>
+        {!perfil.whatsapp && <div className="field-hint">⚠ Primero cargá tu WhatsApp en la pestaña Perfil, si no el botón no aparece.</div>}
+      </div>
+    )}
+    {perfil.anuncio.accion === 'link' && (
+      <div className="field">
+        <label>Link</label>
+        <input placeholder="https://..." value={perfil.anuncio.url}
+          onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, url: e.target.value}})}/>
+      </div>
+    )}
+    {perfil.anuncio.accion === 'curso' && (
+      <div className="field">
+        <label>Curso</label>
+        {misCursos.length === 0 ? (
+          <div className="field-hint">⚠ Todavía no tenés cursos publicados.</div>
+        ) : (
+          <select value={perfil.anuncio.curso_slug}
+            onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, curso_slug: e.target.value}})}
+            style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}>
+            <option value="">Elegí un curso</option>
+            {misCursos.map(c => <option key={c.slug} value={c.slug}>{c.titulo}</option>)}
+          </select>
+        )}
+      </div>
+    )}
   </div>
 
   {/* LINKS */}

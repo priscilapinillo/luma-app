@@ -34,25 +34,19 @@ export default function CertificadoPage() {
   async function cargar() {
     try {
       const supabase = createClient()
-      const { data: c } = await supabase
-        .from('certificates').select('codigo_unico, fecha_emision, course_id, person_id, terapeuta_id')
-        .eq('codigo_unico', codigo).maybeSingle()
+      const { data, error } = await supabase.rpc('verificar_certificado', { p_codigo: codigo })
+      if (error) console.error('Error verificando certificado:', error)
+      const c = data?.[0]
 
       if (!c) { setNoEncontrado(true); setLoading(false); return }
-
-      const [{ data: curso }, { data: persona }, { data: perfil }] = await Promise.all([
-        supabase.from('courses').select('titulo').eq('id', c.course_id).maybeSingle(),
-        supabase.from('persons').select('nombre, apellido').eq('id', c.person_id).maybeSingle(),
-        supabase.from('therapist_profiles').select('nombre_profesional, template').eq('user_id', c.terapeuta_id).maybeSingle(),
-      ])
 
       setCert({
         codigo_unico: c.codigo_unico,
         fecha_emision: c.fecha_emision,
-        curso_titulo: curso?.titulo || 'Curso',
-        alumna_nombre: `${persona?.nombre || ''} ${persona?.apellido || ''}`.trim() || 'Alumna',
-        terapeuta_nombre: perfil?.nombre_profesional || 'Instructora',
-        template: perfil?.template || 'luna',
+        curso_titulo: c.curso_titulo || 'Curso',
+        alumna_nombre: c.alumna_nombre || 'Alumna',
+        terapeuta_nombre: c.terapeuta_nombre || 'Instructora',
+        template: c.template || 'luna',
       })
     } catch (e) { console.error(e); setNoEncontrado(true) }
     finally { setLoading(false) }
@@ -85,10 +79,9 @@ export default function CertificadoPage() {
           --cream:${t.cream};--text-dim:${t.textDim};--border:${t.border};
         }
         .cert{position:relative;width:100%;max-width:720px;aspect-ratio:1.55/1;border-radius:20px;overflow:hidden;
-          background:radial-gradient(circle at 12% 15%, var(--accent-dim) 0%, transparent 45%),
-                      radial-gradient(circle at 90% 85%, var(--primary-dim) 0%, transparent 45%),
-                      linear-gradient(150deg, var(--bg2), var(--bg));
-          box-shadow:0 40px 100px rgba(0,0,0,0.6);padding:6px}
+          background:var(--bg);box-shadow:0 40px 100px rgba(0,0,0,0.6);padding:6px}
+        .cert-fondo{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block}
+        .cert-inner{z-index:1}
         .cert-inner{position:relative;height:100%;border-radius:15px;border:1.5px solid var(--primary-dim);
           display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 40px;text-align:center;overflow:hidden}
         .cert-inner::before{content:'';position:absolute;inset:14px;border:0.5px solid var(--primary-dim);border-radius:8px;pointer-events:none}
@@ -110,8 +103,9 @@ export default function CertificadoPage() {
         @media print{
           @page{size:A4 landscape;margin:0}
           *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-          html,body{background:#0a0812 !important}
-          .cert-pagina{min-height:auto !important;height:100vh;padding:0 24px !important;box-sizing:border-box;overflow:hidden}
+          html,body{background:#FFFFFF !important}
+          .cert-pagina{background:#FFFFFF !important;min-height:auto !important;height:100vh;padding:0 24px !important;box-sizing:border-box;overflow:hidden}
+          .cert-pagina::after{content:'Verificá la autenticidad en lumaapp.lat/certificado';display:block;margin-top:14px;font-size:10px;letter-spacing:1px;color:#8A8299}
           .cert{box-shadow:none}
           .no-print{display:none !important}
         }
@@ -131,7 +125,26 @@ export default function CertificadoPage() {
         }
       `}</style>
 
-      <div className="cert">
+<div className="cert">
+        <svg className="cert-fondo" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="certBase" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor={t.bg2}/>
+              <stop offset="1" stopColor={t.bg}/>
+            </linearGradient>
+            <radialGradient id="certLuz1" cx="0.12" cy="0.15" r="0.45">
+              <stop offset="0" stopColor={t.accentDim}/>
+              <stop offset="1" stopColor={t.accentDim} stopOpacity="0"/>
+            </radialGradient>
+            <radialGradient id="certLuz2" cx="0.9" cy="0.85" r="0.45">
+              <stop offset="0" stopColor={t.primaryDim}/>
+              <stop offset="1" stopColor={t.primaryDim} stopOpacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="100" height="100" fill="url(#certBase)"/>
+          <rect width="100" height="100" fill="url(#certLuz1)"/>
+          <rect width="100" height="100" fill="url(#certLuz2)"/>
+        </svg>
         <div className="cert-inner">
           <svg className="mandala" viewBox="0 0 200 200" fill="none">
             <circle cx="100" cy="100" r="98" stroke={t.primary} strokeWidth="0.5"/>
