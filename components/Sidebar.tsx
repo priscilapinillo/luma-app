@@ -16,6 +16,17 @@ export default function Sidebar() {
   const [menuMobile, setMenuMobile] = useState(false)
   const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string} | null>(null)
   const [cursosPendientes, setCursosPendientes] = useState(0)
+  const [hayNovedad, setHayNovedad] = useState(false)
+
+  // al entrar a Novedades se apaga el puntito
+  useEffect(() => {
+    if (pathname === '/roadmap') setHayNovedad(false)
+  }, [pathname])
+  useEffect(() => {
+    const apagar = () => setHayNovedad(false)
+    window.addEventListener('luma-novedades-vistas', apagar)
+    return () => window.removeEventListener('luma-novedades-vistas', apagar)
+  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem('luma-theme')
@@ -49,6 +60,18 @@ export default function Sidebar() {
           .eq('terapeuta_id', user.id)
           .eq('estado', 'pendiente_pago')
         setCursosPendientes(count || 0)
+
+        // puntito de Novedades: hay alguna más nueva que la última vez que entró
+        try {
+          const [{ data: ultima }, { data: vistas }] = await Promise.all([
+            supabase.from('novedades').select('publicada_at').order('publicada_at', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('therapist_profiles').select('novedades_vistas_at').eq('user_id', user.id).maybeSingle(),
+          ])
+          if (ultima?.publicada_at && window.location.pathname !== '/roadmap') {
+            const vistasAt = vistas?.novedades_vistas_at
+            setHayNovedad(!vistasAt || new Date(ultima.publicada_at) > new Date(vistasAt))
+          }
+        } catch (e) { console.error('Error novedades:', e) }
       } catch (err) {
         console.error('Error perfil:', err)
       }
@@ -169,6 +192,8 @@ body.modal-ficha-abierto .sb-mobile {
   width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
 }
+.sb-dot-novedad{width:9px;height:9px;border-radius:50%;background:#EF4444;box-shadow:0 0 0 2px rgba(255,255,255,0.9);flex-shrink:0;animation:sbDotLatido 2s ease-in-out infinite}
+@keyframes sbDotLatido{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
 
           /* ── BOTÓN FLOTANTE ── */
           .sb-float-btn {
@@ -345,8 +370,9 @@ body.modal-ficha-abierto .sb-mobile {
         </nav>
 
         {/* BOTÓN FLOTANTE */}
-        <button className="sb-float-btn" onClick={() => setMenuMobile(!menuMobile)}>
+        <button className="sb-float-btn" onClick={() => setMenuMobile(!menuMobile)} style={{position:'fixed'}} aria-label={hayNovedad ? 'Menú (hay novedades)' : 'Menú'}>
   <Settings size={18}/>
+  {hayNovedad && <span className="sb-dot-novedad" style={{position:'absolute',top:'-3px',right:'-3px'}}/>}
 </button>
 
         {/* MENÚ DESPLEGABLE */}
@@ -398,6 +424,7 @@ body.modal-ficha-abierto .sb-mobile {
               <li>
                 <Link href="/roadmap" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
                   <Map size={16}/> <span>Novedades</span>
+                  {hayNovedad && <span className="sb-dot-novedad" style={{marginLeft:'auto'}}/>}
                 </Link>
               </li>
               <li>
@@ -478,6 +505,8 @@ body.modal-ficha-abierto .sb-mobile {
         .sb-user-plan{font-size:9px;color:var(--text-muted);margin-top:1px}
         .sb-logout{width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0;cursor:pointer;border-radius:5px;border:none;background:transparent;padding:0}
         .sb-logout:hover{color:#EF4444}
+        .sb-dot-novedad{width:8px;height:8px;border-radius:50%;background:#EF4444;flex-shrink:0;animation:sbDotLatido 2s ease-in-out infinite}
+        @keyframes sbDotLatido{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
         @media(max-width:767px){
        .sb{ display:none !important; }
 }
@@ -532,6 +561,7 @@ body.modal-ficha-abierto .sb-mobile {
 
         <Link href="/roadmap" className={`sb-link${pathname==='/roadmap'?' active':''}`}>
           <Map size={13}/>Novedades
+          {hayNovedad && <span className="sb-dot-novedad" style={{marginLeft:'auto'}}/>}
         </Link>
 
         <Link href="/ayuda" className={`sb-link${pathname==='/ayuda'?' active':''}`}>
