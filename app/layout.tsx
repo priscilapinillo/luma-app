@@ -38,8 +38,15 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{__html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/sw.js')
+              navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
                 .catch(function(err) { console.log('SW error:', err) })
+              function limpiarGlobito() {
+                if (document.visibilityState === 'visible' && navigator.clearAppBadge) {
+                  navigator.clearAppBadge().catch(function() {})
+                }
+              }
+              limpiarGlobito()
+              document.addEventListener('visibilitychange', limpiarGlobito)
             })
           }
         `}}/>
