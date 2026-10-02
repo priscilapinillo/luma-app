@@ -21,6 +21,8 @@ type Terapeuta = {
   instrucciones_pago?: string; acepta_transferencia?: boolean
   mp_activo?: boolean
   max_entregas_activas?: number | null
+  destacado?: { activa: boolean; etiqueta: string; titulo: string; descripcion: string; texto_boton: string; accion: 'whatsapp' | 'link' | 'curso'; url: string; curso_slug: string; mensaje_whatsapp: string } | null
+  anuncio?: { activa: boolean; etiqueta: string; titulo: string; descripcion: string; fecha: string; texto_boton: string; accion: 'ninguno' | 'whatsapp' | 'link' | 'curso'; url: string; curso_slug: string; mensaje_whatsapp: string } | null
   pausa_entre_turnos?: number | null
   moneda?: string
   zona_horaria?: string
@@ -250,6 +252,27 @@ async function crearSesionYBooking(
   return sesion
 }
 // ─── componente principal ───────────────────────────────────────────────────
+
+function ContadorAnuncio({ fecha }: { fecha: string }) {
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const ms = Math.max(0, new Date(fecha).getTime() - ahora)
+  const dias = Math.floor(ms / 86400000)
+  const horas = Math.floor(ms / 3600000) % 24
+  const min = Math.floor(ms / 60000) % 60
+  const seg = Math.floor(ms / 1000) % 60
+  return (
+    <div className="anuncio-contador">
+      <div className="anuncio-num"><b>{dias}</b><span>{dias === 1 ? 'día' : 'días'}</span></div>
+      <div className="anuncio-num"><b>{String(horas).padStart(2,'0')}</b><span>horas</span></div>
+      <div className="anuncio-num"><b>{String(min).padStart(2,'0')}</b><span>min</span></div>
+      <div className="anuncio-num"><b>{String(seg).padStart(2,'0')}</b><span>seg</span></div>
+    </div>
+  )
+}
 
 export default function PaginaPublica({ params }: { params: Promise<{ slug: string }> }) {
   const [terapeuta, setTerapeuta] = useState<Terapeuta | null>(null)
@@ -586,6 +609,23 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     </div>
   )
 
+  // ── bloques especiales (servicio destacado y anuncio) ──
+  const waNumero = (terapeuta.whatsapp || '').replace(/\D/g,'').replace(/^0+/,'')
+  function armarHref(b: { accion: string; url: string; curso_slug: string; mensaje_whatsapp: string }) {
+    if (b.accion === 'whatsapp') return waNumero ? `https://wa.me/${waNumero}${b.mensaje_whatsapp ? `?text=${encodeURIComponent(b.mensaje_whatsapp)}` : ''}` : ''
+    if (b.accion === 'curso') return b.curso_slug && cursos.some(c => c.slug === b.curso_slug) ? `/p/${terapeuta!.slug}/cursos/${b.curso_slug}` : ''
+    if (b.accion === 'link') return b.url || ''
+    return ''
+  }
+  const dest = terapeuta.destacado
+  const destHref = dest ? armarHref(dest) : ''
+  const mostrarDestacado = !!(dest && dest.activa && dest.titulo && destHref)
+  const anuncio = terapeuta.anuncio
+  const anuncioFechaOk = !!(anuncio?.fecha && new Date(anuncio.fecha).getTime() > Date.now())
+  const mostrarAnuncio = !!(anuncio && anuncio.activa && anuncio.titulo && anuncioFechaOk)
+  const anuncioHref = anuncio ? armarHref(anuncio) : ''
+  const fechaAnuncioTexto = anuncio?.fecha ? new Date(anuncio.fecha).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : ''
+
   // ── render principal ──────────────────────────────────────────────────────
 
   return (
@@ -700,6 +740,19 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hero-cta-secundario:hover{background:var(--primary-dim);color:var(--cream)}
         .hero-trust{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);letter-spacing:1px;font-family:var(--font-subtitle)}
 
+        .dest-card{position:relative;display:block;text-decoration:none;background:var(--card-bg);border:1px solid var(--primary-dim);border-radius:24px;padding:32px 24px;text-align:center;box-shadow:0 0 40px var(--primary-dim);transition:transform 0.3s}
+        .dest-card:hover{transform:translateY(-3px)}
+        .dest-etiqueta{display:inline-block;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--primary);border:0.5px solid var(--primary-dim);border-radius:50px;padding:5px 14px;margin-bottom:16px;font-family:var(--font-subtitle);font-weight:700}
+        .dest-titulo{font-family:var(--font-title);font-size:clamp(28px,6vw,40px);font-weight:300;color:var(--cream);line-height:1.1;margin-bottom:12px}
+        .dest-desc{font-size:15px;line-height:1.7;color:var(--text-dim);font-family:var(--font-subtitle);margin-bottom:24px}
+        .dest-card .hero-cta{margin-bottom:0}
+        .anuncio-card{background:var(--card-bg);border:1px solid var(--primary-dim);border-radius:24px;padding:32px 20px;text-align:center}
+        .anuncio-fecha{font-size:13px;color:var(--primary-light);font-family:var(--font-subtitle);font-weight:600;letter-spacing:1px;margin-bottom:22px;text-transform:capitalize}
+        .anuncio-contador{display:flex;justify-content:center;gap:10px;margin-bottom:24px}
+        .anuncio-num{min-width:64px;padding:12px 6px;border-radius:14px;background:var(--primary-dim);border:0.5px solid var(--border)}
+        .anuncio-num b{display:block;font-family:var(--font-title);font-size:clamp(26px,7vw,36px);font-weight:400;color:var(--cream);line-height:1;font-variant-numeric:tabular-nums}
+        .anuncio-num span{display:block;margin-top:6px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--primary);font-family:var(--font-subtitle);font-weight:700}
+        .anuncio-card .hero-cta{margin-bottom:0;text-decoration:none}
         .section{position:relative;z-index:1;padding:60px 20px;max-width:560px;margin:0 auto;width:100%}
         .section-label{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--primary);margin-bottom:12px;justify-content:center;font-family:var(--font-subtitle);font-weight:700}
         .section-title{font-family:var(--font-title);font-size:clamp(32px,6vw,48px);font-weight:300;color:var(--cream);letter-spacing:-1px;line-height:1.1;text-align:center;margin-bottom:8px}
@@ -954,6 +1007,19 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </div>
         <div className="hero-scroll"><ChevronDown size={20}/></div>
       </section>
+
+      {mostrarDestacado && dest && (<>
+        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+        <section className="section">
+          <a className="dest-card" href={destHref}
+            {...(dest.accion === 'curso' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
+            {dest.etiqueta && <div className="dest-etiqueta">{t.deco} {dest.etiqueta}</div>}
+            <h2 className="dest-titulo">{dest.titulo}</h2>
+            {dest.descripcion && <p className="dest-desc">{dest.descripcion}</p>}
+            <span className="hero-cta">{t.deco} {dest.texto_boton || 'Quiero saber más'}</span>
+          </a>
+        </section>
+      </>)}
 
       {secciones.sobre_mi && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
@@ -1322,6 +1388,25 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </div>
         )}
       </section>
+
+      {mostrarAnuncio && anuncio && (<>
+        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+        <section className="section">
+          <div className="anuncio-card">
+            {anuncio.etiqueta && <div className="dest-etiqueta">{t.deco} {anuncio.etiqueta}</div>}
+            <h2 className="dest-titulo">{anuncio.titulo}</h2>
+            {anuncio.descripcion && <p className="dest-desc" style={{marginBottom:'12px'}}>{anuncio.descripcion}</p>}
+            <div className="anuncio-fecha">{fechaAnuncioTexto} hs</div>
+            <ContadorAnuncio fecha={anuncio.fecha}/>
+            {anuncioHref && (
+              <a className="hero-cta" href={anuncioHref}
+                {...(anuncio.accion === 'curso' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
+                {t.deco} {anuncio.texto_boton || 'Quiero mi lugar'}
+              </a>
+            )}
+          </div>
+        </section>
+      </>)}
 
       {secciones.testimonios && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
