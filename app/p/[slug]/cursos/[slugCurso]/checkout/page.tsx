@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { Check, Shield } from 'lucide-react'
+import { tieneAccesoCurso } from '@/lib/acceso'
 
 type Terapeuta = {
   user_id: string; nombre_profesional: string; template?: string
@@ -47,6 +48,9 @@ export default function CheckoutCursoPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [enviado, setEnviado] = useState(false)
   const [mailRecuperoEnviado, setMailRecuperoEnviado] = useState(false)
+  const [sesionAlumna, setSesionAlumna] = useState<{ userId: string; personaId: string; email: string; nombre: string } | null>(null)
+  const [yaTieneAcceso, setYaTieneAcceso] = useState(false)
+  const [avisoPago, setAvisoPago] = useState('')
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -66,6 +70,31 @@ export default function CheckoutCursoPage() {
       if (!cursoData) { setLoading(false); return }
       setCurso(cursoData)
 
+      // si ya entró como alumna, no le pedimos los datos de nuevo
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: sub } = await supabase
+          .from('subscriptions').select('user_id').eq('user_id', user.id).maybeSingle()
+        if (!sub) {
+          const { data: persona } = await supabase
+            .from('persons').select('id, nombre, apellido').eq('auth_user_id', user.id).maybeSingle()
+          if (persona) {
+            setSesionAlumna({
+              userId: user.id,
+              personaId: persona.id,
+              email: user.email || '',
+              nombre: `${persona.nombre || ''} ${persona.apellido || ''}`.trim(),
+            })
+            const { data: previa } = await supabase
+              .from('enrollments').select('estado, modalidad, fecha_vencimiento')
+              .eq('course_id', cursoData.id).eq('person_id', persona.id).maybeSingle()
+            if (previa && tieneAccesoCurso({ estado: previa.estado, modalidad: previa.modalidad, fecha_vencimiento: previa.fecha_vencimiento })) {
+              setYaTieneAcceso(true)
+            }
+          }
+        }
+      }
+
       const p = new URLSearchParams(window.location.search)
       const enrollmentId = p.get('enrollment_id')
       const paymentId = p.get('payment_id') || p.get('collection_id')
@@ -79,6 +108,11 @@ export default function CheckoutCursoPage() {
         window.history.replaceState(null, '', window.location.pathname)
         if (r.ok) setEnviado(true)
         else setErrorMsg('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta con el comprobante y te habilita el acceso.')
+      } else if (p.get('status') && p.get('status') !== 'approved') {
+        window.history.replaceState(null, '', window.location.pathname)
+        setAvisoPago(p.get('status') === 'pending' || p.get('status') === 'in_process'
+          ? 'Tu pago quedó en proceso. Si pagaste en efectivo o con otro medio que tarda, mandale el comprobante a la terapeuta para que te habilite el acceso.'
+          : 'El pago no se completó y no se te cobró nada. Podés intentarlo de nuevo cuando quieras.')
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -89,9 +123,11 @@ export default function CheckoutCursoPage() {
   const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const sinMetodoPago = !tieneMP && !tieneTransferencia
   const esGratis = curso != null && curso.precio != null && Number(curso.precio) === 0
-  const formularioListo = !!(nombre.trim() && email.trim() && password.trim().length >= 6)
+  const formularioListo = !!sesionAlumna || !!(nombre.trim() && email.trim() && password.trim().length >= 6)
+  const nombreAlumna = sesionAlumna?.nombre || nombre
 
   async function autenticarAlumna(): Promise<string | null> {
+    if (sesionAlumna) return sesionAlumna.userId
     const supabase = createClient()
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: email.trim(), password,
@@ -155,20 +191,32 @@ export default function CheckoutCursoPage() {
       vence.setDate(vence.getDate() + 30)
       datos.fecha_vencimiento = vence.toISOString()
     }
+
+    // si ya tiene el curso, no tocamos nada (si no, le sacaríamos el acceso)
+    const { data: previa } = await supabase
+      .from('enrollments').select('id, estado, modalidad, fecha_vencimiento')
+      .eq('course_id', curso!.id).eq('person_id', personaId).maybeSingle()
+    if (previa && tieneAccesoCurso({ estado: previa.estado, modalidad: previa.modalidad, fecha_vencimiento: previa.fecha_vencimiento })) {
+      setYaTieneAcceso(true)
+      return 'tiene_acceso' as const
+    }
+    // si ya estaba pendiente, es un reintento: no le mandamos otra notificación a la terapeuta
+    const avisarTerapeuta = !previa || previa.estado !== 'pendiente_pago'
+
     const { data, error } = await supabase
       .from('enrollments')
       .upsert(datos, { onConflict: 'course_id,person_id' })
       .select().single()
     if (error) { console.error('Error creando inscripción:', error); return null }
 
-    try {
+    if (avisarTerapeuta) try {
       await fetch('/api/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: curso!.user_id,
-          titulo: '✦ Nueva compra en Luma',
-          cuerpo: `${nombre || 'Alguien'} se inscribió a ${curso!.titulo}`,
+          titulo: previa ? '✦ Renovación de curso en Luma' : '✦ Nueva compra en Luma',
+          cuerpo: `${nombreAlumna || 'Alguien'} ${previa ? 'quiere renovar' : 'se inscribió a'} ${curso!.titulo}`,
         }),
       })
     } catch(e) { console.error('Error notificación:', e) }
@@ -185,6 +233,7 @@ export default function CheckoutCursoPage() {
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      if (insc === 'tiene_acceso') return
       if (!insc) { setErrorMsg('Hubo un error al confirmar. Intentá de nuevo.'); return }
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
@@ -198,7 +247,9 @@ export default function CheckoutCursoPage() {
       if (!userId) return
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
-      await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      if (insc === 'tiene_acceso') return
+      if (!insc) { setErrorMsg('Hubo un error al registrar tu inscripción. Intentá de nuevo.'); return }
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
   }
@@ -229,7 +280,7 @@ export default function CheckoutCursoPage() {
           body: JSON.stringify({
             userId: curso!.user_id,
             titulo: '✦ Nueva alumna en Luma',
-            cuerpo: `${nombre || 'Alguien'} se inscribió gratis a ${curso!.titulo}`,
+            cuerpo: `${nombreAlumna || 'Alguien'} se inscribió gratis a ${curso!.titulo}`,
           }),
         })
       } catch (e) { console.error('Error notificación:', e) }
@@ -248,6 +299,13 @@ export default function CheckoutCursoPage() {
     setMailRecuperoEnviado(true)
   }
 
+  async function usarOtraCuenta() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setSesionAlumna(null)
+    setYaTieneAcceso(false)
+  }
+
   async function handleMP() {
     setErrorMsg('')
     setPreparandoMP(true)
@@ -257,6 +315,7 @@ export default function CheckoutCursoPage() {
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      if (insc === 'tiene_acceso') return
       if (!insc) { setErrorMsg('Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
 
       const origin = window.location.origin
@@ -333,7 +392,16 @@ export default function CheckoutCursoPage() {
       `}</style>
 
       <div className="wrap">
-        {!enviado ? (
+        {!enviado && yaTieneAcceso ? (
+          <div className="exito-wrap">
+            <div className="exito-circle"><Check size={32} color="white"/></div>
+            <h2 style={{fontSize:'24px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Ya tenés este curso ✦</h2>
+            <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
+              Tu acceso a <strong>{curso.titulo}</strong> está activo. No hace falta que pagues de nuevo.
+            </p>
+            <a className="exito-btn" href={`/mi-cuenta/cursos/${curso.id}`}>Entrar al curso</a>
+          </div>
+        ) : !enviado ? (
           <>
             <div className="resumen-curso">
               {curso.imagen_url && <img src={curso.imagen_url} className="resumen-img"/>}
@@ -343,6 +411,17 @@ export default function CheckoutCursoPage() {
               </div>
             </div>
 
+            {avisoPago && <div className="error-msg" style={{color:'var(--cream)',background:'var(--primary-dim)',borderColor:'var(--border)'}}>{avisoPago}</div>}
+
+            {sesionAlumna ? (
+              <div style={{background:'var(--card-bg)',border:'1px solid var(--border)',borderRadius:'12px',padding:'12px 14px',marginBottom:'16px',fontSize:'13px',color:'var(--text)'}}>
+                Comprando como <strong style={{color:'var(--cream)'}}>{sesionAlumna.email}</strong>
+                <button type="button" onClick={usarOtraCuenta}
+                  style={{display:'block',marginTop:'4px',background:'none',border:'none',padding:0,fontSize:'12px',color:'var(--primary)',textDecoration:'underline',cursor:'pointer',fontFamily:'inherit'}}>
+                  ¿No sos vos? Usar otra cuenta
+                </button>
+              </div>
+            ) : (<>
             <div className="field">
               <label>Nombre completo</label>
               <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: María López"/>
@@ -372,6 +451,7 @@ export default function CheckoutCursoPage() {
                 </div>
               )}
             </div>
+            </>)}
 
             {errorMsg && <div className="error-msg">{errorMsg}</div>}
 

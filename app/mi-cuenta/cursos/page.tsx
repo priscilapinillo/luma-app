@@ -133,7 +133,10 @@ export default function MisCursosPage() {
         @media(min-width:640px){ .mc-grid{grid-template-columns:1fr 1fr} }
         .mc-card{background:white;border:1px solid #E5E5E5;border-radius:14px;overflow:hidden;cursor:pointer;transition:transform 0.15s}
         .mc-card:hover{transform:translateY(-2px)}
-        .mc-card.pendiente{cursor:default;opacity:0.75}
+        .mc-card.pendiente{cursor:default}
+        .mc-card.pendiente .mc-card-img{opacity:0.6}
+        .mc-btn-completar{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;background:#8B5CF6;color:white;text-decoration:none}
+        .mc-pendiente-txt{font-size:12px;color:#525252;line-height:1.5;margin-top:8px}
         .mc-card-img{width:100%;height:140px;object-fit:cover;background:#F0EBFF}
         .mc-card-body{padding:14px 16px}
         .mc-card-titulo{font-size:14px;font-weight:700;color:#0A0A0A;margin-bottom:4px}
@@ -182,9 +185,28 @@ export default function MisCursosPage() {
                       </div>
                     )}
                     <div className="mc-ver-btn">Ver curso →</div>
-                  </>) : i.estado !== 'activa' ? (
-                    <span className="mc-badge pendiente_pago">⏳ Esperando confirmación de pago</span>
-                  ) : (<>
+                  </>) : i.estado !== 'activa' ? (<>
+                    <span className="mc-badge pendiente_pago">⏳ Pago pendiente</span>
+                    <div className="mc-pendiente-txt">
+                      Si ya transferiste, {i.terapeuta?.nombre_profesional || 'tu terapeuta'} lo confirma en breve. Si no llegaste a pagar, podés completarlo ahora.
+                    </div>
+                    <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}}>
+                      {i.terapeuta?.slug && i.course.slug && (
+                        <a className="mc-btn-completar" href={`/p/${i.terapeuta.slug}/cursos/${i.course.slug}/checkout`}
+                          onClick={e => e.stopPropagation()}>
+                          Completar pago →
+                        </a>
+                      )}
+                      {i.terapeuta?.whatsapp && (
+                        <a href={`https://wa.me/${i.terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Te paso el comprobante de mi inscripción a "${i.course.titulo}".`)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          style={{display:'inline-flex',alignItems:'center',gap:'6px',fontSize:'11px',fontWeight:700,padding:'7px 12px',borderRadius:'8px',background:'#25D366',color:'white',textDecoration:'none'}}>
+                          💬 Enviar comprobante
+                        </a>
+                      )}
+                    </div>
+                  </>) : (<>
                     <span className="mc-badge pendiente_pago">⚠️ Acceso vencido</span>
                     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}}>
                       {(i.terapeuta?.alias_pago || i.terapeuta?.cbu) && (
