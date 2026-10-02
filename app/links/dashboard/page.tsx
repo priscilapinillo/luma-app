@@ -193,9 +193,12 @@ export default function LinksDashboardPage() {
         <div className="ld-upgrade">
           <div style={{fontSize:'13px',fontWeight:700,marginBottom:'4px'}}>Esto es solo el comienzo ✦</div>
           <div style={{fontSize:'12px',opacity:0.85,marginBottom:'10px',lineHeight:1.5}}>
-            Con Luma podés transformar este link en tu página profesional completa, con reservas, servicios, pagos y gestión de consultantes.
+            Con Luma podés transformar este link en tu página profesional completa, con reservas, servicios, cursos, tus links, pagos y gestión de consultantes.
           </div>
-          <a href="/suscripcion" style={{fontSize:'12px',fontWeight:700,color:'#C4B5FD'}}>Conocé Luma →</a>
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            <a href="/" style={{fontSize:'12px',fontWeight:700,color:'white',padding:'8px 14px',borderRadius:'10px',border:'1px solid rgba(196,181,253,0.5)',textDecoration:'none'}}>Más información</a>
+            <a href="/#precio" style={{fontSize:'12px',fontWeight:700,color:'#1A1035',background:'#C4B5FD',padding:'8px 14px',borderRadius:'10px',textDecoration:'none'}}>Ver planes →</a>
+          </div>
         </div>
 
         <div className="ld-card">
