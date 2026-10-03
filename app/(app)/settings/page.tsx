@@ -1213,9 +1213,12 @@ export default function AjustesPage() {
     </div>
     <div className="field">
       <label>¿Cuándo empieza? (fecha y hora)</label>
-      <input type="datetime-local" value={isoAInputLocal(perfil.anuncio.fecha)}
-        onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, fecha: e.target.value ? new Date(e.target.value).toISOString() : ''}})}/>
+      <input type="datetime-local" defaultValue={isoAInputLocal(perfil.anuncio.fecha)}
+        onChange={e => { const v = e.target.value; if (!v) { setPerfil({...perfil, anuncio: {...perfil.anuncio, fecha: ''}}); return } const d = new Date(v); if (isNaN(d.getTime()) || d.getFullYear() < 2000) return; setPerfil({...perfil, anuncio: {...perfil.anuncio, fecha: d.toISOString()}}) }}/>
       <div className="field-hint">Ponela en tu horario. Cada persona ve la cuenta regresiva según el suyo.</div>
+      {perfil.anuncio.activa && (!perfil.anuncio.titulo.trim() || !perfil.anuncio.fecha || new Date(perfil.anuncio.fecha).getTime() <= Date.now()) && (
+        <div className="field-hint" style={{color:'#DC2626',fontWeight:600}}>⚠️ Tu anuncio todavía no se muestra: necesita un título y una fecha futura.</div>
+      )}
     </div>
     <div className="field">
       <label>Botón</label>

@@ -5,7 +5,7 @@ import { detectarContenido } from '@/lib/contenido'
 
 // ─── Pegá acá el link del video cuando lo tengas (YouTube, Vimeo, Loom o Drive). ───
 // Mientras esté vacío, la sección NO aparece en la landing.
-const VIDEO_PRESENTACION_URL = ''
+const VIDEO_PRESENTACION_URL = 'https://youtu.be/C7NGGfjjWjM'
 
 export default function VideoPresentacion() {
   const [reproduciendo, setReproduciendo] = useState(false)

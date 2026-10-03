@@ -264,6 +264,7 @@ function ContadorAnuncio({ fecha }: { fecha: string }) {
   const horas = Math.floor(ms / 3600000) % 24
   const min = Math.floor(ms / 60000) % 60
   const seg = Math.floor(ms / 1000) % 60
+  if (ms === 0) return <div className="anuncio-fecha" style={{marginBottom:'24px'}}>✦ ¡Ya empezó! ✦</div>
   return (
     <div className="anuncio-contador">
       <div className="anuncio-num"><b>{dias}</b><span>{dias === 1 ? 'día' : 'días'}</span></div>
