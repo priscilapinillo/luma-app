@@ -586,7 +586,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const faqItems = terapeuta?.faq || []
   const isLuna = (terapeuta?.template || 'luna') === 'luna'
   const mostrarTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
-  const requierePago = terapeuta?.tipo_pago === 'sena' || terapeuta?.tipo_pago === 'completo'
+  const mostrarMP = !!terapeuta?.mp_activo
+  const requierePago = (terapeuta?.tipo_pago === 'sena' || terapeuta?.tipo_pago === 'completo') && (mostrarMP || mostrarTransferencia)
   const formularioListo = !!(form.nombre.trim() && form.whatsapp.trim())
 
   const qBusqueda = sinTildes(busqueda.trim())
@@ -1314,6 +1315,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               {requierePago && (<>
                 <div className="section-label" style={{marginBottom:'12px',justifyContent:'flex-start'}}>¿Cómo querés pagar?</div>
                 <div className="metodo-pago-wrap">
+                  {mostrarMP && (
                   <div className={`metodo-pago-opt${metodoPago==='mp'?' sel':''}`}
                     onClick={() => setMetodoPago('mp')}>
                     <div className="metodo-radio">{metodoPago==='mp' && <div className="metodo-radio-inner"/>}</div>
@@ -1322,6 +1324,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                       <div className="metodo-sub">Pagá con tarjeta, débito o saldo MP</div>
                     </div>
                   </div>
+                  )}
                   {mostrarTransferencia && (
                     <div className={`metodo-pago-opt${metodoPago==='transferencia'?' sel':''}`}
                       onClick={() => setMetodoPago('transferencia')}>
