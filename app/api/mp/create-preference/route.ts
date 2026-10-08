@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 // El precio, el nombre y los links de vuelta se arman acá con datos de la base,
 // no con lo que manda el navegador.
 async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
-  const { reservaId, serviceId, therapistId } = body
+  const { reservaId, serviceId, therapistId, reemplazaId } = body
   if (!UUID.test(String(reservaId)) || !serviceId || !therapistId) {
     return NextResponse.json({ motivo: 'faltan_datos' }, { status: 400 })
   }
@@ -112,6 +112,19 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
       }).catch(() => {})
     }
     return NextResponse.json({ motivo: tokenMalo ? 'token_invalido' : 'error_mp' }, { status: 400 })
+  }
+
+  // Si la misma clienta tenía otro turno sin pagar (eligió otro horario), se cancela ese turno viejo.
+  // Solo turnos de esta terapeuta, con Mercado Pago, sin pagar y creados en las últimas 2 horas.
+  if (reemplazaId && UUID.test(String(reemplazaId)) && reemplazaId !== reservaId) {
+    const { error: errCancel } = await supabase.from('sessions')
+      .update({ estado_sesion: 'cancelada' })
+      .eq('id', reemplazaId)
+      .eq('user_id', therapistId)
+      .eq('metodo_pago', 'mercadopago')
+      .eq('estado_pago', 'pendiente')
+      .gte('created_at', new Date(Date.now() - 2 * 3600000).toISOString())
+    if (errCancel) console.warn('create-preference: no se pudo cancelar el turno anterior', errCancel)
   }
 
   return NextResponse.json({ init_point: data.init_point, id: data.id, existe: !!sesion })

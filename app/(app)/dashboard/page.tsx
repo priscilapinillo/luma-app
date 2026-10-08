@@ -224,7 +224,7 @@ const [contextoLocal, setContextoLocal] = useState('')
             .filter((s: any) => s.estado_pago === 'pagado' && esDelMesActual(s.fecha))
             .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
           const pendiente = sesiones
-            .filter((s: any) => s.estado_pago === 'pendiente' && esDelMesActual(s.fecha))
+            .filter((s: any) => s.estado_pago === 'pendiente' && esDelMesActual(s.fecha) && !(s.metodo_pago === 'mercadopago' && (s.public_bookings?.length || 0) > 0))
             .reduce((acc: number, s: any) => acc + (s.precio || 0), 0)
           setIngresosMes(cobrado)
           setPendientesMes(pendiente)
@@ -1239,7 +1239,7 @@ setTabDetalle('contexto')
               return (
                 <div style={{background:'#FEF9C3',border:'0.5px solid #FDE68A',borderRadius:'12px',padding:'11px 14px',fontSize:'12px',color:'#854D0E',lineHeight:'1.6',flexShrink:0}}>
                   <div style={{fontWeight:800,fontSize:'13px',marginBottom:'4px'}}>💳 El pago con Mercado Pago no se completó</div>
-                  Reservó desde tu página y empezó a pagar, pero <strong>Mercado Pago no confirmó el cobro</strong>: puede haber cerrado la ventana o tenido un problema con la tarjeta. El turno sigue reservado.
+                  Reservó desde tu página y empezó a pagar, pero <strong>Mercado Pago no confirmó el cobro</strong>: puede haber cerrado la ventana o tenido un problema con la tarjeta. Mientras no se pague, <strong>no se suma a tus finanzas</strong>. Si te paga por otro medio, marcalo como pagado; si no, podés eliminar el turno.
                   {wa && (
                     <a href={wa} target="_blank" rel="noopener noreferrer"
                       style={{display:'block',marginTop:'8px',textAlign:'center',padding:'7px',background:'#DCFCE7',color:'#166534',borderRadius:'8px',fontSize:'11px',fontWeight:600,textDecoration:'none',border:'0.5px solid #BBF7D0'}}>

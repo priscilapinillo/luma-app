@@ -65,6 +65,7 @@ export default function FinanzasPage() {
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState<'semana' | 'mes' | 'anio'>('mes')
   const [offset, setOffset] = useState(0)
+  const [mpSinCompletar, setMpSinCompletar] = useState<any[]>([])
   const [detalleAbierto, setDetalleAbierto] = useState(false)
   const [pagosCursos, setPagosCursos] = useState<PagoCurso[]>([])
   const [cursosMap, setCursosMap] = useState<Record<string, string>>({})
@@ -84,7 +85,7 @@ export default function FinanzasPage() {
       }
 
       const [{ data: sess }, { data: pacs }, { data: pagosC }, { data: misCursos }] = await Promise.all([
-        supabase.from('sessions').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
+        supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).order('fecha', { ascending: true }),
         supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
         supabase.from('course_payments').select('id,monto,fecha,metodo,tipo,course_id').eq('terapeuta_id', user.id),
         supabase.from('courses').select('id,titulo').eq('user_id', user.id),
@@ -98,7 +99,13 @@ export default function FinanzasPage() {
       }
 
       // las sesiones canceladas no cuentan (igual que en el Dashboard)
-      if (sess) setSesiones(sess.filter((s: any) => s.estado_sesion !== 'cancelada'))
+      if (sess) {
+        // los pagos con Mercado Pago que la clienta no terminó no son plata pendiente: se muestran aparte y no suman
+        const esMPSinCompletar = (s: any) => s.metodo_pago === 'mercadopago' && s.estado_pago === 'pendiente' && (s.public_bookings?.length || 0) > 0
+        const validas = sess.filter((s: any) => s.estado_sesion !== 'cancelada')
+        setSesiones(validas.filter((s: any) => !esMPSinCompletar(s)))
+        setMpSinCompletar(validas.filter(esMPSinCompletar))
+      }
       if (pacs) {
         const map: Record<string, string> = {}
         pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
@@ -655,6 +662,15 @@ export default function FinanzasPage() {
           </div>
         </div>
 
+        {(() => {
+          const enPeriodo = mpSinCompletar.filter((s: any) => { const f = parseFecha(s.fecha); return f >= rangoActual.inicio && f <= rangoActual.fin })
+          if (enPeriodo.length === 0) return null
+          return (
+            <div style={{background:'var(--bg-card)',border:'0.5px dashed var(--border)',borderRadius:'12px',padding:'11px 14px',fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.6',marginBottom:'12px'}}>
+              💳 <strong>{enPeriodo.length} {enPeriodo.length === 1 ? 'reserva' : 'reservas'} con Mercado Pago sin completar</strong> en este período: la clienta empezó a pagar pero no terminó, así que <strong>no se suma</strong> a tus finanzas. Si te paga por otro medio, marcala como pagada desde Inicio.
+            </div>
+          )
+        })()}
         <div className="det-section">
           <button className="det-toggle" onClick={() => setDetalleAbierto(!detalleAbierto)}>
             <div className="z-label" style={{margin:0}}><List size={12}/>Detalle de sesiones · {periodoLabel} ({sesionesDetalle.length})</div>

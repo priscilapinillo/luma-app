@@ -254,7 +254,8 @@ async function crearSesionYBooking(
   return sesion
 }
 // ─── reserva con Mercado Pago ───────────────────────────────────────────────
-// Se guarda en esta pestaña para poder reintentar el pago sin crear otro turno.
+// Se guarda en este navegador para poder reintentar el pago sin crear otro turno
+// (aunque Mercado Pago la devuelva en otra pestaña).
 type ReservaMP = { clave: string; id: string; creada: number; servicioId: string; servicioNombre: string; fecha: string; hora: string }
 const CLAVE_RESERVA_MP = 'luma-reserva-mp'
 const MINUTOS_PARA_PAGAR = 25
@@ -271,13 +272,13 @@ function nuevoId(): string {
   return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20)
 }
 function leerReservaMP(): ReservaMP | null {
-  try { const r = sessionStorage.getItem(CLAVE_RESERVA_MP); return r ? JSON.parse(r) as ReservaMP : null } catch { return null }
+  try { const r = localStorage.getItem(CLAVE_RESERVA_MP); return r ? JSON.parse(r) as ReservaMP : null } catch { return null }
 }
 function guardarReservaMP(r: ReservaMP) {
-  try { sessionStorage.setItem(CLAVE_RESERVA_MP, JSON.stringify(r)) } catch {}
+  try { localStorage.setItem(CLAVE_RESERVA_MP, JSON.stringify(r)) } catch {}
 }
 function borrarReservaMP() {
-  try { sessionStorage.removeItem(CLAVE_RESERVA_MP) } catch {}
+  try { localStorage.removeItem(CLAVE_RESERVA_MP) } catch {}
 }
 function reservaMPVigente(r: ReservaMP | null) {
   return !!r && Date.now() - r.creada < MINUTOS_PARA_PAGAR * 60000
@@ -584,11 +585,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     return 'En este momento no se puede pagar con Mercado Pago. Tu turno todavía no se reservó.' + alternativa
   }
 
-  async function pedirPagoMP(reservaId: string, serviceId: string) {
+  async function pedirPagoMP(reservaId: string, serviceId: string, reemplazaId?: string) {
     const res = await fetch('/api/mp/create-preference', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reservaId, serviceId, therapistId: terapeuta!.user_id }),
+      body: JSON.stringify({ reservaId, serviceId, therapistId: terapeuta!.user_id, ...(reemplazaId ? { reemplazaId } : {}) }),
     })
     const data = await res.json().catch(() => ({}))
     return { ok: res.ok && !!data.init_point, ...data } as { ok: boolean; init_point?: string; existe?: boolean; ya_pagado?: boolean; motivo?: string }
@@ -603,9 +604,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       const clave = [terapeuta.user_id, servicioSel.id, fechaSel, horaSel, form.whatsapp.replace(/\D/g, '')].join('|')
       const previa = leerReservaMP()
       const reservaId = previa && previa.clave === clave && reservaMPVigente(previa) ? previa.id : nuevoId()
+      // si esta misma persona ya tenía otro turno sin pagar con esta terapeuta (eligió otro horario),
+      // ese turno viejo se cancela para que no quede ocupando lugar ni sumando como pendiente
+      const reemplazaId = previa && previa.id !== reservaId && reservaMPVigente(previa)
+        && previa.clave.startsWith(terapeuta.user_id + '|') ? previa.id : undefined
 
       // 1) preparar el pago
-      const pago = await pedirPagoMP(reservaId, servicioSel.id)
+      const pago = await pedirPagoMP(reservaId, servicioSel.id, reemplazaId)
       if (pago.ya_pagado) { borrarReservaMP(); setEnviado(true); return }
       if (!pago.ok) {
         if (pago.motivo === 'reserva_vencida') borrarReservaMP()
