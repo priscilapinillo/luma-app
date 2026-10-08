@@ -194,6 +194,7 @@ async function crearSesionYBooking(
     nombre: string
     whatsapp: string
     metodoPago: string
+    id?: string
   }
 ) {
   if (!opts.pacienteId) {
@@ -202,6 +203,7 @@ async function crearSesionYBooking(
   }
 
   const { data: sesion, error } = await supabase.from('sessions').insert({
+    ...(opts.id ? { id: opts.id } : {}),
     user_id: opts.terapeutaId,
     patient_id: opts.pacienteId,
     service_id: opts.servicio.id,
@@ -251,6 +253,36 @@ async function crearSesionYBooking(
 
   return sesion
 }
+// ─── reserva con Mercado Pago ───────────────────────────────────────────────
+// Se guarda en esta pestaña para poder reintentar el pago sin crear otro turno.
+type ReservaMP = { clave: string; id: string; creada: number; servicioId: string; servicioNombre: string; fecha: string; hora: string }
+const CLAVE_RESERVA_MP = 'luma-reserva-mp'
+const MINUTOS_PARA_PAGAR = 25
+
+function nuevoId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  } catch {}
+  const b = new Uint8Array(16)
+  crypto.getRandomValues(b)
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
+  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20)
+}
+function leerReservaMP(): ReservaMP | null {
+  try { const r = sessionStorage.getItem(CLAVE_RESERVA_MP); return r ? JSON.parse(r) as ReservaMP : null } catch { return null }
+}
+function guardarReservaMP(r: ReservaMP) {
+  try { sessionStorage.setItem(CLAVE_RESERVA_MP, JSON.stringify(r)) } catch {}
+}
+function borrarReservaMP() {
+  try { sessionStorage.removeItem(CLAVE_RESERVA_MP) } catch {}
+}
+function reservaMPVigente(r: ReservaMP | null) {
+  return !!r && Date.now() - r.creada < MINUTOS_PARA_PAGAR * 60000
+}
+
 // ─── componente principal ───────────────────────────────────────────────────
 
 function ContadorAnuncio({ fecha }: { fecha: string }) {
@@ -306,6 +338,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [mpInitPoint, setMpInitPoint] = useState<string | null>(null)
   const [preparandoMP, setPreparandoMP] = useState(false)
   const [mpError, setMpError] = useState('')
+  const [pagoFallido, setPagoFallido] = useState<{ sessionId: string; reserva: ReservaMP | null; error?: string } | null>(null)
+  const [reintentandoMP, setReintentandoMP] = useState(false)
 
   // UI
   const [diasSel, setDiasSel] = useState<Date[]>([])
@@ -335,13 +369,19 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     return () => { if (teniaDark) document.documentElement.classList.add('dark') }
   }, [])
 
-  // detectar vuelta de MP con status=approved
+  // vuelta de Mercado Pago: si se aprobó se confirma; si no, se ofrece reintentar sin crear otro turno
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
     const status = p.get('status')
     const sessionId = p.get('session_id')
+    if (!status || !sessionId) return
     const paymentId = p.get('payment_id') || p.get('collection_id')
-    if (status === 'approved' && sessionId && paymentId) {
+    const previa = leerReservaMP()
+    window.history.replaceState(null, '', window.location.pathname)
+    const avisoNoConfirmado = 'No pudimos confirmar tu pago todavía. Si ya pagaste, quedate tranquila: se confirma solo en unos minutos. Si no, escribile a la terapeuta.'
+    if (status === 'approved') {
+      if (!paymentId) { alert(avisoNoConfirmado); return }
+      setMetodoPago('mp')
       fetch('/api/mp/confirmar-pago-reserva', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,11 +389,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       })
         .then(r => r.json())
         .then(r => {
-          window.history.replaceState(null, '', window.location.pathname)
-          if (r.ok) setEnviado(true)
-          else alert('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta y te confirma el turno.')
+          if (r.ok) { borrarReservaMP(); setEnviado(true) }
+          else alert(avisoNoConfirmado)
         })
-        .catch(() => alert('No pudimos confirmar tu pago todavía. Si ya pagaste, escribile a la terapeuta y te confirma el turno.'))
+        .catch(() => alert(avisoNoConfirmado))
+    } else {
+      setPagoFallido({ sessionId, reserva: previa && previa.id === sessionId ? previa : null })
     }
   }, [])
 
@@ -531,50 +572,91 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     }
   }
 
-  // MERCADO PAGO — se llama al hacer click en el botón, no en useEffect
+  // MERCADO PAGO
+  // Orden seguro: 1) se prepara el pago  2) recién si salió bien se guarda el turno (una sola vez)  3) se va a pagar.
+  // Si Mercado Pago falla, no se crea ningún turno. Si reintenta, se reutiliza el mismo turno.
+  function mensajeErrorMP(motivo?: string) {
+    if (motivo === 'reserva_vencida') return 'Pasó el tiempo para pagar este turno. Elegí el horario de nuevo, por favor.'
+    if (motivo === 'servicio_invalido') return 'Este servicio ya no está disponible. Actualizá la página, por favor.'
+    const alternativa = mostrarTransferencia
+      ? ' Podés elegir pagar por transferencia.'
+      : terapeuta?.whatsapp ? ' Escribile por WhatsApp para coordinar el pago.' : ''
+    return 'En este momento no se puede pagar con Mercado Pago. Tu turno todavía no se reservó.' + alternativa
+  }
+
+  async function pedirPagoMP(reservaId: string, serviceId: string) {
+    const res = await fetch('/api/mp/create-preference', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reservaId, serviceId, therapistId: terapeuta!.user_id }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return { ok: res.ok && !!data.init_point, ...data } as { ok: boolean; init_point?: string; existe?: boolean; ya_pagado?: boolean; motivo?: string }
+  }
+
   async function prepararMP() {
     if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) return
     if (preparandoMP) return
     setPreparandoMP(true)
     setMpError('')
     try {
-      const supabase = createClient()
-      const pacienteId = await buscarOCrearPaciente(supabase, terapeuta.user_id, form.nombre, form.whatsapp)
-      const sesion = await crearSesionYBooking(supabase, {
-        terapeutaId: terapeuta.user_id, pacienteId,
-        servicio: servicioSel, fecha: fechaSel, hora: horaSel,
-        mensaje: form.mensaje, nombre: form.nombre, whatsapp: form.whatsapp,
-        metodoPago: 'mercadopago',
-      })
-      if (!sesion) { setMpError('Error al crear la reserva. Intentá de nuevo.'); return }
+      const clave = [terapeuta.user_id, servicioSel.id, fechaSel, horaSel, form.whatsapp.replace(/\D/g, '')].join('|')
+      const previa = leerReservaMP()
+      const reservaId = previa && previa.clave === clave && reservaMPVigente(previa) ? previa.id : nuevoId()
 
-      const monto = servicioSel.precio_base
-      const origin = window.location.origin
-      const res = await fetch('/api/mp/create-preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          servicioNombre: servicioSel.nombre,
-          precio: servicioSel.precio_base,
-          monto,
-          therapistId: terapeuta.user_id,
-          externalReference: sesion.id,
-          successUrl: `${origin}/p/${terapeuta.slug || ''}?status=approved&session_id=${sesion.id}`,
-          failureUrl: `${origin}/p/${terapeuta.slug || ''}?status=failure&session_id=${sesion.id}`,
-        }),
-      })
-      const data = await res.json()
-      if (data.init_point) {
-        // redirigir directamente — funciona en iOS Safari porque está en el mismo click handler
-        window.location.href = data.init_point
-      } else {
-        setMpError('No se pudo conectar con Mercado Pago. Intentá de nuevo.')
+      // 1) preparar el pago
+      const pago = await pedirPagoMP(reservaId, servicioSel.id)
+      if (pago.ya_pagado) { borrarReservaMP(); setEnviado(true); return }
+      if (!pago.ok) {
+        if (pago.motivo === 'reserva_vencida') borrarReservaMP()
+        setMpError(mensajeErrorMP(pago.motivo))
+        return
       }
+
+      // 2) guardar el turno solo si todavía no existe
+      if (!pago.existe) {
+        const supabase = createClient()
+        const pacienteId = await buscarOCrearPaciente(supabase, terapeuta.user_id, form.nombre, form.whatsapp)
+        const sesion = await crearSesionYBooking(supabase, {
+          terapeutaId: terapeuta.user_id, pacienteId,
+          servicio: servicioSel, fecha: fechaSel, hora: horaSel,
+          mensaje: form.mensaje, nombre: form.nombre, whatsapp: form.whatsapp,
+          metodoPago: 'mercadopago',
+          id: reservaId,
+        })
+        if (!sesion) { setMpError('No pudimos guardar tu turno. Intentá de nuevo en unos minutos.'); return }
+        guardarReservaMP({ clave, id: reservaId, creada: Date.now(), servicioId: servicioSel.id, servicioNombre: servicioSel.nombre, fecha: fechaSel, hora: horaSel })
+      }
+
+      // 3) ir a pagar
+      window.location.href = pago.init_point!
     } catch (e) {
       console.error(e)
-      setMpError('Error al conectar con Mercado Pago.')
+      setMpError(mensajeErrorMP())
     } finally {
       setPreparandoMP(false)
+    }
+  }
+
+  // reintentar el pago del mismo turno (cuando vuelve de Mercado Pago sin pagar)
+  async function reintentarMP() {
+    const r = pagoFallido?.reserva
+    if (!terapeuta || !r || reintentandoMP) return
+    setReintentandoMP(true)
+    try {
+      const pago = await pedirPagoMP(r.id, r.servicioId)
+      if (pago.ya_pagado) { borrarReservaMP(); setPagoFallido(null); setMetodoPago('mp'); setEnviado(true); return }
+      if (!pago.ok || !pago.existe) {
+        if (pago.motivo === 'reserva_vencida' || !pago.existe) borrarReservaMP()
+        setPagoFallido({ sessionId: r.id, reserva: null, error: mensajeErrorMP(pago.motivo) })
+        return
+      }
+      window.location.href = pago.init_point!
+    } catch (e) {
+      console.error(e)
+      setPagoFallido({ sessionId: r.id, reserva: r, error: mensajeErrorMP() })
+    } finally {
+      setReintentandoMP(false)
     }
   }
 
@@ -957,7 +1039,44 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           .hero .hero-text{max-width:100%;flex:unset}
           .hero-trust{justify-content:center}
         }
+        .pago-fallido-fondo{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:20px}
+        .pago-fallido{width:100%;max-width:420px;max-height:90vh;overflow-y:auto;background:var(--bg2);border:0.5px solid var(--border);border-radius:22px;padding:28px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
+        .pago-fallido-icono{font-size:28px;color:var(--primary);margin-bottom:8px}
+        .pago-fallido-titulo{font-family:var(--font-title);font-size:24px;font-weight:400;color:var(--cream);margin:0 0 10px}
+        .pago-fallido-texto{font-size:14px;line-height:1.6;color:var(--text);font-family:var(--font-subtitle);margin:0 0 14px}
+        .pago-fallido .wsp-btn{margin-top:12px;width:100%;justify-content:center}
+        .pago-fallido-cerrar{margin-top:14px;background:none;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:var(--font-subtitle);text-decoration:underline}
       `}</style>
+
+      {pagoFallido && (
+        <div className="pago-fallido-fondo" onClick={() => setPagoFallido(null)}>
+          <div className="pago-fallido" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <div className="pago-fallido-icono">{t.deco}</div>
+            <h2 className="pago-fallido-titulo">Tu pago no se completó</h2>
+            <p className="pago-fallido-texto">Quedate tranquila: no se te cobró nada.</p>
+            {pagoFallido.reserva && reservaMPVigente(pagoFallido.reserva) ? (<>
+              <p className="pago-fallido-texto">
+                Tu turno de <strong>{pagoFallido.reserva.servicioNombre}</strong>
+                {pagoFallido.reserva.hora !== '00:00' && <> del {new Date(pagoFallido.reserva.fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })} a las {pagoFallido.reserva.hora} hs</>}
+                {' '}queda guardado unos minutos más para que puedas pagarlo.
+              </p>
+              <button className="confirmar-btn" onClick={reintentarMP} disabled={reintentandoMP}>
+                {reintentandoMP ? `${t.deco} Preparando pago...` : `${t.deco} Reintentar el pago`}
+              </button>
+            </>) : !pagoFallido.error && (
+              <p className="pago-fallido-texto">Si querés, volvé a elegir tu turno.</p>
+            )}
+            {pagoFallido.error && <div className="error-msg" style={{marginTop:'12px'}}>{pagoFallido.error}</div>}
+            {terapeuta.whatsapp && (
+              <a className="wsp-btn" target="_blank" rel="noopener noreferrer"
+                href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent('Hola! Quise pagar mi turno por Mercado Pago y no pude. ¿Me ayudás?')}`}>
+                💬 Escribir por WhatsApp
+              </a>
+            )}
+            <button className="pago-fallido-cerrar" onClick={() => setPagoFallido(null)}>Cerrar</button>
+          </div>
+        </div>
+      )}
 
       {t.stars && (
         <div className="stars-bg">
@@ -1355,6 +1474,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {/* MP seleccionado */}
                 {metodoPago === 'mp' && (<>
                   {mpError && <div className="error-msg">{mpError}</div>}
+                  {mpError && !mostrarTransferencia && terapeuta.whatsapp && (
+                    <a className="wsp-btn" style={{width:'100%',justifyContent:'center',marginBottom:'12px'}} target="_blank" rel="noopener noreferrer"
+                      href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero reservar ${servicioSel?.nombre || 'un turno'}${horaSel ? ` el ${fechaSel} a las ${horaSel}hs` : ''} pero no pude pagar con Mercado Pago.`)}`}>
+                      💬 Coordinar por WhatsApp
+                    </a>
+                  )}
                   <button className="confirmar-btn" onClick={prepararMP} disabled={preparandoMP}>
                     {preparandoMP ? `${t.deco} Preparando pago...` : `${t.deco} Pagar con Mercado Pago`}
                   </button>
