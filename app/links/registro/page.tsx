@@ -4,6 +4,9 @@ import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { tieneAccesoLumaActivo } from '@/lib/accesoLinks'
+import MetaPixel from '@/components/MetaPixel'
+import { eventoMeta } from '@/lib/metaPixel'
+import { leerOrigen } from '@/lib/origen'
 
 
 export default function LinksRegistroPage() {
@@ -27,7 +30,7 @@ export default function LinksRegistroPage() {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { full_name: nombre } },
+        options: { data: { full_name: nombre, ...(leerOrigen() ? { origen: leerOrigen() } : {}) } },
       })
 
       if (signUpError) {
@@ -62,6 +65,7 @@ export default function LinksRegistroPage() {
         return
       }
 
+      eventoMeta('CompleteRegistration', { content_name: 'Luma Links' })
       router.push('/links/dashboard')
     } catch (err) {
       console.error(err)
@@ -134,6 +138,7 @@ export default function LinksRegistroPage() {
       `}</style>
 
       <div className="lr-glow g1"/>
+      <MetaPixel/>
       <div className="lr-glow g2"/>
 
       <header className="lr-top">

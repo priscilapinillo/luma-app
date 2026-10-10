@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Check } from 'lucide-react'
+import MetaPixel from '@/components/MetaPixel'
+import { eventoMeta } from '@/lib/metaPixel'
 
 const PLANES = [
   {
@@ -43,6 +45,7 @@ export default function SuscripcionPage() {
   async function handlePagar(planId: string) {
     setError('')
     setLoading(planId)
+    eventoMeta('InitiateCheckout', { content_name: planId, value: planId === 'premium' ? 28000 : 9900, currency: 'ARS' })
     try {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
@@ -157,6 +160,7 @@ export default function SuscripcionPage() {
 
       <div className="sus-wrap">
         <div className="sus-orb1"/><div className="sus-orb2"/>
+          <MetaPixel/>
         <div className="sus-inner">
           <span className="sus-logo">Luma</span>
           <h1 className="sus-title">Elegí tu plan</h1>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Script from 'next/script'
 import InstagramFlotante from '@/components/InstagramFlotante'
 import VideoPresentacion from '@/components/VideoPresentacion'
+import MetaPixel from '@/components/MetaPixel'
 
 // ─── Íconos SVG genéricos para la animación del Hero ───────────────────────
 function IconExcel() {
@@ -1021,6 +1022,7 @@ export default function LandingPage() {
   </section>
 
   <InstagramFlotante/>
+  <MetaPixel medirClicsRegistro/>
 {/* SECCIÓN 10 — CIERRE */}
   <section className="cierre-section">
     <div className="cierre-blob b1"/>

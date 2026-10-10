@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { emailEsAlumna } from '../verificar-rol'
+import MetaPixel from '@/components/MetaPixel'
+import { eventoMeta } from '@/lib/metaPixel'
+import { leerOrigen } from '@/lib/origen'
 
 export default function AuthPage() {
   const [flipped, setFlipped] = useState(false)
@@ -82,10 +85,10 @@ export default function AuthPage() {
     const supabase = createClient()
     const { data, error } = await supabase.auth.signUp({
       email: regEmail, password: regPassword,
-      options: { data: { full_name: nombre } }
+      options: { data: { full_name: nombre, ...(leerOrigen() ? { origen: leerOrigen() } : {}) } }
     })
     if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); registrandoRef.current = false; return }
-    console.log('DEBUG registro — data.user:', data.user, 'data.session:', data.session)
+    eventoMeta('CompleteRegistration', { content_name: 'Luma' })
     if (data.user) {
       const trialEnds = new Date()
       trialEnds.setDate(trialEnds.getDate() + 7)
@@ -305,6 +308,7 @@ export default function AuthPage() {
       `}</style>
 
       <div className="auth-wrap">
+        <MetaPixel/>
 
         {/* IZQUIERDA */}
         <div className="auth-left">
