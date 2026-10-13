@@ -125,7 +125,35 @@ export async function POST(req: NextRequest) {
     const vencidas = new Set((subs || []).filter((x: any) => calcularAcceso(x) === 'sin_acceso').map((x: any) => x.user_id))
     const { data: activas } = await s.from('therapist_profiles').select('user_id, slug').eq('pagina_activa', true)
     const pausadas = (activas || []).filter((p: any) => vencidas.has(p.user_id))
-    if (pausadas.length) hallazgos.push({ tipo: 'revisar', que: `${pausadas.length} terapeuta(s) con el plan vencido y la página activa: sus visitantes ven «no disponible»`, detalle: pausadas.map((p: any) => p.slug) })
+    // es esperable (terminó la prueba y no pagó): se avisa solo los lunes, como resumen para escribirles
+    if (pausadas.length && new Date().getUTCDay() === 1) hallazgos.push({ tipo: 'revisar', que: `${pausadas.length} terapeuta(s) con el plan vencido y la página activa: sus visitantes ven «no disponible»`, detalle: pausadas.map((p: any) => p.slug) })
+  } catch {}
+
+  try {
+    // cuentas nuevas a medio crear: no son terapeutas, ni Luma Links, ni alumnas (el registro falló)
+    const hace7dias = Date.now() - 7 * 86400000
+    const recientes: { id: string; email: string }[] = []
+    for (let pagina = 1; pagina <= 10; pagina++) {
+      const { data } = await s.auth.admin.listUsers({ page: pagina, perPage: 200 })
+      const users = data?.users || []
+      for (const u of users) if (new Date(u.created_at).getTime() > hace7dias) recientes.push({ id: u.id, email: u.email || '' })
+      if (users.length < 200) break
+    }
+    if (recientes.length) {
+      const ids = recientes.map(r => r.id)
+      const [{ data: subs }, { data: links }, { data: personas }] = await Promise.all([
+        s.from('subscriptions').select('user_id').in('user_id', ids),
+        s.from('luma_links_profiles').select('auth_user_id').in('auth_user_id', ids),
+        s.from('persons').select('auth_user_id').in('auth_user_id', ids),
+      ])
+      const conTipo = new Set([
+        ...(subs || []).map((x: any) => x.user_id),
+        ...(links || []).map((x: any) => x.auth_user_id),
+        ...(personas || []).map((x: any) => x.auth_user_id),
+      ])
+      const incompletas = recientes.filter(r => !conTipo.has(r.id))
+      if (incompletas.length) hallazgos.push({ tipo: 'revisar', que: `${incompletas.length} cuenta(s) nueva(s) a medio crear (no son terapeuta, ni Links, ni alumna): revisá el registro`, detalle: incompletas.map(r => r.email) })
+    }
   } catch {}
 
   const alarmas = hallazgos.filter(h => h.tipo === 'seguridad').length

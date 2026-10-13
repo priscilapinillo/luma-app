@@ -252,7 +252,7 @@ export default function LinksDashboardPage() {
           </div>
           <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
             <a href="/" style={{fontSize:'12px',fontWeight:700,color:'white',padding:'8px 14px',borderRadius:'10px',border:'1px solid rgba(196,181,253,0.5)',textDecoration:'none'}}>Más información</a>
-            <a href="/#precio" style={{fontSize:'12px',fontWeight:700,color:'#1A1035',background:'#C4B5FD',padding:'8px 14px',borderRadius:'10px',textDecoration:'none'}}>Ver planes →</a>
+            <a href="/pasar-a-luma" style={{fontSize:'12px',fontWeight:700,color:'#1A1035',background:'#C4B5FD',padding:'8px 14px',borderRadius:'10px',textDecoration:'none'}}>Ver planes →</a>
           </div>
         </div>
 

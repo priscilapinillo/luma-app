@@ -16,6 +16,8 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [esCuentaLinks, setEsCuentaLinks] = useState(false)
+  const [cuentaIncompleta, setCuentaIncompleta] = useState(false)
+  const [completando, setCompletando] = useState(false)
   const [loading, setLoading] = useState(false)
   const [nombre, setNombre] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -34,30 +36,57 @@ export default function AuthPage() {
     setLoading(true)
     setError('')
     setEsCuentaLinks(false)
+    setCuentaIncompleta(false)
     const supabase = createClient()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
 
     const userId = data.user?.id
 
+    // 1) terapeuta (con plan, aunque esté vencido) → su panel.
+    //    Va primero: así, si alguna vez también tuvo Luma Links, igual puede entrar a pagar su plan.
+    const { data: sub } = await supabase
+      .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
+    if (sub) { router.push('/dashboard'); return }
+
+    // 2) cuenta de Luma Links → se entra por Luma Links
     const { data: linksProfile } = await supabase
       .from('luma_links_profiles').select('id').eq('auth_user_id', userId).maybeSingle()
-
-      if (linksProfile) {
-        await supabase.auth.signOut({ scope: 'local' })
+    if (linksProfile) {
+      await supabase.auth.signOut({ scope: 'local' })
       setEsCuentaLinks(true)
       setLoading(false)
       return
     }
 
-    const { data: sub } = await supabase
-      .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
+    // 3) alumna → sus cursos
+    const { data: persona } = await supabase
+      .from('persons').select('id').eq('auth_user_id', userId).maybeSingle()
+    if (persona) { router.push('/mi-cuenta/cursos'); return }
 
-    if (sub) {
-      router.push('/dashboard')
-    } else {
-      router.push('/mi-cuenta/cursos')
+    // 4) cuenta a medio crear (se registró pero no se le activó la prueba): le ofrecemos terminarla
+    setCuentaIncompleta(true)
+    setLoading(false)
+  }
+
+  // termina una cuenta que quedó a medio crear: le activa la prueba gratis de terapeuta (lo hace el servidor)
+  async function completarCuenta() {
+    setCompletando(true)
+    setError('')
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setCuentaIncompleta(false); setError('Volvé a iniciar sesión.'); setCompletando(false); return }
+      const res = await fetch('/api/cuenta/empezar-prueba', {
+        method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const r = await res.json().catch(() => ({ ok: false }))
+      if (r.ok) { router.push('/dashboard'); return }
+      setError(r.error || 'No pudimos activar tu prueba. Probá de nuevo en unos minutos.')
+    } catch {
+      setError('No pudimos conectarnos. Revisá tu internet y probá de nuevo.')
     }
+    setCompletando(false)
   }
   async function handleRecuperar(e?: React.FormEvent) {
     e?.preventDefault()
@@ -90,14 +119,32 @@ export default function AuthPage() {
     if (error) { setRegError('No se pudo crear la cuenta. Intentá con otro email.'); setRegLoading(false); registrandoRef.current = false; return }
     eventoMeta('CompleteRegistration', { content_name: 'Luma' })
     if (data.user) {
-      const trialEnds = new Date()
-      trialEnds.setDate(trialEnds.getDate() + 7)
-      const { error: errorSub } = await supabase.from('subscriptions').insert({
-        user_id: data.user.id,
-        status: 'trial',
-        trial_ends_at: trialEnds.toISOString(),
-      })
-      console.log('DEBUG registro — error insert subscriptions:', errorSub)
+      // la prueba gratis la activa el servidor; si eso falla, se intenta desde acá como respaldo
+      let listo = false
+      if (data.session) {
+        try {
+          const res = await fetch('/api/cuenta/empezar-prueba', {
+            method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}` },
+          })
+          const r = await res.json().catch(() => ({ ok: false }))
+          listo = !!r.ok
+        } catch {}
+      }
+      if (!listo) {
+        const trialEnds = new Date()
+        trialEnds.setDate(trialEnds.getDate() + 7)
+        const { error: errorSub } = await supabase.from('subscriptions').insert({
+          user_id: data.user.id,
+          status: 'trial',
+          trial_ends_at: trialEnds.toISOString(),
+        })
+        listo = !errorSub || errorSub.code === '23505'
+      }
+      if (!listo) {
+        // nunca más la mandamos al panel con la cuenta a medio crear
+        setRegError('Tu cuenta se creó, pero no pudimos activar tu prueba gratis. Iniciá sesión con tu email y contraseña y la activamos desde ahí.')
+        setRegLoading(false); registrandoRef.current = false; return
+      }
     }
     router.push('/dashboard')
     setRegLoading(false)
@@ -370,6 +417,18 @@ export default function AuthPage() {
                       <div style={{fontSize:'12px',color:'#92400E',marginBottom:'12px',padding:'10px 12px',background:'#FFFBEB',borderRadius:'8px',border:'1px solid #FDE68A'}}>
                         Esta es una cuenta de <strong>Luma Links</strong>, no de terapeuta. Entrá desde{' '}
                         <Link href="/links/login" style={{color:'#92400E',fontWeight:700,textDecoration:'underline'}}>acá</Link>.
+                      </div>
+                    )}
+                    {cuentaIncompleta && (
+                      <div style={{fontSize:'13px',color:'#4C1D95',marginBottom:'12px',padding:'14px',background:'#F4F0FF',borderRadius:'10px',border:'1px solid #DDD6FE',lineHeight:1.5}}>
+                        Tu cuenta quedó <strong>a medio crear</strong> (fue un error nuestro, perdón). ¿Qué querés hacer?
+                        <button type="button" onClick={completarCuenta} disabled={completando}
+                          style={{display:'block',width:'100%',marginTop:'10px',padding:'11px',borderRadius:'8px',border:'none',background:'linear-gradient(135deg,#7C3AED,#8B5CF6)',color:'white',fontWeight:700,fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
+                          {completando ? 'Activando…' : 'Soy terapeuta: empezar mis 7 días gratis'}
+                        </button>
+                        <Link href="/mi-cuenta/cursos" style={{display:'block',textAlign:'center',marginTop:'8px',color:'#7C3AED',fontWeight:600,textDecoration:'underline'}}>
+                          Soy alumna: ir a mis cursos
+                        </Link>
                       </div>
                     )}
 {!recuperando ? (

@@ -164,7 +164,7 @@ export default function SuscripcionPage() {
         <div className="sus-inner">
           <span className="sus-logo">Luma</span>
           <h1 className="sus-title">Elegí tu plan</h1>
-          <p className="sus-sub">Cancelás cuando querás · Cobro mensual automático por Mercado Pago</p>
+          <p className="sus-sub">Cancelás cuando quieras · Cobro mensual automático por Mercado Pago, solo con tarjeta de crédito o débito</p>
 
           {error && <div className="sus-error">{error}</div>}
 
@@ -193,6 +193,7 @@ export default function SuscripcionPage() {
           </div>
 
           <div className="sus-seguro">🔒 Pago seguro con Mercado Pago</div>
+          <div className="sus-seguro" style={{marginTop:'6px',lineHeight:1.5}}>Podés pagar con cualquier cuenta de Mercado Pago, aunque tenga otro email. No elijas &quot;dinero en cuenta&quot;: el cobro mensual solo funciona con tarjeta.</div>
 
           {!transferAbierta ? (
             <button className="sus-transfer-link" onClick={() => setTransferAbierta(true)}>

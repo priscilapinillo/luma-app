@@ -59,6 +59,16 @@ export default function CheckoutCursoPage() {
   const [inscripcion, setInscripcion] = useState<{ id: string; suscripcion_estado: string | null } | null>(null)
   const [suscripcionInfo, setSuscripcionInfo] = useState<EstadoSuscripcion | null>(null)
   const [consultando, setConsultando] = useState(false)
+  const [volvioDeMP, setVolvioDeMP] = useState(false)
+  const [volvioSinSesion, setVolvioSinSesion] = useState(false)
+
+  // ¿viene de Mercado Pago después de suscribirse? Mercado Pago a veces le agrega cosas
+  // al link de vuelta, así que se reconoce de dos formas
+  function volvioDeSuscripcion() {
+    if (typeof window === 'undefined') return false
+    const q = window.location.search
+    return q.includes('suscripcion=volver') || q.includes('preapproval_id=')
+  }
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -101,19 +111,29 @@ export default function CheckoutCursoPage() {
               setYaTieneAcceso(true)
             }
             // volvió de Mercado Pago después de suscribirse: le preguntamos a Mercado Pago cómo quedó
-            if (previa && new URLSearchParams(window.location.search).get('suscripcion') === 'volver') {
+            if (previa && volvioDeSuscripcion()) {
               window.history.replaceState(null, '', window.location.pathname)
-              await consultarSuscripcion(previa.id)
+              setVolvioDeMP(true)
+              setConsultando(true)
+              let info = await consultarSuscripcion(previa.id)
+              // recién pagó: Mercado Pago puede tardar unos segundos en mostrar la suscripción
+              for (let i = 0; i < 6 && (!info || info.suscripcion_estado === 'pendiente' || info.suscripcion_estado === 'creando'); i++) {
+                await new Promise(ok => setTimeout(ok, 4000))
+                info = await consultarSuscripcion(previa.id)
+              }
+              setConsultando(false)
+              return
             }
           }
         }
       }
 
       const p = new URLSearchParams(window.location.search)
-      if (p.get('suscripcion') === 'volver') {
+      if (volvioDeSuscripcion()) {
         // volvió de Mercado Pago pero no hay sesión en este navegador
         window.history.replaceState(null, '', window.location.pathname)
-        setAvisoPago('Entrá con tu email y contraseña para ver el estado de tu suscripción. Si ya la completaste, el curso te va a aparecer en Mi cuenta.')
+        setVolvioSinSesion(true)
+        return
       }
       const enrollmentId = p.get('enrollment_id')
       const paymentId = p.get('payment_id') || p.get('collection_id')
@@ -406,7 +426,7 @@ export default function CheckoutCursoPage() {
 
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280',fontFamily:'sans-serif'}}>
-      Cargando...
+      {consultando ? 'Confirmando tu pago con Mercado Pago… no cierres esta página.' : 'Cargando...'}
     </div>
   )
 
@@ -457,7 +477,16 @@ export default function CheckoutCursoPage() {
       `}</style>
 
       <div className="wrap">
-        {!enviado && suscripcionInfo && !suscripcionInfo.acceso ? (
+        {volvioSinSesion && !sesionAlumna ? (
+          <div className="exito-wrap">
+            <div className="exito-circle"><Check size={32} color="white"/></div>
+            <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>¡Gracias! Volviste de Mercado Pago</h2>
+            <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
+              Si completaste el pago, ya está: <strong>no pagues de nuevo</strong>. Entrá a tu cuenta con tu email y contraseña y vas a ver <strong>{curso.titulo}</strong> en Mis cursos (puede tardar unos minutos en habilitarse).
+            </p>
+            <a className="exito-btn" href="/mi-cuenta/cursos">Entrar a mi cuenta</a>
+          </div>
+        ) : !enviado && suscripcionInfo && !suscripcionInfo.acceso ? (
           <div className="exito-wrap">
             {suscripcionInfo.suscripcion_estado === 'esperando_cobro' ? (<>
               <div className="exito-circle"><Check size={32} color="white"/></div>
@@ -467,6 +496,17 @@ export default function CheckoutCursoPage() {
                 Podés cerrar esta página: el curso te va a aparecer en Mi cuenta. <strong>No hace falta que pagues de nuevo.</strong>
               </p>
               <a className="exito-btn" href="/mi-cuenta/cursos">Ir a mi cuenta</a>
+            </>) : volvioDeMP && suscripcionInfo.suscripcion_estado === 'pendiente' ? (<>
+              <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Estamos confirmando tu pago</h2>
+              <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
+                Mercado Pago todavía no nos avisó. Si completaste el pago, <strong>no pagues de nuevo</strong>: a veces tarda unos minutos. El curso te va a aparecer en Mi cuenta apenas se confirme.
+              </p>
+              <a className="exito-btn" href="/mi-cuenta/cursos">Ir a mi cuenta</a>
+              {suscripcionInfo.link && (
+                <p style={{fontSize:'12px',color:'var(--text-dim)',marginTop:'18px'}}>
+                  ¿No llegaste a pagar? <a href={suscripcionInfo.link} style={{color:'var(--primary)'}}>Completalo acá</a>
+                </p>
+              )}
             </>) : suscripcionInfo.suscripcion_estado === 'pendiente' && suscripcionInfo.link ? (<>
               <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Tenés una suscripción sin completar</h2>
               <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>Todavía no terminaste en Mercado Pago. Si te llegó a descontar dinero, Mercado Pago lo devuelve solo. Para completarla, usá tarjeta de crédito o débito (no dinero en cuenta).</p>

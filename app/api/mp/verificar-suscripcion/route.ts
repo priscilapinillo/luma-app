@@ -1,62 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { db, mpLuma, aplicarPreapproval, vincularPlanesLuma, duenaDePreapproval } from '@/lib/planLuma'
 
+// Le pregunta a Mercado Pago cómo está el plan de una terapeuta y lo guarda.
+// Solo copia lo que dice Mercado Pago: aunque alguien la llame con otro userId, no puede regalarse nada.
+// La usan el panel (por si el aviso de Mercado Pago no llegó) y la pantalla "Confirmando tu pago".
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json()
-    if (!userId) return NextResponse.json({ error: 'Falta userId' }, { status: 400 })
+    const { userId } = await req.json().catch(() => ({}))
+    if (!userId || typeof userId !== 'string' || !/^[0-9a-f-]{36}$/i.test(userId)) {
+      return NextResponse.json({ vigente: false, motivo: 'sin_usuario' }, { status: 400 })
+    }
+    const s = db()
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    const { data: sub } = await supabase
-      .from('subscriptions')
-      .select('mp_subscription_id, plan')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (!sub?.mp_subscription_id) {
-      return NextResponse.json({ vigente: false, motivo: 'sin_suscripcion_mp' })
+    // 1) la suscripción que ya tiene guardada (si tiene)
+    const { data: sub } = await s.from('subscriptions').select('mp_subscription_id').eq('user_id', userId).maybeSingle()
+    if (sub?.mp_subscription_id) {
+      const r = await mpLuma(`/preapproval/${encodeURIComponent(sub.mp_subscription_id)}`)
+      if (r.ok && r.data?.id) {
+        const duena = await duenaDePreapproval(r.data)
+        if (duena && duena.userId === userId) await aplicarPreapproval(userId, duena.plan, r.data)
+      } else {
+        console.error('verificar-suscripcion: no se pudo leer el preapproval', sub.mp_subscription_id, r.status)
+      }
     }
 
-    const res = await fetch(`https://api.mercadopago.com/preapproval/${sub.mp_subscription_id}`, {
-      headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` },
-    })
-    const preapproval = await res.json()
+    // 2) los planes que preparó para pagar (por si pagó y todavía no está guardado)
+    await vincularPlanesLuma(userId).catch(e => console.error('verificar-suscripcion: vincular', e))
 
-    if (!res.ok) {
-      console.error('Error consultando MP en verificar-suscripcion:', preapproval)
-      return NextResponse.json({ vigente: false, motivo: 'error_mp' })
-    }
-
-    if (preapproval.status === 'authorized') {
-      // MP confirma que sigue vigente — autocuramos la base, así no hace falta tocar Supabase a mano
-      const nuevaFecha = preapproval.next_payment_date
-        ? new Date(preapproval.next_payment_date)
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-
-      await supabase.from('subscriptions').update({
-        status: 'active',
-        current_period_ends_at: nuevaFecha.toISOString(),
-      }).eq('user_id', userId)
-
-      return NextResponse.json({
-        vigente: true,
-        plan: sub.plan,
-        current_period_ends_at: nuevaFecha.toISOString(),
-      })
-    }
-
-    // MP confirma que NO está vigente (cancelada, pausada, etc.) — reflejamos eso también
-    await supabase.from('subscriptions').update({
-      status: preapproval.status === 'paused' ? 'past_due' : 'cancelled',
-    }).eq('user_id', userId)
-
-    return NextResponse.json({ vigente: false, motivo: preapproval.status })
+    // 3) cómo quedó
+    const { data: fin } = await s.from('subscriptions').select('status, plan, current_period_ends_at').eq('user_id', userId).maybeSingle()
+    const vigente = fin?.status === 'active' && !!fin?.current_period_ends_at && new Date(fin.current_period_ends_at) > new Date()
+    return NextResponse.json({ vigente, plan: fin?.plan || null, motivo: fin?.status || 'sin_plan' })
   } catch (err) {
-    console.error('Error en verificar-suscripcion:', err)
-    return NextResponse.json({ vigente: false, motivo: 'error_interno' }, { status: 500 })
+    console.error('Error verificar-suscripcion:', err)
+    return NextResponse.json({ vigente: false, motivo: 'error' }, { status: 500 })
   }
 }

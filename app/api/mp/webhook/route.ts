@@ -1,80 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { mpLuma, aplicarPreapproval, duenaDePreapproval } from '@/lib/planLuma'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-function sumarUnMes(fecha: Date) {
-  const nueva = new Date(fecha)
-  nueva.setMonth(nueva.getMonth() + 1)
-  return nueva
-}
-
-async function cancelarPreapprovalEnMP(id: string) {
-  try {
-    const r = await fetch(`https://api.mercadopago.com/preapproval/${id}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'cancelled' }),
-    })
-    if (!r.ok) console.error('Webhook: no se pudo cancelar el plan anterior', id, r.status)
-  } catch (e) { console.error('Webhook: error cancelando el plan anterior', id, e) }
-}
-
+// Aviso de Mercado Pago sobre los planes de Luma (lo que pagan las terapeutas).
+// Solo cambia el plan con lo que Mercado Pago confirma al consultarlo directamente.
 async function actualizarDesdePreapproval(preapprovalId: string) {
-  const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
-    headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` },
-    cache: 'no-store',
-  })
-  if (!res.ok) { console.error('Webhook: no se pudo leer el preapproval', preapprovalId, res.status); return }
-  const preapproval = await res.json()
+  const r = await mpLuma(`/preapproval/${encodeURIComponent(preapprovalId)}`)
+  if (!r.ok || !r.data?.id) { console.error('Webhook: no se pudo leer el preapproval', preapprovalId, r.status); return }
+  const preapproval = r.data
 
-  const [userId, plan] = (preapproval.external_reference || '').split(':')
-  if (!userId) { console.error('Webhook: preapproval sin external_reference válido'); return }
-
-  // "pending" = abrió el pago en Mercado Pago pero todavía no lo autorizó: no se toca nada
-  // (antes esto la pasaba a "past_due" y le sacaba el acceso a quien estaba en prueba)
+  // "pending" = abrió el pago pero todavía no lo autorizó: no se toca nada
   if (!['authorized', 'cancelled', 'paused'].includes(preapproval.status)) {
     console.log(`Webhook: preapproval ${preapprovalId} en estado ${preapproval.status}, no cambia nada`)
     return
   }
 
-  const { data: subActual } = await supabase
-    .from('subscriptions').select('mp_subscription_id, status')
-    .eq('user_id', userId).maybeSingle()
-  const idActual = subActual?.mp_subscription_id || null
-  // solo es "la vigente" si es exactamente la que ya está guardada como autorizada
-  const esElActual = !!idActual && idActual === preapprovalId
+  // de quién es: por la referencia vieja ("userId:plan") o por el plan que preparó Luma
+  const duena = await duenaDePreapproval(preapproval)
+  if (!duena) { console.error('Webhook: no se sabe de quién es el preapproval', preapprovalId); return }
 
-  if (preapproval.status === 'authorized') {
-    // plan nuevo autorizado (por ejemplo, pasó de Básico a Premium): recién ahora se cancela el anterior
-    if (idActual && idActual !== preapprovalId) await cancelarPreapprovalEnMP(idActual)
-    const periodoVence = preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : sumarUnMes(new Date())
-    const { error } = await supabase.from('subscriptions').update({
-      status: 'active',
-      plan: plan || undefined,
-      mp_subscription_id: preapprovalId,
-      current_period_ends_at: periodoVence.toISOString(),
-    }).eq('user_id', userId)
-    if (error) console.error('Webhook: error actualizando subscriptions:', error)
-    else console.log(`Webhook: user ${userId} → active, plan=${plan}`)
-    return
-  }
-
-  // cancelado o pausado: solo cuenta si es la suscripción vigente de la cuenta
-  // (si es un plan viejo que se canceló al cambiar de plan, o uno que nunca se autorizó, se ignora)
-  if (!esElActual) {
-    console.log(`Webhook: ${preapprovalId} (${preapproval.status}) no es la suscripción vigente, se ignora`)
-    return
-  }
-  const { error } = await supabase.from('subscriptions').update({
-    status: preapproval.status === 'cancelled' ? 'cancelled' : 'past_due',
-    mp_subscription_id: preapprovalId,
-  }).eq('user_id', userId)
-  if (error) console.error('Webhook: error actualizando subscriptions:', error)
-  else console.log(`Webhook: user ${userId} → ${preapproval.status}`)
+  await aplicarPreapproval(duena.userId, duena.plan, preapproval)
+  console.log(`Webhook: user ${duena.userId} → ${preapproval.status}, plan=${duena.plan}`)
 }
 
 function validarFirma(req: NextRequest, dataId: string): boolean {
