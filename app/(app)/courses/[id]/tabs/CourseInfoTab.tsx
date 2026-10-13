@@ -271,6 +271,7 @@ type Testimonio = {
   async function cambiarCobroAutomatico(prender: boolean) {
     setAvisoCobro('')
     if (!prender) { setForm(prev => ({ ...prev, cobro_automatico: false })); return }
+    if (Number(form.precio) < 15) { setAvisoCobro('Mercado Pago no acepta cobros automáticos de menos de $15. Subí el precio para poder prenderlo.'); return }
     setRevisandoMP(true)
     try {
       const supabase = createClient()
@@ -406,9 +407,12 @@ type Testimonio = {
             </span>
           </label>
           {revisandoMP && <div className="field-hint" style={{marginTop:'8px'}}>Revisando tu Mercado Pago…</div>}
+          {!!form.cobro_automatico && Number(form.precio) < 15 && (
+            <div className="field-hint" style={{marginTop:'8px',color:'#B45309'}}>⚠️ Mercado Pago no acepta cobros automáticos de menos de $15: con este precio las alumnas no van a poder suscribirse.</div>
+          )}
           {avisoCobro && (
             <div style={{marginTop:'10px',fontSize:'12px',color:'#92400E',background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'8px 10px',lineHeight:1.5}}>
-              {avisoCobro} <a href="/settings?bloque=cobros" style={{color:'#92400E',fontWeight:700}}>Conectalo en Página de reservas → Cobros</a>
+              {avisoCobro} {avisoCobro.includes('conectado') && <a href="/settings?bloque=cobros" style={{color:'#92400E',fontWeight:700}}>Conectalo en Página de reservas → Cobros</a>}
             </div>
           )}
           {!form.cobro_automatico && curso.cobro_automatico && (

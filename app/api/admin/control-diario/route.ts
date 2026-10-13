@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   } catch {}
   try {
     // suscripciones de cursos que hace más de 2 días nadie revisa (la revisión automática no está corriendo)
-    const { data } = await s.from('enrollments').select('id').not('mp_preapproval_id', 'is', null)
+    const { data } = await s.from('enrollments').select('id')
       .in('suscripcion_estado', ['pendiente', 'esperando_cobro', 'activa', 'con_problemas']).lt('suscripcion_revisada_at', hace(48)).limit(50)
     if (data && data.length) hallazgos.push({ tipo: 'revisar', que: `${data.length} suscripción(es) de cursos sin revisar hace más de 2 días (revisá la tarea automática en Netlify)` })
     const { data: trabadas } = await s.from('enrollments').select('id').eq('suscripcion_estado', 'creando').lt('suscripcion_creada_at', hace(1)).limit(50)

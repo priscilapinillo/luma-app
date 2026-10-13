@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     // las que más tiempo llevan sin revisarse primero; como mucho 6 por vez para no hacer esperar
     const hace10min = new Date(Date.now() - 10 * 60000).toISOString()
     const { data: filas } = await s.from('enrollments').select('id, suscripcion_revisada_at')
-      .eq('course_id', courseId).not('mp_preapproval_id', 'is', null)
+      .eq('course_id', courseId)
       .in('suscripcion_estado', ['pendiente', 'esperando_cobro', 'activa', 'con_problemas', 'rechazada'])
       .or(`suscripcion_revisada_at.is.null,suscripcion_revisada_at.lt."${hace10min}"`)
       .order('suscripcion_revisada_at', { ascending: true, nullsFirst: true }).limit(6)

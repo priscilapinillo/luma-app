@@ -58,7 +58,7 @@ export default function MisCursosPage() {
   // le pregunta a Mercado Pago cómo están las suscripciones que lo necesitan (cobros nuevos, rechazos, vencimientos)
   async function refrescarSuscripciones(lista: Inscripcion[]) {
     const tresDias = Date.now() + 3 * 86400000
-    const revisar = lista.filter(i => i.mp_preapproval_id && (
+    const revisar = lista.filter(i => (i.mp_preapproval_id || i.suscripcion_estado === 'pendiente') && (
       ['pendiente', 'esperando_cobro', 'con_problemas', 'rechazada', 'activa'].includes(i.suscripcion_estado || '') &&
       (i.suscripcion_estado !== 'activa' || !i.fecha_vencimiento || new Date(i.fecha_vencimiento).getTime() < tresDias)
     )).slice(0, 5)

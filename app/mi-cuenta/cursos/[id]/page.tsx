@@ -79,11 +79,11 @@ export default function AulaCursoPage() {
       setPersonaId(persona.id)
 
       let { data: enrollment, error: errorEnroll } = await supabase
-        .from('enrollments').select('id, estado, modalidad, fecha_vencimiento, mp_preapproval_id')
+        .from('enrollments').select('id, estado, modalidad, fecha_vencimiento, mp_preapproval_id, mp_plan_id')
         .eq('course_id', courseId).eq('person_id', persona.id).maybeSingle()
 
       // con suscripción automática: antes de cortar el acceso, le preguntamos a Mercado Pago si entró un cobro nuevo
-      if (enrollment && !tieneAccesoCurso(enrollment) && enrollment.mp_preapproval_id) {
+      if (enrollment && !tieneAccesoCurso(enrollment) && (enrollment.mp_preapproval_id || enrollment.mp_plan_id)) {
         try {
           const { data: { session } } = await supabase.auth.getSession()
           const res = await fetch('/api/cursos/suscripcion/estado', {

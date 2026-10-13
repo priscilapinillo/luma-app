@@ -1,4 +1,6 @@
 // Suscripciones automáticas de cursos con Mercado Pago (solo servidor).
+// Cada alumna tiene su propio "plan" de Mercado Pago: puede suscribirse con CUALQUIER cuenta de Mercado Pago
+// (no importa el mail). Como el plan es solo de ella, Luma sabe que la suscripción que aparezca en ese plan es suya.
 // Se cobran con el token de cada terapeuta (el mismo que ya usa para cobrar reservas y cursos).
 // No depende de los avisos de Mercado Pago: Luma le pregunta el estado a Mercado Pago cuando hace falta
 // (al volver del pago, al abrir el panel o el curso, y en la revisión diaria).
@@ -87,14 +89,93 @@ export function accesoDe(e: any) {
   return tieneAccesoCurso({ estado: e.estado, modalidad: e.modalidad, fecha_vencimiento: e.fecha_vencimiento })
 }
 
+function planesDe(e: any): string[] {
+  const lista = Array.isArray(e.mp_planes) ? e.mp_planes.filter(Boolean).map(String) : []
+  if (e.mp_plan_id && !lista.includes(String(e.mp_plan_id))) lista.push(String(e.mp_plan_id))
+  return lista
+}
+
+// Busca en los planes de la alumna la suscripción que hizo en Mercado Pago y la vincula a su inscripción.
+// Si por error se suscribió más de una vez (por ejemplo, con un link viejo), deja la primera y cancela las otras
+// ANTES de que se cobren dos veces.
+async function vincularDesdePlanes(ctx: Contexto): Promise<any> {
+  const { token } = ctx
+  let e = ctx.e
+  const planes = planesDe(e)
+  if (!token || planes.length === 0) return e
+  const vivas: any[] = []
+  for (const plan of planes) {
+    const r = await mp(token, `/preapproval/search?preapproval_plan_id=${encodeURIComponent(plan)}`)
+    if (!r.ok) { await registrarEvento(e.id, 'buscar_en_plan_error', { plan, status: r.status, respuesta: r.data }); continue }
+    for (const x of (r.data?.results || [])) if (x?.id && x.status !== 'cancelled') vivas.push(x)
+  }
+  if (vivas.length === 0) return e
+  vivas.sort((a, b) => new Date(a.date_created || 0).getTime() - new Date(b.date_created || 0).getTime())
+  // ¿cuál es la suscripción que vale? la que ya estaba vinculada si sigue viva; si no, la primera que hizo
+  let principal: any = null
+  if (e.mp_preapproval_id) {
+    principal = vivas.find(v => String(v.id) === String(e.mp_preapproval_id)) || null
+    if (!principal) {
+      const g = await mp(token, `/preapproval/${encodeURIComponent(String(e.mp_preapproval_id))}`)
+      if (g.ok && g.data?.status && g.data.status !== 'cancelled') principal = { id: e.mp_preapproval_id } // sigue viva (suscripción vieja, fuera de los planes)
+    }
+  }
+  if (!principal) principal = vivas[0]
+  for (const v of vivas) {
+    if (String(v.id) === String(principal.id)) continue
+    // suscripción de más: se cancela para que nunca se cobre dos veces
+    const c = await mp(token, `/preapproval/${encodeURIComponent(String(v.id))}`, { method: 'PUT', body: { status: 'cancelled' } })
+    await registrarEvento(e.id, c.ok ? 'duplicada_cancelada' : 'duplicada_no_se_pudo_cancelar', { preapproval: v.id, status: c.status })
+    if (!c.ok) {
+      await enviarAviso(ctx.curso.user_id, '⚠️ Revisá una suscripción duplicada',
+        `Una alumna de ${ctx.curso.titulo} quedó con dos suscripciones en Mercado Pago y no pudimos cancelar una. Cancelala desde tu Mercado Pago para que no se le cobre dos veces.`).catch(() => {})
+    }
+  }
+  if (String(principal.id) !== String(e.mp_preapproval_id || '')) {
+    const { error } = await db().from('enrollments').update({ mp_preapproval_id: String(principal.id) }).eq('id', e.id)
+    if (!error) {
+      e = { ...e, mp_preapproval_id: String(principal.id) }
+      await registrarEvento(e.id, 'vinculada', { preapproval: principal.id, plan: principal.preapproval_plan_id })
+    } else {
+      await registrarEvento(e.id, 'vincular_error', { preapproval: principal.id, error: error.message })
+    }
+  }
+  return e
+}
+
+async function cancelarPlan(token: string, planId: string) {
+  const r = await mp(token, `/preapproval_plan/${encodeURIComponent(planId)}`, { method: 'PUT', body: { status: 'cancelled' } })
+  return r.ok
+}
+
 // Le pregunta a Mercado Pago cómo está la suscripción, anota los cobros nuevos (una sola vez cada uno)
 // y actualiza el acceso. Se puede llamar todas las veces que haga falta: nunca suma dos veces el mismo cobro.
 export async function revisarSuscripcion(enrollmentId: string): Promise<Contexto | null> {
-  const ctx = await cargarContexto(enrollmentId)
-  if (!ctx || !ctx.e.mp_preapproval_id || !ctx.token) return ctx
+  const ctx0 = await cargarContexto(enrollmentId)
+  if (!ctx0 || !ctx0.token) return ctx0
   const s = db()
-  const { e, token, curso } = ctx
   const ahora = Date.now()
+  // ¿ya se suscribió en su plan? (con cualquier cuenta de Mercado Pago)
+  const eVinculada = await vincularDesdePlanes(ctx0)
+  const ctx: Contexto = { ...ctx0, e: eVinculada }
+  if (!ctx.e.mp_preapproval_id) {
+    // todavía no se suscribió: si pasaron más de 24 horas, se da de baja el plan (solo si Mercado Pago lo confirma;
+    // si no, queda "pendiente" y se sigue revisando, así nunca se pierde una suscripción hecha con un link viejo)
+    const e0 = ctx.e
+    if (e0.suscripcion_estado === 'pendiente' && e0.suscripcion_creada_at && ahora - new Date(e0.suscripcion_creada_at).getTime() > HORAS_PENDIENTE * 3600000) {
+      const todos = planesDe(e0)
+      let ok = true
+      for (const pl of todos) ok = (await cancelarPlan(ctx.token!, pl)) && ok
+      if (ok) {
+        await s.from('enrollments').update({ suscripcion_estado: 'cancelada', suscripcion_revisada_at: new Date().toISOString() }).eq('id', e0.id)
+        await registrarEvento(e0.id, 'pendiente_vencida_cancelada')
+        return { ...ctx, e: { ...e0, suscripcion_estado: 'cancelada' } }
+      }
+    }
+    await s.from('enrollments').update({ suscripcion_revisada_at: new Date().toISOString() }).eq('id', e0.id)
+    return ctx
+  }
+  const { e, token, curso } = ctx as { e: any; token: string; curso: any }
 
   const pre = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`)
   if (!pre.ok) {
@@ -241,11 +322,13 @@ export async function crearOReutilizar(enrollmentId: string, userId: string, ori
   if (e.suscripcion_estado === 'pendiente' && e.suscripcion_link) {
     const mismoPrecio = Number(e.suscripcion_monto) === Number(curso.precio)
     if (mismoPrecio) return { estado: 'pendiente', link: e.suscripcion_link }
-    // la terapeuta cambió el precio mientras estaba sin completar: se cancela la vieja y se crea con el precio de hoy
-    const c = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`, { method: 'PUT', body: { status: 'cancelled' } })
-    if (!c.ok) {
-      const g = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`)
-      if (!(g.ok && g.data?.status === 'cancelled')) return { estado: 'error', mensaje: 'No pudimos actualizar tu suscripción. Probá de nuevo en unos minutos.' }
+    // la terapeuta cambió el precio mientras estaba sin completar: se da de baja lo viejo y se crea con el precio de hoy
+    if (e.mp_preapproval_id) {
+      const c = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`, { method: 'PUT', body: { status: 'cancelled' } })
+      if (!c.ok) {
+        const g = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`)
+        if (!(g.ok && g.data?.status === 'cancelled')) return { estado: 'error', mensaje: 'No pudimos actualizar tu suscripción. Probá de nuevo en unos minutos.' }
+      }
     }
     await s.from('enrollments').update({ suscripcion_estado: 'cancelada' }).eq('id', e.id)
     await registrarEvento(e.id, 'pendiente_cancelada_por_cambio_de_precio', { antes: e.suscripcion_monto, ahora: curso.precio })
@@ -277,33 +360,32 @@ export async function crearOReutilizar(enrollmentId: string, userId: string, ori
   if (!reclamo || reclamo.length === 0) return { estado: 'en_proceso' }
   const intento = reclamo[0].suscripcion_intento
 
-  // si ya tiene acceso pago (pagaba a mano, o canceló y vuelve), el primer cobro es el día que vence
+  // si ya tiene acceso pago (pagaba a mano, o canceló y vuelve), no se le cobra hoy:
+  // el plan arranca con días gratis hasta que vence su acceso actual
   const acceso = accesoDe(e)
   const vence = e.fecha_vencimiento ? new Date(e.fecha_vencimiento) : null
-  const empiezaDespues = acceso && vence && vence.getTime() > Date.now() + 3600000
+  const diasGratis = acceso && vence ? Math.ceil((vence.getTime() - Date.now()) / 86400000) : 0
   const base = origen.startsWith('https://') ? origen : 'https://lumaapp.lat'
-  const email = String(persona.email || '').trim()
-  if (!email) {
-    await s.from('enrollments').update({ suscripcion_estado: null }).eq('id', e.id).eq('suscripcion_estado', 'creando')
-    return { estado: 'error', mensaje: 'Tu cuenta no tiene un email cargado. Escribile a la terapeuta.' }
-  }
+
+  // si había un plan sin usar (por ejemplo, con otro precio), se intenta dar de baja; igual queda anotado
+  // para revisarlo siempre, por si la alumna usa un link viejo
+  if (e.mp_plan_id && !e.mp_preapproval_id) await cancelarPlan(token, String(e.mp_plan_id))
 
   const cuerpo = {
     reason: `${curso.titulo}${perfil?.nombre_profesional ? ` · ${perfil.nombre_profesional}` : ''}`.slice(0, 120),
     external_reference: String(e.id),
-    payer_email: email,
     back_url: `${base}/p/${perfil?.slug}/cursos/${curso.slug}/checkout?suscripcion=volver`,
-    status: 'pending',
     auto_recurring: {
       frequency: 1,
       frequency_type: 'months',
       transaction_amount: Number(curso.precio),
       currency_id: moneda,
-      ...(empiezaDespues ? { start_date: vence!.toISOString() } : {}),
+      ...(diasGratis >= 1 ? { free_trial: { frequency: Math.min(diasGratis, 365), frequency_type: 'days' } } : {}),
     },
   }
-  const r = await mp(token, '/preapproval', { method: 'POST', body: cuerpo, idem: `luma-sus-${e.id}-${intento}` })
-  if (!r.ok || !r.data?.id || !r.data?.init_point) {
+  const r = await mp(token, '/preapproval_plan', { method: 'POST', body: cuerpo, idem: `luma-plan-${e.id}-${intento}` })
+  const link = r.data?.init_point || (r.data?.id ? `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=${r.data.id}` : '')
+  if (!r.ok || !r.data?.id || !link) {
     await s.from('enrollments').update({ suscripcion_estado: null }).eq('id', e.id).eq('suscripcion_estado', 'creando')
     await registrarEvento(e.id, 'crear_error', { status: r.status, respuesta: r.data })
     if (r.status === 401 || r.status === 403) {
@@ -311,29 +393,39 @@ export async function crearOReutilizar(enrollmentId: string, userId: string, ori
         `Una alumna quiso suscribirse a ${curso.titulo} y Mercado Pago rechazó tu token. Revisalo en Ajustes → Página de reservas → Cobros.`).catch(() => {})
       return { estado: 'error', mensaje: 'El cobro automático no está disponible en este momento. Elegí otra forma de pago o escribile a la terapeuta.' }
     }
+    if (/lower than|monto m[ií]nimo|minimum/i.test(String(r.data?.message || ''))) {
+      return { estado: 'error', mensaje: 'El precio de este curso es menor al mínimo que acepta Mercado Pago para cobros automáticos. Elegí otra forma de pago o escribile a la terapeuta.' }
+    }
     return { estado: 'error', mensaje: 'Mercado Pago no pudo crear la suscripción. Probá de nuevo en unos minutos o elegí otra forma de pago.' }
   }
 
+  const planes = planesDe(e)
+  if (!planes.includes(String(r.data.id))) planes.push(String(r.data.id))
   await s.from('enrollments').update({
-    mp_preapproval_id: String(r.data.id),
+    mp_plan_id: String(r.data.id),
+    mp_planes: planes,
+    mp_preapproval_id: null,
     suscripcion_estado: 'pendiente',
-    suscripcion_link: String(r.data.init_point),
+    suscripcion_link: String(link),
     suscripcion_monto: Number(curso.precio),
     modalidad: 'suscripcion',
   }).eq('id', e.id)
-  await registrarEvento(e.id, 'creada', { preapproval: r.data.id, monto: curso.precio, empieza: empiezaDespues ? vence!.toISOString() : 'hoy' })
-  return { estado: 'pendiente', link: String(r.data.init_point) }
+  await registrarEvento(e.id, 'plan_creado', { plan: r.data.id, monto: curso.precio, dias_gratis: diasGratis >= 1 ? diasGratis : 0 })
+  return { estado: 'pendiente', link: String(link) }
 }
 
 // Cancela en Mercado Pago. La alumna conserva el acceso hasta la fecha que ya pagó.
 export async function cancelarSuscripcion(ctx: Contexto, quien: 'alumna' | 'terapeuta' | 'sistema'): Promise<{ ok: boolean; mensaje?: string }> {
   const { e, token } = ctx
   const s = db()
+  if (!token) return { ok: false, mensaje: 'No pudimos conectar con Mercado Pago. Probá de nuevo en unos minutos.' }
+  // el link del plan deja de servir (si Mercado Pago no lo permite, igual se sigue revisando ese plan)
+  for (const pl of planesDe(e)) await cancelarPlan(token, pl)
   if (!e.mp_preapproval_id || !ESTADOS_VIVOS.includes(e.suscripcion_estado)) {
     if (e.suscripcion_estado !== 'cancelada' && e.suscripcion_estado) await s.from('enrollments').update({ suscripcion_estado: 'cancelada' }).eq('id', e.id)
+    await registrarEvento(e.id, 'cancelada_sin_suscripcion', { quien })
     return { ok: true }
   }
-  if (!token) return { ok: false, mensaje: 'No pudimos conectar con Mercado Pago. Probá de nuevo en unos minutos.' }
   const r = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`, { method: 'PUT', body: { status: 'cancelled' } })
   if (!r.ok) {
     const g = await mp(token, `/preapproval/${encodeURIComponent(e.mp_preapproval_id)}`)
@@ -370,9 +462,15 @@ export async function cambiarMontoDeSuscriptas(courseId: string, nuevoMonto: num
     const ctx = await cargarContexto(f.id)
     if (!ctx?.token || !ctx.e.mp_preapproval_id) { fallidas++; continue }
     if (Number(ctx.e.suscripcion_monto) === nuevoMonto) continue
-    const r = await mp(ctx.token, `/preapproval/${encodeURIComponent(ctx.e.mp_preapproval_id)}`, {
+    let r = await mp(ctx.token, `/preapproval/${encodeURIComponent(ctx.e.mp_preapproval_id)}`, {
       method: 'PUT', body: { auto_recurring: { transaction_amount: nuevoMonto } },
     })
+    if (!r.ok && ctx.e.mp_plan_id) {
+      // suscripción de un plan: el monto se cambia en el plan (que es solo de esta alumna)
+      r = await mp(ctx.token, `/preapproval_plan/${encodeURIComponent(ctx.e.mp_plan_id)}`, {
+        method: 'PUT', body: { auto_recurring: { transaction_amount: nuevoMonto } },
+      })
+    }
     if (!r.ok) { fallidas++; await registrarEvento(f.id, 'cambiar_monto_error', { status: r.status, respuesta: r.data }); continue }
     const aviso = `El precio de tu suscripción cambia a $${nuevoMonto.toLocaleString('es-AR')} por mes desde tu próximo cobro${ctx.e.proximo_cobro ? ` (${new Date(ctx.e.proximo_cobro).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })})` : ''}. Si no querés seguir, podés cancelar antes de esa fecha.`
     await s.from('enrollments').update({ suscripcion_monto: nuevoMonto, suscripcion_aviso: aviso }).eq('id', f.id)
