@@ -2,6 +2,7 @@
 
 import { toast } from '@/components/ToastProvider'
 import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
+import { PASOS, calcularPasos, contarListos, primerIncompleto, type IdPaso } from '@/lib/progresoPagina'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, Expand, Check, Search, X,
@@ -70,6 +71,17 @@ export default function DashboardPage() {
   const [nuevaTask, setNuevaTask] = useState('')
   const [loading, setLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  // cartel de Inicio: una sola puerta a Página de reservas (misma regla de pasos que Ajustes)
+  const [progresoPagina, setProgresoPagina] = useState<{ pasos: Record<IdPaso, boolean>; listos: number; slug: string; nuevo: boolean } | null>(null)
+  const [cartelHoyOculto, setCartelHoyOculto] = useState(true)
+  const [cartelListoOculto, setCartelListoOculto] = useState(true)
+  const [linkCopiado, setLinkCopiado] = useState(false)
+  useEffect(() => {
+    try {
+      setCartelHoyOculto(localStorage.getItem('luma-cartel-pagina-hoy') === new Date().toDateString())
+      setCartelListoOculto(localStorage.getItem('luma-cartel-pagina-listo') === '1')
+    } catch { setCartelHoyOculto(false); setCartelListoOculto(false) }
+  }, [])
   const [trialVencido, setTrialVencido] = useState(false)
   const [avisoRenovacion, setAvisoRenovacion] = useState<{dias: number} | null>(null)
 const [onboardingChecks, setOnboardingChecks] = useState({
@@ -169,7 +181,7 @@ const [contextoLocal, setContextoLocal] = useState('')
           supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).neq('estado_sesion', 'cancelada').order('fecha', { ascending: true }),
           supabase.from('patients').select('*').eq('user_id', user.id),
           supabase.from('services').select('*').eq('user_id', user.id).eq('activo', true),
-          supabase.from('therapist_profiles').select('nombre_profesional, pagina_activa').eq('user_id', user.id).maybeSingle(),
+          supabase.from('therapist_profiles').select('nombre_profesional, pagina_activa, avatar_url, whatsapp, slug, tipo_pago, mp_activo, acepta_transferencia, alias_pago').eq('user_id', user.id).maybeSingle(),
           supabase.from('tasks').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
           supabase.from('availability').select('*').eq('user_id', user.id),
         ])
@@ -181,19 +193,32 @@ const [contextoLocal, setContextoLocal] = useState('')
               setNuevoTurno(prev => ({ ...prev, servicio: servs[0].nombre, servicioId: servs[0].id, precio: servs[0].precio_base }))
             }
           }
-          const yaVioOnboarding = localStorage.getItem('luma-onboarding-done')
-          if (!yaVioOnboarding) {
-            setOnboardingChecks({
-              servicio: (servs?.length || 0) > 0,
-              disponibilidad: (avail?.length || 0) > 0,
-              pagina: prof?.pagina_activa || false,
-            })
-            setShowOnboarding(true)
-          }
         if (tsks) setTasks(tsks.map((t: any) => ({ id: t.id, texto: t.texto, completada: t.completada })))
         if (avail) setDisponibilidad(avail)
         if (prof?.nombre_profesional) setNombreTerapeuta(prof.nombre_profesional)
         else setNombreTerapeuta(user.email?.split('@')[0] || '')
+        // progreso de Página de reservas para el cartel (si algo falla, el cartel no aparece y el Inicio sigue normal)
+        try {
+          const [{ data: credMP }, { data: pushs }] = await Promise.all([
+            supabase.from('mp_credenciales').select('user_id').eq('user_id', user.id).maybeSingle(),
+            supabase.from('push_subscriptions').select('user_id').eq('user_id', user.id).limit(1),
+          ])
+          const franjasActivas = (avail || []).filter((a: any) => a.activo).length
+          const pasosP = calcularPasos({
+            avatar_url: prof?.avatar_url, nombre_profesional: prof?.nombre_profesional, whatsapp: prof?.whatsapp,
+            tipo_pago: prof?.tipo_pago || 'libre', mp_activo: prof?.mp_activo, tiene_token_mp: !!credMP,
+            acepta_transferencia: prof?.acepta_transferencia, alias_pago: prof?.alias_pago,
+            slug: prof?.slug, pagina_activa: prof?.pagina_activa,
+            servicios_activos: servs?.length || 0, franjas_activas: franjasActivas,
+            avisos_activos: (pushs?.length || 0) > 0,
+          })
+          setProgresoPagina({
+            pasos: pasosP,
+            listos: contarListos(pasosP),
+            slug: prof?.slug || '',
+            nuevo: !prof?.avatar_url && !(servs?.length) && franjasActivas === 0 && !prof?.pagina_activa,
+          })
+        } catch (e) { console.error('Error calculando el cartel de Inicio:', e) }
         const { data: sub } = await supabase
         .from('subscriptions')
         .select('status, trial_ends_at, current_period_ends_at, plan')
@@ -800,6 +825,17 @@ metodo_pago: s.metodo_pago || 'mercadopago',
   .hist-box{width:90vw !important}
   .ab{display:block !important;visibility:visible !important;opacity:1 !important}
 }
+        .cp-card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;flex-shrink:0;box-shadow:0 4px 16px var(--shadow)}
+        .cp-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+        .cp-tit{font-size:14px;font-weight:800;color:var(--text-primary);font-family:'Manrope',sans-serif;line-height:1.35}
+        .cp-x{background:none;border:none;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:inherit;white-space:nowrap;padding:2px 0;text-decoration:underline}
+        .cp-barra{height:7px;border-radius:7px;background:var(--bg-input);overflow:hidden;margin-bottom:10px}
+        .cp-barra>div{height:100%;border-radius:7px;background:linear-gradient(90deg,#8B5CF6,#C084FC)}
+        .cp-acc{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+        .cp-sub{font-size:12px;color:var(--text-secondary)}
+        .cp-dir{font-size:13px;color:var(--text-secondary);margin-bottom:10px;word-break:break-all}
+        .cp-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 16px;border-radius:11px;font-size:12.5px;font-weight:700;border:none;cursor:pointer;font-family:inherit;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;text-decoration:none}
+        .cp-btn.sec{background:var(--accent-light);color:var(--accent)}
         .wc{background:var(--accent-light);border-radius:16px;padding:13px 16px;border:0.5px solid var(--border);flex-shrink:0;position:relative;overflow:hidden}
         .wc-blob{position:absolute;border-radius:50%;background:var(--accent);opacity:0.12;width:80px;height:80px;top:-20px;right:-20px;pointer-events:none}
         .wc-h{font-size:16px;font-weight:800;color:var(--accent);font-family:'Manrope',sans-serif}
@@ -968,6 +1004,49 @@ metodo_pago: s.metodo_pago || 'mercadopago',
             <div className="wc-h">¡{saludoHora()}, {nombreTerapeuta}! ✨</div>
             <div className="wc-s">Tenés {turnosHoy} sesiones hoy · Todo listo para empezar</div>
           </div>
+
+          {progresoPagina && (() => {
+            const total = PASOS.length
+            const completa = progresoPagina.listos === total
+            if (completa ? cartelListoOculto : cartelHoyOculto) return null
+            const siguiente = progresoPagina.nuevo ? 'perfil' : (primerIncompleto(progresoPagina.pasos) || 'compartir')
+            const faltan = total - progresoPagina.listos
+            return (
+              <div className="cp-card">
+                <div className="cp-top">
+                  <div className="cp-tit">
+                    {completa ? 'Tu página está lista ✨'
+                      : progresoPagina.nuevo ? `Armá tu página de reservas en ${total} pasos`
+                      : `Te ${faltan === 1 ? 'falta 1 paso' : `faltan ${faltan} pasos`} para tener tu página lista`}
+                  </div>
+                  <button className="cp-x" onClick={() => {
+                    try {
+                      if (completa) localStorage.setItem('luma-cartel-pagina-listo', '1')
+                      else localStorage.setItem('luma-cartel-pagina-hoy', new Date().toDateString())
+                    } catch {}
+                    if (completa) setCartelListoOculto(true); else setCartelHoyOculto(true)
+                  }}>{completa ? 'Listo, no mostrar más' : 'Ocultar por hoy'}</button>
+                </div>
+                {completa ? (<>
+                  <div className="cp-dir">lumaapp.lat/p/{progresoPagina.slug}</div>
+                  <div className="cp-acc">
+                    <button className="cp-btn" onClick={async () => {
+                      const url = `https://lumaapp.lat/p/${progresoPagina.slug}`
+                      try { await navigator.clipboard.writeText(url) } catch { window.prompt('Copiá tu link:', url) }
+                      setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2500)
+                    }}>{linkCopiado ? '¡Copiado! Pegalo en tu bio' : 'Copiar link'}</button>
+                    <a className="cp-btn sec" href={`/p/${progresoPagina.slug}`} target="_blank" rel="noopener noreferrer">Ver mi página</a>
+                  </div>
+                </>) : (<>
+                  <div className="cp-barra"><div style={{width: `${(progresoPagina.listos / total) * 100}%`}}/></div>
+                  <div className="cp-acc">
+                    <span className="cp-sub">{progresoPagina.listos} de {total} pasos listos</span>
+                    <a className="cp-btn" href={`/settings?bloque=${siguiente}`}>{progresoPagina.nuevo ? 'Empezar' : 'Seguir'} →</a>
+                  </div>
+                </>)}
+              </div>
+            )
+          })()}
 
           <div className="sr">
             <input className="si" placeholder="Buscar paciente, alias o servicio..."
@@ -1708,48 +1787,6 @@ setTabDetalle('contexto')
 
 
 
-      {/* MODAL ONBOARDING */}
-{showOnboarding && (
-  <div className="mo-overlay" onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}>
-    <div className="mo-box" style={{width:'420px'}} onClick={e => e.stopPropagation()}>
-      <div className="mo-hdr">
-        <span className="mo-title">✦ Bienvenida a Luma</span>
-        <button className="mo-close" onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}><X size={12}/></button>
-      </div>
-      <p style={{fontSize:'13px',color:'var(--text-secondary)',marginBottom:'20px',lineHeight:'1.7'}}>
-        Seguí estos pasos para empezar a usar Luma al 100%.
-      </p>
-      {[
-        { key:'servicio', label:'Creá tu primer servicio', desc:'Andá a Servicios y creá al menos uno', href:'/services', emoji:'✨' },
-        { key:'disponibilidad', label:'Configurá tu disponibilidad', desc:'En Ajustes → tu horario de atención', href:'/settings', emoji:'📅' },
-        { key:'pagina', label:'Activá tu página pública', desc:'En Ajustes → Página pública', href:'/settings', emoji:'🌐' },
-        { key:'link', label:'Compartí tu link', desc:'Envialo a tus consultantes', href:null, emoji:'🔗' },
-      ].map((paso, i) => {
-        const done = onboardingChecks[paso.key as keyof typeof onboardingChecks]
-        return (
-          <div key={i} style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',borderRadius:'12px',background:done?'var(--accent-light)':'var(--bg-input)',border:`0.5px solid ${done?'var(--border)':'var(--border-light)'}`,marginBottom:'8px'}}>
-            <div style={{width:'28px',height:'28px',borderRadius:'50%',background:done?'var(--accent)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',flexShrink:0,color:done?'white':'var(--text-muted)'}}>
-              {done ? '✓' : paso.emoji}
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)',textDecoration:done?'line-through':'none',opacity:done?0.6:1}}>{paso.label}</div>
-              <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>{paso.desc}</div>
-            </div>
-            {!done && paso.href && (
-              <a href={paso.href} onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}
-                style={{fontSize:'11px',color:'var(--accent)',fontWeight:600,textDecoration:'none',flexShrink:0}}>
-                Ir →
-              </a>
-            )}
-          </div>
-        )
-      })}
-      <button className="save-btn" style={{marginTop:'8px'}} onClick={() => { setShowOnboarding(false); localStorage.setItem('luma-onboarding-done','1') }}>
-        Entendido, empezar
-      </button>
-    </div>
-  </div>
-)}
 {/* MODAL TRIAL VENCIDO */}
 {trialVencido && (
   <div style={{position:'fixed',inset:0,background:'rgba(20,15,35,0.45)',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}>

@@ -12,11 +12,17 @@ type Inscripcion = {
   modalidad: string
   fecha_inicio: string
   fecha_vencimiento: string | null
+  suscripcion_estado: string | null
+  suscripcion_link: string | null
+  proximo_cobro: string | null
+  mp_preapproval_id: string | null
+  suscripcion_aviso: string | null
   course: {
     id: string
     titulo: string
     imagen_url: string
     slug: string
+    cobro_automatico?: boolean
   }
   terapeuta: {
     nombre_profesional: string
@@ -26,6 +32,7 @@ type Inscripcion = {
     cbu: string | null
     titular_cuenta: string | null
     banco: string | null
+    mp_activo?: boolean
   } | null
   proximoEncuentro: { fecha_hora: string } | null
 }
@@ -36,10 +43,75 @@ export default function MisCursosPage() {
   const [loading, setLoading] = useState(true)
   const [debugInfo, setDebugInfo] = useState('')
   const [datosAbiertos, setDatosAbiertos] = useState<string | null>(null)
+  const [accionando, setAccionando] = useState<string | null>(null)
+  const [mensajes, setMensajes] = useState<Record<string, string>>({})
 
-  useEffect(() => { cargarDatos() }, [])
+  useEffect(() => { cargarDatos(true) }, [])
 
-  async function cargarDatos() {
+  const fechaLarga = (f: string | null) => f ? new Date(f).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' }) : ''
+
+  async function tokenSesion() {
+    const { data: { session } } = await createClient().auth.getSession()
+    return session?.access_token
+  }
+
+  // le pregunta a Mercado Pago cómo están las suscripciones que lo necesitan (cobros nuevos, rechazos, vencimientos)
+  async function refrescarSuscripciones(lista: Inscripcion[]) {
+    const tresDias = Date.now() + 3 * 86400000
+    const revisar = lista.filter(i => i.mp_preapproval_id && (
+      ['pendiente', 'esperando_cobro', 'con_problemas', 'rechazada', 'activa'].includes(i.suscripcion_estado || '') &&
+      (i.suscripcion_estado !== 'activa' || !i.fecha_vencimiento || new Date(i.fecha_vencimiento).getTime() < tresDias)
+    )).slice(0, 5)
+    if (revisar.length === 0) return false
+    const accessToken = await tokenSesion()
+    for (const i of revisar) {
+      try {
+        await fetch('/api/cursos/suscripcion/estado', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId: i.id, accessToken }),
+        })
+      } catch (e) { console.error(e) }
+    }
+    return true
+  }
+
+  async function irASuscripcion(i: Inscripcion) {
+    setAccionando(i.id)
+    setMensajes(prev => ({ ...prev, [i.id]: '' }))
+    let seVa = false
+    try {
+      for (let intento = 0; intento < 4; intento++) {
+        const res = await fetch('/api/cursos/suscripcion/crear', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId: i.id, accessToken: await tokenSesion() }),
+        })
+        const r = await res.json().catch(() => ({ estado: 'error' }))
+        if (r.link) { seVa = true; window.location.href = r.link; return }
+        if (r.estado === 'en_proceso') { await new Promise(ok => setTimeout(ok, 2500)); continue }
+        if (r.estado === 'activa' || r.estado === 'esperando_cobro') { await cargarDatos(false); return }
+        setMensajes(prev => ({ ...prev, [i.id]: r.mensaje || 'No se pudo conectar con Mercado Pago. Probá de nuevo.' }))
+        return
+      }
+      setMensajes(prev => ({ ...prev, [i.id]: 'Mercado Pago está tardando. Probá de nuevo en un momento.' }))
+    } finally { if (!seVa) setAccionando(null) }
+  }
+
+  async function cancelarSuscripcion(i: Inscripcion) {
+    const hasta = fechaLarga(i.fecha_vencimiento)
+    if (!confirm(`¿Cancelar la renovación automática de "${i.course.titulo}"?\n\nNo se te va a cobrar más.${hasta ? ` Seguís teniendo acceso hasta el ${hasta}.` : ''}`)) return
+    setAccionando(i.id)
+    try {
+      const res = await fetch('/api/cursos/suscripcion/cancelar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId: i.id, accessToken: await tokenSesion() }),
+      })
+      const r = await res.json().catch(() => ({ ok: false }))
+      if (!r.ok) { setMensajes(prev => ({ ...prev, [i.id]: r.mensaje || 'No se pudo cancelar. Probá de nuevo en unos minutos.' })); return }
+      await cargarDatos(false)
+    } finally { setAccionando(null) }
+  }
+
+  async function cargarDatos(revisarMP = false) {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -48,18 +120,20 @@ export default function MisCursosPage() {
       const { data: persona, error: errorPersona } = await supabase
         .from('persons').select('id').eq('auth_user_id', user.id).maybeSingle()
       if (!persona) {
-        setDebugInfo(`No se encontró una persona vinculada a esta cuenta. Error: ${errorPersona ? JSON.stringify(errorPersona) : 'ninguno'}`)
+        if (errorPersona) console.error('Error buscando la persona:', errorPersona)
+        setDebugInfo('No encontramos cursos asociados a esta cuenta. Si compraste con otro email, cerrá sesión y entrá con ese.')
         setLoading(false); return
       }
 
       const { data: enrollments, error: errorEnroll } = await supabase
         .from('enrollments')
-        .select('id, estado, modalidad, fecha_inicio, fecha_vencimiento, course_id')
+        .select('id, estado, modalidad, fecha_inicio, fecha_vencimiento, course_id, suscripcion_estado, suscripcion_link, proximo_cobro, mp_preapproval_id, suscripcion_aviso')
         .eq('person_id', persona.id)
         .order('fecha_inicio', { ascending: false })
 
       if (errorEnroll) {
-        setDebugInfo(`Error cargando inscripciones: ${JSON.stringify(errorEnroll)}`)
+        console.error('Error cargando inscripciones:', errorEnroll)
+        setDebugInfo('No pudimos cargar tus cursos. Revisá tu conexión y recargá la página.')
         setLoading(false); return
       }
 
@@ -70,12 +144,12 @@ export default function MisCursosPage() {
 
       const courseIds = enrollments.map(e => e.course_id)
       const { data: cursos } = await supabase
-        .from('courses').select('id, titulo, imagen_url, slug, user_id')
+        .from('courses').select('id, titulo, imagen_url, slug, user_id, cobro_automatico')
         .in('id', courseIds)
 
       const terapeutaIds = [...new Set((cursos || []).map(c => c.user_id))]
       const { data: terapeutas } = await supabase
-        .from('therapist_profiles').select('user_id, nombre_profesional, slug, whatsapp, alias_pago, cbu, titular_cuenta, banco')
+        .from('therapist_profiles').select('user_id, nombre_profesional, slug, whatsapp, alias_pago, cbu, titular_cuenta, banco, mp_activo')
         .in('user_id', terapeutaIds)
 
         const { data: encuentros } = await supabase
@@ -93,16 +167,23 @@ export default function MisCursosPage() {
           modalidad: e.modalidad,
           fecha_inicio: e.fecha_inicio,
           fecha_vencimiento: e.fecha_vencimiento,
+          suscripcion_estado: e.suscripcion_estado || null,
+          suscripcion_link: e.suscripcion_link || null,
+          proximo_cobro: e.proximo_cobro || null,
+          mp_preapproval_id: e.mp_preapproval_id || null,
+          suscripcion_aviso: e.suscripcion_aviso || null,
           course: curso as Inscripcion['course'],
-          terapeuta: terapeuta ? { nombre_profesional: terapeuta.nombre_profesional, slug: terapeuta.slug, whatsapp: terapeuta.whatsapp, alias_pago: terapeuta.alias_pago, cbu: terapeuta.cbu, titular_cuenta: terapeuta.titular_cuenta, banco: terapeuta.banco } : null,
+          terapeuta: terapeuta ? { nombre_profesional: terapeuta.nombre_profesional, slug: terapeuta.slug, whatsapp: terapeuta.whatsapp, alias_pago: terapeuta.alias_pago, cbu: terapeuta.cbu, titular_cuenta: terapeuta.titular_cuenta, banco: terapeuta.banco, mp_activo: terapeuta.mp_activo } : null,
           proximoEncuentro,
         }
       }).filter(i => i.course)
 
       setInscripciones(combinado)
+      // si alguna suscripción necesita revisarse, le preguntamos a Mercado Pago y recargamos una sola vez
+      if (revisarMP && await refrescarSuscripciones(combinado)) { await cargarDatos(false); return }
     } catch (e: any) {
       console.error(e)
-      setDebugInfo(`Error inesperado: ${e?.message || JSON.stringify(e)}`)
+      setDebugInfo('Hubo un problema al cargar tus cursos. Recargá la página.')
     } finally { setLoading(false) }
   }
 
@@ -149,6 +230,10 @@ export default function MisCursosPage() {
         .mc-btn-datos{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:7px 12px;border-radius:8px;background:#F0EBFF;color:#6D28D9;border:none;cursor:pointer;font-family:inherit}
         .mc-datos-pago{margin-top:10px;padding:12px;background:#FAFAFA;border:1px solid #E5E5E5;border-radius:10px;font-size:12px}
         .mc-datos-row{display:flex;justify-content:space-between;padding:4px 0}
+        .mc-sus{margin-top:10px;padding:9px 11px;border-radius:9px;background:#F5F3FF;color:#5B21B6;font-size:11.5px;line-height:1.5;cursor:default}
+        .mc-sus.alerta{background:#FFFBEB;color:#92400E}
+        .mc-link{display:inline;margin-left:6px;background:none;border:none;padding:0;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:11.5px}
+        .mc-link:disabled{opacity:.6;cursor:default}
       `}</style>
 
       <nav className="mc-nav">
@@ -185,6 +270,49 @@ export default function MisCursosPage() {
                       </div>
                     )}
                     <div className="mc-ver-btn">Ver curso →</div>
+                    {(i.suscripcion_estado === 'activa' || i.suscripcion_estado === 'esperando_cobro') && (
+                      <div className="mc-sus" onClick={e => e.stopPropagation()}>
+                        🔁 Renovación automática{i.proximo_cobro ? ` · próximo cobro: ${fechaLarga(i.proximo_cobro)}` : ''}
+                        <button className="mc-link" disabled={accionando === i.id} onClick={() => cancelarSuscripcion(i)}>
+                          {accionando === i.id ? 'Cancelando…' : 'Cancelar'}
+                        </button>
+                      </div>
+                    )}
+                    {i.suscripcion_aviso && ['activa', 'esperando_cobro', 'con_problemas'].includes(i.suscripcion_estado || '') && (
+                      <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>📣 {i.suscripcion_aviso}</div>
+                    )}
+                    {i.suscripcion_estado === 'con_problemas' && (
+                      <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>
+                        ⚠️ No pudimos cobrar tu cuota. Actualizá tu tarjeta en Mercado Pago (Tu perfil → Suscripciones). Tenés acceso hasta el {fechaLarga(i.fecha_vencimiento)}.
+                      </div>
+                    )}
+                    {i.suscripcion_estado === 'cancelada' && i.modalidad === 'suscripcion' && (
+                      <div className="mc-sus" onClick={e => e.stopPropagation()}>Renovación automática cancelada · acceso hasta el {fechaLarga(i.fecha_vencimiento)}</div>
+                    )}
+                    {i.modalidad === 'suscripcion' && i.course.cobro_automatico && i.terapeuta?.mp_activo && !['activa', 'esperando_cobro', 'con_problemas', 'pendiente', 'creando'].includes(i.suscripcion_estado || '') && (
+                      <div className="mc-sus" onClick={e => e.stopPropagation()}>
+                        ¿Querés que se renueve solo? El primer cobro es el día que vence tu acceso.
+                        <button className="mc-link" disabled={accionando === i.id} onClick={() => irASuscripcion(i)}>
+                          {accionando === i.id ? 'Preparando…' : 'Activar renovación automática'}
+                        </button>
+                      </div>
+                    )}
+                    {mensajes[i.id] && <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>{mensajes[i.id]}</div>}
+                  </>) : i.suscripcion_estado === 'esperando_cobro' ? (<>
+                    <span className="mc-badge pendiente_pago">⏳ Confirmando tu primer cobro</span>
+                    <div className="mc-pendiente-txt">Tu suscripción está activa. El acceso se habilita apenas Mercado Pago acredite el cobro (suele tardar unos minutos). No hace falta que pagues de nuevo.</div>
+                  </>) : i.suscripcion_estado === 'pendiente' || i.suscripcion_estado === 'rechazada' ? (<>
+                    <span className="mc-badge pendiente_pago">{i.suscripcion_estado === 'rechazada' ? '⚠️ Tarjeta rechazada' : '⏳ Suscripción sin completar'}</span>
+                    <div className="mc-pendiente-txt">{i.suscripcion_estado === 'rechazada' ? 'El primer cobro fue rechazado y no se te cobró nada. Podés probar con otra tarjeta.' : 'Todavía no terminaste en Mercado Pago. No se te cobró nada.'}</div>
+                    <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}} onClick={e => e.stopPropagation()}>
+                      <button className="mc-btn-completar" style={{border:'none',cursor:'pointer',fontFamily:'inherit'}} disabled={accionando === i.id} onClick={() => irASuscripcion(i)}>
+                        {accionando === i.id ? 'Preparando…' : i.suscripcion_estado === 'rechazada' ? 'Probar con otra tarjeta →' : 'Completar ahora →'}
+                      </button>
+                    </div>
+                    {mensajes[i.id] && <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>{mensajes[i.id]}</div>}
+                  </>) : i.suscripcion_estado === 'con_problemas' ? (<>
+                    <span className="mc-badge pendiente_pago">⚠️ Cuota sin cobrar</span>
+                    <div className="mc-pendiente-txt">Mercado Pago no pudo cobrar tu cuota y sigue intentando. Actualizá tu tarjeta en Mercado Pago (Tu perfil → Suscripciones): cuando se cobre, el acceso vuelve solo.</div>
                   </>) : i.estado !== 'activa' ? (<>
                     <span className="mc-badge pendiente_pago">⏳ Pago pendiente</span>
                     <div className="mc-pendiente-txt">
@@ -208,6 +336,14 @@ export default function MisCursosPage() {
                     </div>
                   </>) : (<>
                     <span className="mc-badge pendiente_pago">⚠️ Acceso vencido</span>
+                    {i.modalidad === 'suscripcion' && i.course.cobro_automatico && i.terapeuta?.mp_activo && (
+                      <div style={{marginTop:'10px'}} onClick={e => e.stopPropagation()}>
+                        <button className="mc-btn-completar" style={{border:'none',cursor:'pointer',fontFamily:'inherit'}} disabled={accionando === i.id} onClick={() => irASuscripcion(i)}>
+                          {accionando === i.id ? 'Preparando…' : '🔁 Suscribirme de nuevo'}
+                        </button>
+                        {mensajes[i.id] && <div className="mc-sus alerta">{mensajes[i.id]}</div>}
+                      </div>
+                    )}
                     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}}>
                       {(i.terapeuta?.alias_pago || i.terapeuta?.cbu) && (
                         <button className="mc-btn-datos"

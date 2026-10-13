@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServicio, tokenMPDeTerapeuta } from '@/lib/mpReservas'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,16 +8,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, motivo: 'faltan_datos' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = supabaseServicio()
 
     const { data: insc } = await supabase
       .from('enrollments').select('id, estado, course_id, terapeuta_id, fecha_vencimiento')
       .eq('id', enrollmentId).maybeSingle()
     if (!insc) return NextResponse.json({ ok: false, motivo: 'inscripcion_no_existe' }, { status: 404 })
     if (insc.estado === 'activa') return NextResponse.json({ ok: true })
+
+    // Un pago de Mercado Pago habilita UNA sola vez: si ese pago ya se usó, no vuelve a dar acceso
+    const { data: yaUsado } = await supabase
+      .from('course_payments').select('id, enrollment_id, created_at')
+      .eq('mp_payment_id', String(paymentId)).limit(1).maybeSingle()
+    // solo se acepta repetir un pago si es de esta misma inscripción y se anotó hace menos de 2 horas
+    // (un reintento porque falló dar el acceso); un pago viejo nunca vuelve a habilitar un mes nuevo
+    const reintentoReciente = !!yaUsado && yaUsado.enrollment_id === insc.id &&
+      Date.now() - new Date(yaUsado.created_at).getTime() < 2 * 3600000
+    if (yaUsado && !reintentoReciente) {
+      console.warn('Pago de curso ya usado antes:', { enrollmentId, paymentId })
+      return NextResponse.json({ ok: false, motivo: 'pago_ya_usado' }, { status: 400 })
+    }
 
     const { data: curso } = await supabase
       .from('courses').select('precio, modalidad, user_id')
@@ -26,15 +36,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, motivo: 'curso_invalido' }, { status: 400 })
     }
 
-    const { data: perfil } = await supabase
-      .from('therapist_profiles').select('mp_access_token')
-      .eq('user_id', curso.user_id).maybeSingle()
-    if (!perfil?.mp_access_token) {
+    const token = await tokenMPDeTerapeuta(curso.user_id)
+    if (!token) {
       return NextResponse.json({ ok: false, motivo: 'mp_no_configurado' }, { status: 400 })
     }
 
     const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(paymentId))}`, {
-      headers: { Authorization: `Bearer ${perfil.mp_access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     })
     if (!res.ok) return NextResponse.json({ ok: false, motivo: 'pago_no_encontrado' }, { status: 400 })
@@ -51,19 +59,17 @@ export async function POST(req: NextRequest) {
 
     const datos: any = { estado: 'activa' }
     if (curso.modalidad === 'suscripcion') {
-      const vence = new Date()
+      // si todavía le quedaban días, el mes nuevo se suma desde el vencimiento (no se pierden días)
+      const actual = insc.fecha_vencimiento ? new Date(insc.fecha_vencimiento) : null
+      const base = actual && actual > new Date() ? actual : new Date()
+      const vence = new Date(base)
       vence.setDate(vence.getDate() + 30)
       datos.fecha_vencimiento = vence.toISOString()
     }
 
-    const { error } = await supabase.from('enrollments').update(datos).eq('id', insc.id)
-    if (error) {
-      console.error('Error activando inscripción:', error)
-      return NextResponse.json({ ok: false, motivo: 'error_guardando' }, { status: 500 })
-    }
-
-    // anotar el pago en Finanzas. Si esto falla, el acceso ya quedó dado: solo se registra el error
-    const { error: errPago } = await supabase.from('course_payments').insert({
+    // primero se anota el pago: si otro pedido igual llega al mismo tiempo, la base frena el duplicado
+    // (si ya estaba anotado para esta misma inscripción, es un reintento: solo falta dar el acceso)
+    const { error: errPago } = yaUsado ? { error: null } : await supabase.from('course_payments').insert({
       terapeuta_id: curso.user_id,
       enrollment_id: insc.id,
       course_id: insc.course_id,
@@ -73,7 +79,23 @@ export async function POST(req: NextRequest) {
       mp_payment_id: String(pago.id),
       fecha: pago.date_approved || new Date().toISOString(),
     })
-    if (errPago && errPago.code !== '23505') console.error('Error registrando pago de curso:', errPago)
+    if (errPago) {
+      if (errPago.code === '23505') {
+        // ese pago ya se registró en otro pedido simultáneo: no se vuelve a dar acceso
+        const { data: otra } = await supabase.from('enrollments').select('estado').eq('id', insc.id).maybeSingle()
+        return otra?.estado === 'activa'
+          ? NextResponse.json({ ok: true })
+          : NextResponse.json({ ok: false, motivo: 'pago_ya_usado' }, { status: 400 })
+      }
+      // si falla anotarlo por otro motivo, el acceso igual se da (la alumna pagó): solo se registra el error
+      console.error('Error registrando pago de curso:', errPago)
+    }
+
+    const { error } = await supabase.from('enrollments').update(datos).eq('id', insc.id)
+    if (error) {
+      console.error('Error activando inscripción:', error)
+      return NextResponse.json({ ok: false, motivo: 'error_guardando' }, { status: 500 })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err) {

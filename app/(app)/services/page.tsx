@@ -39,6 +39,11 @@ export default function ServiciosPage() {
   const [totalIngresos, setTotalIngresos] = useState(0)
   const [totalSesiones, setTotalSesiones] = useState(0)
   const [loading, setLoading] = useState(true)
+  // si viene desde Página de reservas, mostramos el aviso fijo para volver
+  const [desdePagina, setDesdePagina] = useState(false)
+  useEffect(() => {
+    try { setDesdePagina(new URLSearchParams(window.location.search).get('desde') === 'pagina') } catch {}
+  }, [])
   const [modalOpen, setModalOpen] = useState(false)
   const [editando, setEditando] = useState<Servicio | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -342,6 +347,11 @@ export default function ServiciosPage() {
         .plazo-btn.sel{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
       `}</style>
 
+      {desdePagina && (
+        <a href="/settings?bloque=horarios" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(139,92,246,0.45)'}}>
+          ← Volver a Página de reservas
+        </a>
+      )}
       <div className="sw">
         <div className="s-header">
           <div>

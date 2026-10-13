@@ -17,6 +17,14 @@ type Alumna = {
   fechaVencimiento: string | null
   fechaConfirmacion: string
   leccionesCompletadas: number
+  suscripcionEstado: string | null
+  proximoCobro: string | null
+}
+
+const SUS_VIVA = ['pendiente', 'esperando_cobro', 'activa', 'con_problemas', 'rechazada', 'creando']
+async function tokenSesion() {
+  const { data: { session } } = await createClient().auth.getSession()
+  return session?.access_token
 }
 
 export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
@@ -26,9 +34,9 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [precioCurso, setPrecioCurso] = useState<number | null>(null)
 
-  useEffect(() => { cargarAlumnas() }, [cursoId])
+  useEffect(() => { cargarAlumnas(true) }, [cursoId])
 
-  async function cargarAlumnas() {
+  async function cargarAlumnas(revisarMP = false) {
     try {
       const supabase = createClient()
 
@@ -46,7 +54,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
 
       const { data: enrollments } = await supabase
         .from('enrollments')
-        .select('id, person_id, estado, modalidad, fecha_inicio, fecha_vencimiento, updated_at')
+        .select('id, person_id, estado, modalidad, fecha_inicio, fecha_vencimiento, updated_at, suscripcion_estado, proximo_cobro')
         .eq('course_id', cursoId)
         .order('fecha_inicio', { ascending: false })
 
@@ -76,10 +84,23 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
           fechaVencimiento: e.fecha_vencimiento,
           fechaConfirmacion: e.updated_at,
           leccionesCompletadas: completadas,
+          suscripcionEstado: (e as any).suscripcion_estado || null,
+          proximoCobro: (e as any).proximo_cobro || null,
         }
       })
 
       setAlumnas(combinado)
+      // si hay suscripciones automáticas, le preguntamos a Mercado Pago por cobros nuevos y recargamos una vez
+      if (revisarMP && combinado.some(a => a.suscripcionEstado && SUS_VIVA.includes(a.suscripcionEstado))) {
+        try {
+          const res = await fetch('/api/cursos/suscripcion/revisar-curso', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId: cursoId, accessToken: await tokenSesion() }),
+          })
+          const r = await res.json().catch(() => ({}))
+          if (r.revisadas > 0) { await cargarAlumnas(false); return }
+        } catch (e) { console.error('Error revisando suscripciones:', e) }
+      }
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
@@ -118,7 +139,29 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
     }
   }
 
+  // cancela la suscripción automática de una alumna (conserva el acceso que ya pagó)
+  async function cancelarSuscripcionAlumna(a: Alumna, preguntar = true): Promise<boolean> {
+    if (preguntar && !confirm(`¿Cancelar la suscripción automática de ${a.nombre}?\n\nNo se le va a cobrar más. Conserva el acceso hasta ${a.fechaVencimiento ? formatFecha(a.fechaVencimiento) : 'la fecha que ya pagó'}.`)) return false
+    setConfirmando(a.enrollmentId)
+    try {
+      const res = await fetch('/api/cursos/suscripcion/cancelar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId: a.enrollmentId, accessToken: await tokenSesion() }),
+      })
+      const r = await res.json().catch(() => ({ ok: false }))
+      if (!r.ok) { alert(r.mensaje || 'No se pudo cancelar. Probá de nuevo en unos minutos.'); return false }
+      setAlumnas(prev => prev.map(x => x.enrollmentId === a.enrollmentId ? { ...x, suscripcionEstado: 'cancelada' } : x))
+      return true
+    } finally { setConfirmando(null) }
+  }
+
   async function confirmarPago(enrollmentId: string, modalidad: string) {
+    const alumna = alumnas.find(x => x.enrollmentId === enrollmentId)
+    // si tiene una suscripción de Mercado Pago en proceso, se cancela antes (si no, se le cobraría dos veces)
+    if (alumna?.suscripcionEstado && ['pendiente', 'esperando_cobro', 'rechazada', 'creando'].includes(alumna.suscripcionEstado)) {
+      if (!confirm(`${alumna.nombre} tiene una suscripción de Mercado Pago en proceso.\n\nSi confirmás el pago a mano, se la cancelamos para que no se le cobre dos veces. ¿Seguimos?`)) return
+      if (!(await cancelarSuscripcionAlumna(alumna, false))) return
+    }
     const monto = pedirMonto('Vas a habilitar el acceso al curso.')
     if (monto === null) return
     setConfirmando(enrollmentId)
@@ -219,6 +262,27 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
               {a.modalidad === 'suscripcion' && <span>Vence: {formatFecha(a.fechaVencimiento)}</span>}
             </div>
 
+            {a.suscripcionEstado && (
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',flexWrap:'wrap',fontSize:'11.5px',padding:'8px 10px',borderRadius:'8px',marginBottom:'10px',
+                background: ['con_problemas','rechazada'].includes(a.suscripcionEstado) ? '#FFFBEB' : a.suscripcionEstado === 'cancelada' ? 'var(--bg-card)' : '#F5F3FF',
+                color: ['con_problemas','rechazada'].includes(a.suscripcionEstado) ? '#92400E' : a.suscripcionEstado === 'cancelada' ? 'var(--text-muted)' : '#5B21B6'}}>
+                <span>
+                  {a.suscripcionEstado === 'activa' ? `🔁 Cobro automático activo${a.proximoCobro ? ` · próximo cobro: ${formatFecha(a.proximoCobro)}` : ''}`
+                    : a.suscripcionEstado === 'esperando_cobro' ? '⏳ Cobro automático: esperando que se acredite el primer cobro'
+                    : a.suscripcionEstado === 'con_problemas' ? '⚠️ Mercado Pago no pudo cobrar la última cuota y sigue intentando. Tiene unos días de gracia.'
+                    : a.suscripcionEstado === 'rechazada' ? '⚠️ Su tarjeta fue rechazada en el primer cobro (no se le cobró nada)'
+                    : a.suscripcionEstado === 'pendiente' || a.suscripcionEstado === 'creando' ? '⏳ Empezó a suscribirse pero no terminó en Mercado Pago'
+                    : '🔁 Cobro automático cancelado'}
+                </span>
+                {SUS_VIVA.includes(a.suscripcionEstado) && (
+                  <button onClick={() => cancelarSuscripcionAlumna(a)} disabled={confirmando === a.enrollmentId}
+                    style={{fontSize:'11px',fontWeight:700,background:'none',border:'none',color:'inherit',textDecoration:'underline',cursor:'pointer',fontFamily:'inherit',padding:0}}>
+                    {confirmando === a.enrollmentId ? 'Cancelando…' : 'Cancelar suscripción'}
+                  </button>
+                )}
+              </div>
+            )}
+
             {a.estado === 'activa' && totalLecciones > 0 && (<>
               <div className="al-progreso-barra"><div className="al-progreso-fill" style={{width:`${porcentaje}%`}}/></div>
               <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{a.leccionesCompletadas} de {totalLecciones} lecciones · {porcentaje}%</div>
@@ -230,7 +294,7 @@ export default function CourseStudentsTab({ cursoId }: { cursoId: string }) {
               </button>
             )}
 
-            {a.estado === 'activa' && a.modalidad === 'suscripcion' && (() => {
+            {a.estado === 'activa' && a.modalidad === 'suscripcion' && !['activa','esperando_cobro','con_problemas'].includes(a.suscripcionEstado || '') && (() => {
               const dias = diasParaVencer(a.fechaVencimiento)
               if (dias === null || dias > 5) return null
               const vencido = dias < 0

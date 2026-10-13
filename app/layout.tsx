@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 
 export const viewport: Viewport = {
@@ -7,6 +7,30 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
+}
+
+// Datos de la vista previa de Luma (landing y app). Están en el formato de Next.js para que
+// cada página pueda reemplazarlos: la página de una terapeuta muestra SU foto, nunca la de Luma.
+export const metadata: Metadata = {
+  metadataBase: new URL('https://lumaapp.lat'),
+  title: 'Luma — Tu trabajo, en orden',
+  description: 'Agenda, historial, cobros y finanzas para terapeutas y profesionales del bienestar',
+  verification: {
+    google: 'N1lasbNh0oCGL_I5CnUXt9CEod8MmmRjzqTC3eWmkmg',
+    other: { 'facebook-domain-verification': 'wx4giky0x9eq4hw6qkqaha36yvm7kq' },
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'Luma',
+    title: 'Luma — Agenda para terapeutas holísticas',
+    description: 'Turnos, historial de cada consultante, cobros y tu página de reservas, en un solo lugar. Probalo 7 días gratis.',
+    url: 'https://lumaapp.lat',
+    images: [{ url: 'https://lumaapp.lat/og-luma.jpg', width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['https://lumaapp.lat/og-luma.jpg'],
+  },
 }
 
 export default function RootLayout({
@@ -17,19 +41,6 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-  <title>Luma — Tu trabajo, en orden</title>
-  <meta name="description" content="Agenda, historial, cobros y finanzas para terapeutas y profesionales del bienestar"/>
-  <meta name="google-site-verification" content="N1lasbNh0oCGL_I5CnUXt9CEod8MmmRjzqTC3eWmkmg" />
-  <meta name="facebook-domain-verification" content="wx4giky0x9eq4hw6qkqaha36yvm7kq" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Luma" />
-  <meta property="og:title" content="Luma — Agenda para terapeutas holísticas" />
-  <meta property="og:description" content="Turnos, historial de cada consultante, cobros y tu página de reservas, en un solo lugar. Probalo 7 días gratis." />
-  <meta property="og:url" content="https://lumaapp.lat" />
-  <meta property="og:image" content="https://lumaapp.lat/og-luma.jpg" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta name="twitter:card" content="summary_large_image" />
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>

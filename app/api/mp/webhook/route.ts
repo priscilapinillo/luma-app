@@ -12,37 +12,69 @@ function sumarUnMes(fecha: Date) {
   return nueva
 }
 
+async function cancelarPreapprovalEnMP(id: string) {
+  try {
+    const r = await fetch(`https://api.mercadopago.com/preapproval/${id}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'cancelled' }),
+    })
+    if (!r.ok) console.error('Webhook: no se pudo cancelar el plan anterior', id, r.status)
+  } catch (e) { console.error('Webhook: error cancelando el plan anterior', id, e) }
+}
+
 async function actualizarDesdePreapproval(preapprovalId: string) {
   const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
     headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` },
+    cache: 'no-store',
   })
+  if (!res.ok) { console.error('Webhook: no se pudo leer el preapproval', preapprovalId, res.status); return }
   const preapproval = await res.json()
-  console.log('DEBUG webhook — preapproval completo:', JSON.stringify(preapproval))
 
   const [userId, plan] = (preapproval.external_reference || '').split(':')
   if (!userId) { console.error('Webhook: preapproval sin external_reference válido'); return }
 
-  let status = 'past_due'
-  let periodoVence: Date | null = null
-
-  if (preapproval.status === 'authorized') {
-    status = 'active'
-    periodoVence = preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : sumarUnMes(new Date())
-  } else if (preapproval.status === 'cancelled') {
-    status = 'cancelled'
-  } else if (preapproval.status === 'paused') {
-    status = 'past_due'
+  // "pending" = abrió el pago en Mercado Pago pero todavía no lo autorizó: no se toca nada
+  // (antes esto la pasaba a "past_due" y le sacaba el acceso a quien estaba en prueba)
+  if (!['authorized', 'cancelled', 'paused'].includes(preapproval.status)) {
+    console.log(`Webhook: preapproval ${preapprovalId} en estado ${preapproval.status}, no cambia nada`)
+    return
   }
 
-  const { error } = await supabase.from('subscriptions').update({
-    status,
-    plan: plan || undefined,
-    mp_subscription_id: preapprovalId,
-    current_period_ends_at: periodoVence ? periodoVence.toISOString() : undefined,
-  }).eq('user_id', userId)
+  const { data: subActual } = await supabase
+    .from('subscriptions').select('mp_subscription_id, status')
+    .eq('user_id', userId).maybeSingle()
+  const idActual = subActual?.mp_subscription_id || null
+  // solo es "la vigente" si es exactamente la que ya está guardada como autorizada
+  const esElActual = !!idActual && idActual === preapprovalId
 
+  if (preapproval.status === 'authorized') {
+    // plan nuevo autorizado (por ejemplo, pasó de Básico a Premium): recién ahora se cancela el anterior
+    if (idActual && idActual !== preapprovalId) await cancelarPreapprovalEnMP(idActual)
+    const periodoVence = preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : sumarUnMes(new Date())
+    const { error } = await supabase.from('subscriptions').update({
+      status: 'active',
+      plan: plan || undefined,
+      mp_subscription_id: preapprovalId,
+      current_period_ends_at: periodoVence.toISOString(),
+    }).eq('user_id', userId)
+    if (error) console.error('Webhook: error actualizando subscriptions:', error)
+    else console.log(`Webhook: user ${userId} → active, plan=${plan}`)
+    return
+  }
+
+  // cancelado o pausado: solo cuenta si es la suscripción vigente de la cuenta
+  // (si es un plan viejo que se canceló al cambiar de plan, o uno que nunca se autorizó, se ignora)
+  if (!esElActual) {
+    console.log(`Webhook: ${preapprovalId} (${preapproval.status}) no es la suscripción vigente, se ignora`)
+    return
+  }
+  const { error } = await supabase.from('subscriptions').update({
+    status: preapproval.status === 'cancelled' ? 'cancelled' : 'past_due',
+    mp_subscription_id: preapprovalId,
+  }).eq('user_id', userId)
   if (error) console.error('Webhook: error actualizando subscriptions:', error)
-  else console.log(`Webhook: subscriptions actualizada para user ${userId} → status=${status}, plan=${plan}`)
+  else console.log(`Webhook: user ${userId} → ${preapproval.status}`)
 }
 
 function validarFirma(req: NextRequest, dataId: string): boolean {
@@ -76,8 +108,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     const params = req.nextUrl.searchParams
-    console.log('DEBUG webhook — body recibido:', JSON.stringify(body))
-    console.log('DEBUG webhook — query params:', Object.fromEntries(params))
 
     const type = body.type || params.get('type') || params.get('topic')
     const dataId = body.data?.id || params.get('id') || params.get('data.id')
@@ -99,7 +129,6 @@ export async function POST(req: NextRequest) {
         headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` },
       })
       const pago = await res.json()
-      console.log('DEBUG webhook — authorized_payment completo:', JSON.stringify(pago))
       if (pago.preapproval_id) await actualizarDesdePreapproval(pago.preapproval_id)
     } else {
       console.log(`Webhook: tipo de notificación no manejado todavía: ${type}`)

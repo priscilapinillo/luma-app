@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { tokenMPDeTerapeuta } from '@/lib/mpReservas'
+import { enviarAviso } from '@/lib/push'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MINUTOS_PAGO = 30          // el link de pago vence a los 30 min
@@ -35,7 +37,7 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
   }
 
   const [perfilR, servR, sesionR] = await Promise.all([
-    supabase.from('therapist_profiles').select('slug, mp_activo, mp_access_token').eq('user_id', therapistId).maybeSingle(),
+    supabase.from('therapist_profiles').select('slug, mp_activo').eq('user_id', therapistId).maybeSingle(),
     supabase.from('services').select('id, nombre, precio_base, user_id').eq('id', serviceId).maybeSingle(),
     supabase.from('sessions').select('id, user_id, service_id, estado_pago, estado_sesion, created_at').eq('id', reservaId).maybeSingle(),
   ])
@@ -46,7 +48,7 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
   const perfil = perfilR.data
   const serv = servR.data
   const sesion = sesionR.data
-  const token = (perfil?.mp_access_token || '').trim()
+  const token = perfil?.mp_activo ? (await tokenMPDeTerapeuta(String(therapistId))) || '' : ''
 
   if (!perfil?.mp_activo || !token) {
     return NextResponse.json({ motivo: 'mp_no_configurado' }, { status: 400 })
@@ -101,15 +103,11 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
     console.error('create-preference (reserva): Mercado Pago rechazó', response.status, data?.message)
     if (tokenMalo) {
       // aviso a la terapeuta para que revise su token (si falla el aviso, no importa)
-      fetch(`${origin}/api/push/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: therapistId,
-          titulo: '⚠️ Mercado Pago no está funcionando',
-          cuerpo: 'Una clienta quiso pagarte y Mercado Pago rechazó tu token. Revisalo en Ajustes → Mercado Pago.',
-        }),
-      }).catch(() => {})
+      await enviarAviso(
+        therapistId,
+        '⚠️ Mercado Pago no está funcionando',
+        'Una clienta quiso pagarte y Mercado Pago rechazó tu token. Revisalo en Ajustes → Página de reservas → Cobros.'
+      ).catch(() => {})
     }
     return NextResponse.json({ motivo: tokenMalo ? 'token_invalido' : 'error_mp' }, { status: 400 })
   }
@@ -130,32 +128,54 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
   return NextResponse.json({ init_point: data.init_point, id: data.id, existe: !!sesion })
 }
 
-// ─── Cursos (sin cambios: mismo comportamiento que antes) ─────────────────────
+// ─── Cursos ──────────────────────────────────────────────────────────────────
+// El precio se toma de la base (curso de la inscripción), nunca del navegador.
 async function preferenciaLegacy(body: any, supabase: any) {
   const { servicioNombre, monto, therapistId, successUrl, failureUrl, externalReference } = body
 
   const { data: perfil } = await supabase
     .from('therapist_profiles')
-    .select('mp_access_token, mp_activo')
+    .select('mp_activo')
     .eq('user_id', therapistId)
-    .single()
-
-  if (!perfil?.mp_activo || !perfil?.mp_access_token) {
+    .maybeSingle()
+  const token = perfil?.mp_activo ? await tokenMPDeTerapeuta(String(therapistId)) : null
+  if (!token) {
     return NextResponse.json({ error: 'MP no configurado' }, { status: 400 })
+  }
+
+  let titulo = servicioNombre
+  let precio = Number(monto)
+  if (externalReference && UUID.test(String(externalReference))) {
+    const { data: insc } = await supabase
+      .from('enrollments').select('course_id, terapeuta_id')
+      .eq('id', externalReference).maybeSingle()
+    if (insc) {
+      const { data: curso } = await supabase
+        .from('courses').select('titulo, precio, user_id')
+        .eq('id', insc.course_id).maybeSingle()
+      if (!curso || curso.user_id !== therapistId || insc.terapeuta_id !== therapistId) {
+        return NextResponse.json({ error: 'Curso inválido' }, { status: 400 })
+      }
+      titulo = curso.titulo
+      precio = Number(curso.precio)
+    }
+  }
+  if (!(precio > 0)) {
+    return NextResponse.json({ error: 'Precio inválido' }, { status: 400 })
   }
 
   const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${perfil.mp_access_token}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       items: [{
-        title: servicioNombre,
+        title: titulo,
         quantity: 1,
         currency_id: 'ARS',
-        unit_price: monto,
+        unit_price: precio,
       }],
       back_urls: {
         success: successUrl,

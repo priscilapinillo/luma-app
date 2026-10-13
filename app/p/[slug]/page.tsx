@@ -156,34 +156,19 @@ const DESTELLOS_HERO = [
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+// El paciente y el turno los crea el servidor (/api/reservas/crear). Así la base no tiene que dejar
+// que cualquiera lea o escriba pacientes y turnos. Esta función queda solo para no cambiar el resto de la página.
 async function buscarOCrearPaciente(
-  supabase: ReturnType<typeof createClient>,
-  terapeutaId: string,
-  nombre: string,
-  whatsapp: string,
+  _supabase: ReturnType<typeof createClient>,
+  _terapeutaId: string,
+  _nombre: string,
+  _whatsapp: string,
 ) {
-  try {
-    const partes = nombre.trim().split(' ')
-    const { data: pacienteId, error: errPac } = await supabase.rpc('buscar_o_crear_paciente', {
-      p_terapeuta: terapeutaId,
-      p_nombre: partes[0],
-      p_apellido: partes.slice(1).join(' ') || '',
-      p_celular: whatsapp,
-    })
-
-    if (errPac) {
-      console.error('Error creando paciente:', JSON.stringify(errPac))
-      throw new Error('Error creando paciente: ' + JSON.stringify(errPac))
-    }
-    return pacienteId ?? null
-  } catch(e) {
-    console.error('Error en buscarOCrearPaciente:', e)
-    return null
-  }
+  return 'servidor'
 }
 
 async function crearSesionYBooking(
-  supabase: ReturnType<typeof createClient>,
+  _supabase: ReturnType<typeof createClient>,
   opts: {
     terapeutaId: string
     pacienteId: string | null
@@ -197,61 +182,29 @@ async function crearSesionYBooking(
     id?: string
   }
 ) {
-  if (!opts.pacienteId) {
-    console.error('pacienteId es null — no se puede crear la sesión')
-    throw new Error('No se pudo crear o encontrar el paciente')
-  }
-
-  const { data: sesion, error } = await supabase.from('sessions').insert({
-    ...(opts.id ? { id: opts.id } : {}),
-    user_id: opts.terapeutaId,
-    patient_id: opts.pacienteId,
-    service_id: opts.servicio.id,
-    fecha: opts.fecha + 'T' + opts.hora + ':00',
-    hora: opts.hora,
-    duracion: opts.servicio.duracion_estimada,
-    servicio_nombre: opts.servicio.nombre,
-    precio: opts.servicio.precio_base,
-    estado_pago: 'pendiente',
-    realizado: false,
-    contexto_sesion: opts.mensaje,
-    metodo_pago: opts.metodoPago,
-    tipo_servicio: opts.servicio.tipo_servicio || 'vivo',
-  }).select().single()
-
-  if (error || !sesion) {
-    console.error('Error creando sesión:', JSON.stringify(error))
-    return null
-  }
-
-  await supabase.from('public_bookings').insert({
-    therapist_id: opts.terapeutaId,
-    patient_name: opts.nombre,
-    patient_whatsapp: opts.whatsapp,
-    patient_message: opts.mensaje,
-    service_id: opts.servicio.id,
-    service_name: opts.servicio.nombre,
-    fecha: opts.fecha,
-    hora: opts.hora,
-    duracion: opts.servicio.duracion_estimada,
-    precio: opts.servicio.precio_base,
-    estado: 'pendiente_pago',
-    session_id: sesion.id,
-  })
-
   try {
-    await fetch('/api/push/send', {
+    const res = await fetch('/api/reservas/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        userId: opts.terapeutaId,
-        titulo: '✦ Nueva reserva en Luma',
-        cuerpo: `${opts.nombre} agendó ${opts.servicio.nombre}${opts.hora !== '00:00' ? ` para el ${opts.fecha} a las ${opts.hora}hs` : ''}`,
+        therapistId: opts.terapeutaId, serviceId: opts.servicio.id, fecha: opts.fecha, hora: opts.hora,
+        mensaje: opts.mensaje, nombre: opts.nombre, whatsapp: opts.whatsapp, metodoPago: opts.metodoPago,
+        ...(opts.id ? { id: opts.id } : {}),
       }),
     })
-  } catch(e) { console.error('Error notificación:', e) }
-
-  return sesion
+    const r = await res.json().catch(() => ({ ok: false }))
+    if (!r.ok || !r.sesion) {
+      console.error('No se pudo crear la reserva:', r.motivo)
+      if (r.motivo === 'ocupado') alert('Ese horario se acaba de ocupar. Elegí otro, por favor.')
+      else if (r.motivo === 'demasiadas') alert('Hiciste muchas reservas seguidas. Esperá un rato e intentá de nuevo.')
+      else if (r.motivo === 'servicio_invalido') alert('Este servicio ya no está disponible. Actualizá la página, por favor.')
+      return null
+    }
+    return r.sesion as { id: string }
+  } catch (e) {
+    console.error('Error creando la reserva:', e)
+    return null
+  }
 }
 // ─── reserva con Mercado Pago ───────────────────────────────────────────────
 // Se guarda en este navegador para poder reintentar el pago sin crear otro turno
@@ -310,6 +263,8 @@ function ContadorAnuncio({ fecha }: { fecha: string }) {
 
 export default function PaginaPublica({ params }: { params: Promise<{ slug: string }> }) {
   const [terapeuta, setTerapeuta] = useState<Terapeuta | null>(null)
+  const [esDuena, setEsDuena] = useState(false) // la terapeuta mirando su propia página (ve la vista previa aunque esté apagada)
+  const [disponible, setDisponible] = useState(true) // false si se le venció la prueba o el plan (lo decide el servidor)
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
   const [sesionesOcupadas, setSesionesOcupadas] = useState<{fecha:string;hora:string;duracion:number}[]>([])
@@ -441,6 +396,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
       setTerapeuta(perfil)
+      try {
+        const { data: { user: visitante } } = await supabase.auth.getUser()
+        setEsDuena(!!visitante && visitante.id === perfil.user_id)
+      } catch {}
+      // ¿puede tomar reservas? (si falla la consulta, seguimos mostrando la página: nunca cortamos por un error)
+      try {
+        const r = await fetch(`/api/pagina-disponible?slug=${encodeURIComponent(slugDecoded)}`, { cache: 'no-store' })
+        if (r.ok) { const j = await r.json(); if (j && j.disponible === false) setDisponible(false) }
+      } catch {}
       const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
         supabase.from('availability').select('*').eq('user_id', perfil.user_id),
@@ -549,7 +513,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   // TRANSFERENCIA
   async function confirmarTransferencia() {
     if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) {
-      setErrorMsg(`Faltan datos: t=${!!terapeuta} s=${!!servicioSel} f=${fechaSel} h=${horaSel} n=${form.nombre} w=${form.whatsapp}`)
+      setErrorMsg('Para reservar, elegí el servicio, el día y el horario, y completá tu nombre y WhatsApp.')
       return
     }
     setEnviandoTransferencia(true)
@@ -668,9 +632,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   // ── derivados ─────────────────────────────────────────────────────────────
 
   const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
-  const fotoUrl = terapeuta?.avatar_url || '/IMG-20260311-WA0023.jpg'
+  const fotoUrl = terapeuta?.avatar_url || '' // sin foto: se muestra la inicial (nunca una foto de ejemplo)
   const secciones = terapeuta?.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true }
-  const faqItems = terapeuta?.faq || []
+  const faqItems = (terapeuta?.faq || []).filter(f => (f?.pregunta || '').trim())
   const isLuna = (terapeuta?.template || 'luna') === 'luna'
   const mostrarTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const mostrarMP = !!terapeuta?.mp_activo
@@ -700,6 +664,44 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   // ── bloques especiales (servicio destacado y anuncio) ──
   const waNumero = (terapeuta.whatsapp || '').replace(/\D/g,'').replace(/^0+/,'')
+
+  // ── página apagada o sin nada para ofrecer: el público ve "se está preparando" (nunca contenido de ejemplo)
+  const paginaApagada = !terapeuta.pagina_activa
+  const sinConfigurar = !(terapeuta.nombre_profesional || '').trim() || (servicios.length === 0 && cursos.length === 0)
+  if ((paginaApagada || sinConfigurar) && !esDuena) return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:t.bg,gap:'14px',padding:'24px',textAlign:'center',fontFamily:t.fontBody}}>
+      <div style={{fontSize:'40px',color:t.primary}}>{t.deco}</div>
+      <div style={{fontSize:'22px',fontWeight:600,color:t.primary,fontFamily:t.fontTitle}}>Esta página se está preparando ✨</div>
+      <div style={{fontSize:'14px',color:t.textDim,maxWidth:'340px',lineHeight:1.6}}>
+        {(terapeuta.nombre_profesional || '').trim() ? `${terapeuta.nombre_profesional.trim()} está armando su espacio de reservas.` : 'Este espacio de reservas todavía no está listo.'} Volvé a entrar en unos días.
+      </div>
+      {waNumero && (
+        <a href={`https://wa.me/${waNumero}`} target="_blank" rel="noopener noreferrer"
+          style={{marginTop:'6px',padding:'11px 22px',borderRadius:'50px',background:t.btnBg,color:t.btnColor,fontSize:'13px',fontWeight:600,textDecoration:'none'}}>
+          Escribir por WhatsApp
+        </a>
+      )}
+    </div>
+  )
+  // prueba o plan vencido: no se pueden tomar reservas que la terapeuta no va a ver
+  if (!disponible && !esDuena) return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:t.bg,gap:'14px',padding:'24px',textAlign:'center',fontFamily:t.fontBody}}>
+      <div style={{fontSize:'40px',color:t.primary}}>{t.deco}</div>
+      <div style={{fontSize:'22px',fontWeight:600,color:t.primary,fontFamily:t.fontTitle}}>No disponible por el momento</div>
+      <div style={{fontSize:'14px',color:t.textDim,maxWidth:'340px',lineHeight:1.6}}>
+        Las reservas online de {(terapeuta.nombre_profesional || '').trim() || 'esta página'} están pausadas.{waNumero ? ' Podés escribirle directamente:' : ' Volvé a entrar en unos días.'}
+      </div>
+      {waNumero && (
+        <a href={`https://wa.me/${waNumero}`} target="_blank" rel="noopener noreferrer"
+          style={{marginTop:'6px',padding:'11px 22px',borderRadius:'50px',background:t.btnBg,color:t.btnColor,fontSize:'13px',fontWeight:600,textDecoration:'none'}}>
+          Escribir por WhatsApp
+        </a>
+      )}
+    </div>
+  )
+  const valoresReales = (terapeuta.valores || []).filter(v => (v?.name || '').trim())
+  const bioReal = (terapeuta.bio || '').trim()
+  const testiReales = (terapeuta.testimonios || []).filter((x: any) => (x?.texto || '').trim())
   function armarHref(b: { accion: string; url: string; curso_slug: string; mensaje_whatsapp: string }) {
     if (b.accion === 'whatsapp') return waNumero ? `https://wa.me/${waNumero}${b.mensaje_whatsapp ? `?text=${encodeURIComponent(b.mensaje_whatsapp)}` : ''}` : ''
     if (b.accion === 'curso') return b.curso_slug && cursos.some(c => c.slug === b.curso_slug) ? `/p/${terapeuta!.slug}/cursos/${b.curso_slug}` : ''
@@ -719,6 +721,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   return (
     <div data-public-page="true" style={{colorScheme:'normal'}}>
+      {(paginaApagada || sinConfigurar || !disponible) && esDuena && (
+        <a href={!disponible ? '/suscripcion' : '/settings?bloque=compartir'} style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(16px + env(safe-area-inset-bottom))',zIndex:9999,padding:'11px 18px',borderRadius:'50px',background:'#1A1035',color:'#F0E8D5',fontSize:'12.5px',fontWeight:600,textDecoration:'none',boxShadow:'0 8px 24px rgba(0,0,0,0.35)',fontFamily:'system-ui,sans-serif',maxWidth:'92vw',textAlign:'center'}}>
+          👁 Vista previa: solo vos la ves. {!disponible ? 'Tu prueba o tu plan venció: tus consultantes ven «No disponible»' : paginaApagada ? 'Tu página está apagada' : 'Todavía no tiene servicios'} · {!disponible ? 'Ver planes' : 'Ir a Ajustes'} →
+        </a>
+      )}
       <style>{`
         `}</style>
       <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${t.googleFonts}&display=swap`}/>
@@ -767,6 +774,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         @keyframes float{0%,100%{transform:translateY(0px)}50%{transform:translateY(-12px)}}
         .carta{width:220px;height:340px;border-radius:16px;border:1.5px solid var(--primary);position:relative;overflow:hidden;box-shadow:0 0 40px var(--primary-dim),0 0 80px var(--accent-dim),inset 0 0 30px var(--primary-dim)}
         .carta-foto{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+        .carta-inicial{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:130px;font-weight:500;font-family:var(--font-title,serif);color:var(--primary);background:radial-gradient(circle at 50% 38%,var(--primary-dim),transparent 72%)}
         .carta-overlay{position:absolute;inset:0;background:${t.dark?'linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,transparent 30%,transparent 60%,rgba(0,0,0,0.6) 100%)':'linear-gradient(to bottom,rgba(0,0,0,0.05) 0%,transparent 40%,transparent 60%,rgba(0,0,0,0.2) 100%)'}}
         .carta-frame{position:absolute;inset:8px;border:0.5px solid var(--primary-dim);border-radius:10px;pointer-events:none}
         .carta-roman{position:absolute;top:12px;left:0;right:0;text-align:center;font-family:var(--font-subtitle);font-size:11px;font-weight:600;color:var(--primary);letter-spacing:4px}
@@ -1113,18 +1121,22 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <div className="carta-wrap">
           <div className="carta-glow"/>
           <div className="carta">
-            <img src={fotoUrl} alt={terapeuta.nombre_profesional} className="carta-foto"
-              onError={e => { (e.target as HTMLImageElement).style.display='none' }}/>
+            {fotoUrl ? (
+              <img src={fotoUrl} alt={terapeuta.nombre_profesional} className="carta-foto"
+                onError={e => { (e.target as HTMLImageElement).style.display='none' }}/>
+            ) : (
+              <div className="carta-inicial">{(terapeuta.nombre_profesional || '').trim().charAt(0).toUpperCase() || t.deco}</div>
+            )}
             <div className="carta-overlay"/>
             <div className="carta-frame"/>
             <div className="carta-roman">{t.deco} XVIII {t.deco}</div>
-            <div className="carta-name">{terapeuta.especialidad?.split('·')[0]?.trim() || 'La Intuición'}</div>
+            <div className="carta-name">{terapeuta.especialidad?.split('·')[0]?.trim() || ''}</div>
           </div>
         </div>
         <div className="hero-text">
-          <div className="hero-esp">{terapeuta.especialidad || 'Tarot & Bienestar'}</div>
+          {(terapeuta.especialidad || '').trim() && <div className="hero-esp">{terapeuta.especialidad}</div>}
           <h1 className="hero-nombre">{terapeuta.nombre_profesional}</h1>
-          <p className="hero-bio">{terapeuta.mensaje_bienvenida || 'Te acompaño a conectar con tu intuición y encontrar claridad.'}</p>
+          {(terapeuta.mensaje_bienvenida || '').trim() && <p className="hero-bio">{terapeuta.mensaje_bienvenida}</p>}
           <div className="hero-ctas">
           <button className="hero-cta-fancy" onClick={() => { setTabActiva('servicios'); reservaRef.current?.scrollIntoView({behavior:'smooth'}) }}>
               <div className="hero-cta-dots"/>
@@ -1164,28 +1176,26 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </section>
       </>)}
 
-      {secciones.sobre_mi && (<>
+      {secciones.sobre_mi && (bioReal || valoresReales.length > 0) && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
           <div className="section-label">Sobre mí</div>
           <h2 className="section-title">Mi propósito</h2>
           <div className="sobre-card">
+            {bioReal && (
             <p style={{fontSize:'15px',lineHeight:'1.9',color:'var(--text)',fontFamily:'var(--font-subtitle)',fontWeight:400,marginBottom:'8px'}}>
-              {terapeuta.bio || 'Trabajo desde una mirada holística para acompañar procesos de transformación y crecimiento.'}
+              {terapeuta.bio}
             </p>
-            <div className="sobre-values">
-              {(terapeuta.valores || [
-                {icon:'👁', name:'Escucha', desc:'Te escucho con el corazón y sin juicios'},
-                {icon:'✨', name:'Claridad', desc:'Aporto claridad a lo que hoy te confunde'},
-                {icon:'🌙', name:'Acompaño', desc:'Te acompaño en cada paso de tu proceso'},
-              ]).map(v => (
+            )}
+            {valoresReales.length > 0 && <div className="sobre-values">
+              {valoresReales.map(v => (
                 <div key={v.name} className="sobre-val">
                   <div className="sobre-val-icon">{v.icon}</div>
                   <div className="sobre-val-name">{v.name}</div>
                   <div className="sobre-val-desc">{v.desc}</div>
                 </div>
               ))}
-            </div>
+            </div>}
           </div>
         </section>
       </>)}
@@ -1559,15 +1569,15 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         </section>
       </>)}
 
-      {secciones.testimonios && (<>
+      {secciones.testimonios && testiReales.length > 0 && (<>
         <div className="divider">{t.deco} {t.deco} {t.deco}</div>
         <section className="section">
           <div className="section-label">Testimonios</div>
           <h2 className="section-title">Lo que dicen</h2>
           <div className="testi-card">
             <div className="testi-quote">"</div>
-            <p className="testi-texto">{(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.texto}</p>
-            <div className="testi-nombre">— {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT)[testiIdx]?.nombre}</div>
+            <p className="testi-texto">{testiReales[testiIdx]?.texto}</p>
+            <div className="testi-nombre">— {testiReales[testiIdx]?.nombre}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',marginTop:'16px'}}>
             <button
@@ -1577,14 +1587,14 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               ‹
             </button>
             <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-              {(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).map((_,i) => (
+              {testiReales.map((_,i) => (
                 <div key={i} className={`testi-dot${testiIdx===i?' act':''}`} onClick={() => setTestiIdx(i)}/>
               ))}
             </div>
             <button
-              onClick={() => setTestiIdx(i => Math.min((terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1, i+1))}
-              disabled={testiIdx === (terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length - 1}
-              style={{width:'32px',height:'32px',borderRadius:'50%',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===(terapeuta.testimonios?.length ? terapeuta.testimonios : TESTIMONIOS_DEFAULT).length-1?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
+              onClick={() => setTestiIdx(i => Math.min(testiReales.length - 1, i+1))}
+              disabled={testiIdx === testiReales.length - 1}
+              style={{width:'32px',height:'32px',borderRadius:'50%',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--primary)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:testiIdx===testiReales.length-1?0.3:1,fontSize:'16px',transition:'all 0.2s'}}>
               ›
             </button>
           </div>

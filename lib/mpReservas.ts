@@ -10,13 +10,21 @@ export function supabaseServicio() {
   )
 }
 
+// El token vive en la tabla privada mp_credenciales (nadie de afuera puede leerla).
+// Mientras dure la mudanza, si no está ahí se usa el de therapist_profiles.
 export async function tokenMPDeTerapeuta(userId: string): Promise<string | null> {
+  if (!userId) return null
   const supabase = supabaseServicio()
+  const { data: cred } = await supabase
+    .from('mp_credenciales').select('access_token')
+    .eq('user_id', userId).maybeSingle()
+  const nuevo = (cred?.access_token || '').trim()
+  if (nuevo) return nuevo
   const { data } = await supabase
     .from('therapist_profiles').select('mp_access_token')
     .eq('user_id', userId).maybeSingle()
-  const token = (data?.mp_access_token || '').trim()
-  return token || null
+  const viejo = (data?.mp_access_token || '').trim()
+  return viejo || null
 }
 
 export type ResultadoConfirmacion = { ok: boolean; motivo?: string; status: number }

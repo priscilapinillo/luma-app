@@ -78,15 +78,31 @@ export default function AulaCursoPage() {
       if (!persona) { setSinAcceso(true); setLoading(false); return }
       setPersonaId(persona.id)
 
-      const { data: enrollment, error: errorEnroll } = await supabase
-        .from('enrollments').select('id, estado, modalidad, fecha_vencimiento')
+      let { data: enrollment, error: errorEnroll } = await supabase
+        .from('enrollments').select('id, estado, modalidad, fecha_vencimiento, mp_preapproval_id')
         .eq('course_id', courseId).eq('person_id', persona.id).maybeSingle()
 
+      // con suscripción automática: antes de cortar el acceso, le preguntamos a Mercado Pago si entró un cobro nuevo
+      if (enrollment && !tieneAccesoCurso(enrollment) && enrollment.mp_preapproval_id) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const res = await fetch('/api/cursos/suscripcion/estado', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enrollmentId: enrollment.id, accessToken: session?.access_token }),
+          })
+          if (res.ok) {
+            const info = await res.json()
+            if (info.acceso) enrollment = { ...enrollment, estado: 'activa', fecha_vencimiento: info.fecha_vencimiento }
+          }
+        } catch (e) { console.error('Error revisando la suscripción:', e) }
+      }
+
       if (!enrollment || !tieneAccesoCurso(enrollment)) {
+        if (errorEnroll) console.error('Error buscando la inscripción:', errorEnroll)
         setDebugInfo(
-          !enrollment ? `No se encontró inscripción. Error: ${errorEnroll ? JSON.stringify(errorEnroll) : 'ninguno'}`
-          : enrollment.estado !== 'activa' ? `Encontró la inscripción pero el estado es "${enrollment.estado}", no "activa".`
-          : `El acceso venció el ${enrollment.fecha_vencimiento}. Pedile a tu terapeuta que te renueve el acceso.`
+          !enrollment ? 'No encontramos tu inscripción a este curso. Si lo compraste con otro email, entrá con esa cuenta.'
+          : enrollment.estado !== 'activa' ? 'Tu pago todavía no está confirmado. Cuando se confirme, vas a poder entrar.'
+          : `Tu acceso venció el ${new Date(enrollment.fecha_vencimiento as string).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}. Podés renovarlo desde Mi cuenta → Mis cursos.`
         )
         setSinAcceso(true); setLoading(false); return
       }
@@ -200,45 +216,24 @@ export default function AulaCursoPage() {
     setRespuestas(prev => ({ ...prev, [preguntaId]: opcionId }))
   }
 
+  // la nota y el certificado los decide el servidor (no se pueden falsificar desde el navegador)
   async function enviarExamen() {
     if (!examen || !enrollmentId) return
     setEnviandoExamen(true)
     try {
       const supabase = createClient()
-      const preguntaIds = preguntasExamen.map(p => p.id)
-      const { data: opcionesCorrectas } = await supabase
-        .from('exam_options').select('id,question_id,es_correcta')
-        .in('question_id', preguntaIds).eq('es_correcta', true)
-
-      let correctas = 0
-      preguntasExamen.forEach(p => {
-        const correcta = opcionesCorrectas?.find(o => o.question_id === p.id)
-        if (correcta && respuestas[p.id] === correcta.id) correctas++
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/cursos/examen/enviar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examId: examen.id, enrollmentId, respuestas, accessToken: session?.access_token }),
       })
-      const puntaje = preguntasExamen.length > 0 ? Math.round((correctas / preguntasExamen.length) * 100) : 0
-      const aprobado = puntaje >= examen.puntaje_minimo
-
-      await supabase.from('exam_attempts').insert({
-        exam_id: examen.id, enrollment_id: enrollmentId,
-        respuestas, puntaje_obtenido: puntaje, aprobado,
-      })
-
-      setUltimoResultado({ puntaje, aprobado })
+      const r = await res.json().catch(() => ({ ok: false }))
+      if (!r.ok) { alert(r.mensaje || 'No se pudo enviar tu examen. Probá de nuevo.'); return }
+      setUltimoResultado({ puntaje: r.puntaje, aprobado: r.aprobado })
       setIntentosUsados(prev => prev + 1)
       setVista('curso')
-
-      if (aprobado && !certificadoCodigo && curso && personaId) {
-        const codigoNuevo = 'LUMA-' + Math.random().toString(36).slice(2, 8).toUpperCase()
-        const { data: cert, error: errorCert } = await supabase.from('certificates').insert({
-          enrollment_id: enrollmentId,
-          course_id: courseId,
-          person_id: personaId,
-          terapeuta_id: curso.user_id,
-          codigo_unico: codigoNuevo,
-        }).select('codigo_unico').single()
-        if (!errorCert && cert) setCertificadoCodigo(cert.codigo_unico)
-      }
-    } catch (e) { console.error(e) }
+      if (r.certificado) setCertificadoCodigo(r.certificado)
+    } catch (e) { console.error(e); alert('No se pudo enviar tu examen. Revisá tu conexión.') }
     finally { setEnviandoExamen(false) }
   }
 

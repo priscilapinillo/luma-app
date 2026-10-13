@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { User, Shield, Database, Settings, Camera, Eye, EyeOff, Download, Trash2, LogOut } from 'lucide-react'
+import { User, Shield, Database, Settings, Camera, Eye, EyeOff, Download, Trash2, LogOut, ChevronDown, Copy, ExternalLink, Check } from 'lucide-react'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { PASOS, calcularPasos, contarListos, primerIncompleto, limpiarSlug, type IdPaso } from '@/lib/progresoPagina'
 
 type Destacado = {
   activa: boolean
@@ -83,42 +84,136 @@ const MONEDAS = [
 ]
 
 const SIMBOLOS_MONEDA: Record<string, string> = Object.fromEntries(MONEDAS.map(m => [m.codigo, m.simbolo]))
-type Tab = 'perfil' | 'pagina' | 'seguridad' | 'datos' | 'preferencias'
+type Tab = 'pagina' | 'seguridad' | 'datos' | 'preferencias'
+
+type Franja = { dia_semana: number; hora_inicio: string; hora_fin: string }
+const DIAS_CORTO = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+
+// "Lun a Vie: 09:00 a 18:00 h · Sáb: 09:00 a 13:00 h"
+function resumenHorarios(franjas: Franja[]) {
+  if (franjas.length === 0) return ''
+  const orden = [1,2,3,4,5,6,0]
+  const porDia = orden
+    .map(d => ({
+      d,
+      rangos: franjas
+        .filter(f => f.dia_semana === d)
+        .sort((a, b) => (a.hora_inicio || '').localeCompare(b.hora_inicio || ''))
+        .map(f => `${(f.hora_inicio || '').slice(0,5)} a ${(f.hora_fin || '').slice(0,5)}`)
+        .join(' y '),
+    }))
+    .filter(x => x.rangos)
+  const grupos: { desde: number; hasta: number; rangos: string }[] = []
+  for (const x of porDia) {
+    const ult = grupos[grupos.length - 1]
+    if (ult && ult.rangos === x.rangos && orden.indexOf(ult.hasta) === orden.indexOf(x.d) - 1) ult.hasta = x.d
+    else grupos.push({ desde: x.d, hasta: x.d, rangos: x.rangos })
+  }
+  return grupos
+    .map(g => `${g.desde === g.hasta ? DIAS_CORTO[g.desde] : `${DIAS_CORTO[g.desde]} a ${DIAS_CORTO[g.hasta]}`}: ${g.rangos} h`)
+    .join(' · ')
+}
+
+// Corta una espera que se cuelga (por ejemplo, un service worker que nunca responde)
+function conLimite<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('tardó demasiado')), ms))])
+}
+
+async function registroSW() {
+  const existente = await navigator.serviceWorker.getRegistration()
+  if (existente) return existente
+  return navigator.serviceWorker.register('/sw.js')
+}
 
 export default function AjustesPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [tab, setTab] = useState<Tab>('perfil')
+  const [tab, setTab] = useState<Tab>('pagina')
   const [loading, setLoading] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
   const [misCursos, setMisCursos] = useState<{ titulo: string; slug: string }[]>([])
   const [subiendoDestacado, setSubiendoDestacado] = useState(false)
   useEffect(() => { cargarDatos() }, [])
   const [guardando, setGuardando] = useState(false)
   const [notificacionesActivas, setNotificacionesActivas] = useState(false)
-  
   const [loadingNoti, setLoadingNoti] = useState(false)
 
+  // ── Página de reservas: resúmenes, bloques abiertos y avisos
+  const [serviciosActivos, setServiciosActivos] = useState<string[]>([])
+  const [franjas, setFranjas] = useState<Franja[]>([])
+  const [avisosEnCuenta, setAvisosEnCuenta] = useState(false)
+  const [abiertos, setAbiertos] = useState<IdPaso[]>([])
+  const [ultimoBloque, setUltimoBloque] = useState<IdPaso | null>(null)
+  const [slugAviso, setSlugAviso] = useState('')
+  const [copiado, setCopiado] = useState(false)
+  const [instalada, setInstalada] = useState(false)
+  const [esIOS, setEsIOS] = useState(false)
+  const [permisoNoti, setPermisoNoti] = useState<'default' | 'granted' | 'denied' | 'no-soportado'>('default')
+  const [puedeInstalar, setPuedeInstalar] = useState(false)
+  const [msgAvisos, setMsgAvisos] = useState('')
+  const promptInstalarRef = useRef<any>(null)
+  const slugGuardadoRef = useRef('')
+  const [slugPublicado, setSlugPublicado] = useState('') // la dirección que de verdad quedó guardada
+  const abiertoInicialRef = useRef(false)
+
+  // ¿Está abierta desde el ícono de la pantalla de inicio? ¿Es iPhone? ¿Qué permiso tiene?
+  useEffect(() => {
+    const nav: any = navigator
+    setInstalada(!!window.matchMedia?.('(display-mode: standalone)').matches || nav.standalone === true)
+    setEsIOS(/iphone|ipad|ipod/i.test(nav.userAgent || '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1))
+    const soporta = 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
+    setPermisoNoti(soporta ? (Notification.permission as 'default' | 'granted' | 'denied') : 'no-soportado')
+    function alOfrecerInstalar(e: any) { e.preventDefault(); promptInstalarRef.current = e; setPuedeInstalar(true) }
+    function alInstalar() {
+      promptInstalarRef.current = null
+      setPuedeInstalar(false)
+      setMsgAvisos('¡Listo! Ahora abrí Luma desde el ícono nuevo de tu pantalla de inicio y activá los avisos desde ahí.')
+    }
+    window.addEventListener('beforeinstallprompt', alOfrecerInstalar)
+    window.addEventListener('appinstalled', alInstalar)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', alOfrecerInstalar)
+      window.removeEventListener('appinstalled', alInstalar)
+    }
+  }, [])
+
+  async function instalarApp() {
+    const ev = promptInstalarRef.current
+    if (!ev) return
+    try {
+      ev.prompt()
+      await ev.userChoice
+    } catch (e) { console.error('Error instalando:', e) }
+    promptInstalarRef.current = null
+    setPuedeInstalar(false)
+  }
+
   async function toggleNotificaciones() {
-    setLoadingNoti(true)
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      alert('Tu navegador no soporta notificaciones. Agregá Luma a tu pantalla de inicio primero.')
-      setLoadingNoti(false)
+    if (!instalada) return // los avisos solo se activan con Luma instalada
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setMsgAvisos('Este celular no permite avisos. Probá actualizando el sistema.')
       return
     }
+    setLoadingNoti(true)
+    setMsgAvisos('')
     if (notificacionesActivas) {
       try {
-        const registration = await navigator.serviceWorker.ready
+        const registration = await conLimite(registroSW(), 8000)
         const subActual = await registration.pushManager.getSubscription()
+        const endpoint = subActual?.endpoint
         if (subActual) await subActual.unsubscribe()
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { error } = await supabase.from('push_subscriptions').delete().eq('user_id', user.id)
+        if (user && endpoint) {
+          // solo este dispositivo: los otros (por ejemplo la compu) siguen recibiendo avisos
+          const { error } = await supabase.from('push_subscriptions').delete().eq('user_id', user.id).eq('endpoint', endpoint)
           if (error) console.error('Error borrando suscripción push:', error)
         }
         setNotificacionesActivas(false)
+        await cargarResumenes()
       } catch (err) {
         console.error('Error desactivando notificaciones:', err)
+        setMsgAvisos('No se pudieron desactivar. Probá de nuevo.')
       } finally {
         setLoadingNoti(false)
       }
@@ -126,38 +221,50 @@ export default function AjustesPage() {
     }
     try {
       const permiso = await Notification.requestPermission()
-      if (permiso !== 'granted') {
-        alert('Permiso denegado. Habilitá las notificaciones desde la configuración de tu celular.')
-        return
-      }
-      const registration = await navigator.serviceWorker.ready
-      const sub = await registration.pushManager.subscribe({
+      setPermisoNoti(permiso as 'default' | 'granted' | 'denied')
+      if (permiso !== 'granted') return
+      const registration = await conLimite(registroSW(), 8000)
+      await conLimite(navigator.serviceWorker.ready, 8000)
+      const sub = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
       })
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      await fetch('/api/push/subscribe', {
+      const { data: { session: sesionPush } } = await supabase.auth.getSession()
+      if (!sesionPush) { setMsgAvisos('Tu sesión expiró. Volvé a iniciar sesión.'); return }
+      const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: sub, userId: user.id }),
+        body: JSON.stringify({ subscription: sub, accessToken: sesionPush.access_token }),
       })
+      if (!res.ok) throw new Error('No se pudo registrar el celular (' + res.status + ')')
       setNotificacionesActivas(true)
+      setAvisosEnCuenta(true)
     } catch(err) {
       console.error('Error activando notificaciones:', err)
-      alert('Hubo un error al activar las notificaciones.')
+      setMsgAvisos('Hubo un error al activar los avisos. Cerrá Luma, volvé a abrirla desde el ícono y probá de nuevo.')
     } finally {
       setLoadingNoti(false)
     }
   }
+
+  async function avisoPrueba() {
+    try {
+      const reg = await conLimite(registroSW(), 8000)
+      await reg.showNotification('Luma ✦', { body: 'Así te va a llegar el aviso cuando alguien reserve o pague.' })
+    } catch (e) {
+      console.error('Error en aviso de prueba:', e)
+      setMsgAvisos('No se pudo mostrar el aviso de prueba. Revisá que las notificaciones de Luma estén permitidas en tu celular.')
+    }
+  }
+
   const [subiendoAvatar, setSubiendoAvatar] = useState(false)
   const [email, setEmail] = useState('')
   const [ultimoAcceso, setUltimoAcceso] = useState('')
   const [suscripcion, setSuscripcion] = useState<any>(null)
   const [confirmEliminar, setConfirmEliminar] = useState(false)
   const [msgExito, setMsgExito] = useState('')
-  const perfilGuardadoRef = useRef<string>('')
+  const perfilGuardadoRef = useRef<string>(''); const tokenGuardadoRef = useRef<string>('')
   // ── autoguardado: refs para leer siempre lo último y no pisar guardados en curso
   const perfilActualRef = useRef<any>(null)
   const cargadoRef = useRef(false)
@@ -206,25 +313,48 @@ export default function AjustesPage() {
   const [passError, setPassError] = useState('')
   const [passExito, setPassExito] = useState(false)
 
-  
 
-  async function cargarDatos() {
-    console.log('cargarDatos inicio')
+  // servicios, horarios y avisos: se recargan al volver de Servicios o Agenda
+  async function cargarResumenes(userId?: string) {
     try {
       const supabase = createClient()
-      console.log('supabase creado')
+      let uid = userId
+      if (!uid) {
+        const { data: { user } } = await supabase.auth.getUser()
+        uid = user?.id
+      }
+      if (!uid) return
+      const [{ data: servs }, { data: avail }, { data: pushs }] = await Promise.all([
+        supabase.from('services').select('nombre').eq('user_id', uid).eq('activo', true),
+        supabase.from('availability').select('dia_semana,hora_inicio,hora_fin').eq('user_id', uid).eq('activo', true),
+        supabase.from('push_subscriptions').select('user_id').eq('user_id', uid).limit(1),
+      ])
+      if (servs) setServiciosActivos(servs.map((s: any) => s.nombre).filter(Boolean))
+      if (avail) setFranjas(avail as Franja[])
+      if (pushs) setAvisosEnCuenta(pushs.length > 0)
+    } catch (e) {
+      console.error('Error cargando servicios y horarios:', e)
+    }
+  }
+
+  async function cargarDatos() {
+    setErrorCarga(false)
+    try {
+      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      console.log('user:', user?.email)
       if (!user || !user.email) {
         window.location.href = '/auth/login'
         return
       }
       setEmail(user.email || '')
       setUltimoAcceso(user.last_sign_in_at || '')
-      const [{ data: prof }, { data: subs }] = await Promise.all([
+      const [{ data: prof, error: errProf }, { data: subs }, { data: cred }] = await Promise.all([
         supabase.from('therapist_profiles').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('mp_credenciales').select('access_token').eq('user_id', user.id).maybeSingle(),
       ])
+      // si no pudimos leer el perfil, NO habilitamos el guardado automático (así nunca se pisa con vacío)
+      if (errProf) throw errProf
       if (prof) {
         const perfilCargado = {
           id: prof.id,
@@ -240,11 +370,11 @@ export default function AjustesPage() {
         pagina_activa: prof.pagina_activa || false,
         mensaje_bienvenida: prof.mensaje_bienvenida || '',
         tipo_pago: prof.tipo_pago || 'libre',
-        slug: prof.slug || prof.nombre_profesional?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || '',
+        slug: prof.slug || '',
         template: prof.template || 'luna',
         secciones: prof.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
         faq: prof.faq || [],
-        mp_access_token: prof.mp_access_token || '',
+        mp_access_token: cred?.access_token || prof.mp_access_token || '',
         mp_activo: prof.mp_activo || false,
         acepta_transferencia: prof.acepta_transferencia || false,
         alias_pago: prof.alias_pago || '',
@@ -263,29 +393,52 @@ export default function AjustesPage() {
         anuncio: { ...ANUNCIO_VACIO, ...(prof.anuncio || {}) },
       }
       setPerfil(perfilCargado)
-      perfilGuardadoRef.current = JSON.stringify(perfilCargado)
+      perfilGuardadoRef.current = JSON.stringify(perfilCargado); tokenGuardadoRef.current = (cred?.access_token || '').trim()
+      slugGuardadoRef.current = prof.slug || ''
+      setSlugPublicado(prof.slug || '')
       }
       if (subs) setSuscripcion(subs)
-      const { data: cursosPropios } = await supabase.from('courses').select('titulo,slug').eq('user_id', user.id).eq('estado', 'publicado')
-      if (cursosPropios) setMisCursos(cursosPropios)
+      // recién acá: la carga salió bien (o es una cuenta nueva sin perfil todavía)
+      cargadoRef.current = true
 
-        // Verificar si ya tiene notificaciones activas
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          const { data: pushSub } = await supabase
-            .from('push_subscriptions')
-            .select('id')
-            .eq('user_id', user.id)
-            .maybeSingle()
-          if (pushSub) setNotificacionesActivas(true)
+      await cargarResumenes(user.id)
+
+      try {
+        const { data: cursosPropios } = await supabase.from('courses').select('titulo,slug').eq('user_id', user.id).eq('estado', 'publicado')
+        if (cursosPropios) setMisCursos(cursosPropios)
+      } catch (e) { console.error('Error cargando cursos:', e) }
+
+      // ¿este celular tiene los avisos activados? (permiso + registro en este dispositivo + registro en la cuenta)
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration()
+          const subDispositivo = reg ? await reg.pushManager.getSubscription() : null
+          if (subDispositivo) {
+            const { data: pushSub } = await supabase.from('push_subscriptions').select('user_id').eq('user_id', user.id).eq('endpoint', subDispositivo.endpoint).limit(1)
+            if (pushSub && pushSub.length > 0) setNotificacionesActivas(true)
+          }
         }
-  
-      } catch (err) {
-        console.error('Error cargando:', err)
-      } finally {
-        cargadoRef.current = true
-        setLoading(false)
-      }
+      } catch (e) { console.error('Error revisando avisos:', e) }
+    } catch (err) {
+      console.error('Error cargando:', err)
+      setErrorCarga(true)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // al volver de Servicios o Agenda (o si el celular reabre la pantalla), actualizamos los resúmenes
+  useEffect(() => {
+    function alVolverVisible() { if (document.visibilityState === 'visible' && cargadoRef.current) cargarResumenes() }
+    function alMostrar(e: PageTransitionEvent) { if (e.persisted && cargadoRef.current) cargarResumenes() }
+    document.addEventListener('visibilitychange', alVolverVisible)
+    window.addEventListener('pageshow', alMostrar)
+    return () => {
+      document.removeEventListener('visibilitychange', alVolverVisible)
+      window.removeEventListener('pageshow', alMostrar)
+    }
+  }, [])
+
   // botón "Guardar": avisa con cartel y alertas
   async function guardarPerfil() {
     if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
@@ -298,6 +451,8 @@ export default function AjustesPage() {
     if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
     autoTimerRef.current = setTimeout(() => { guardar(true) }, ms)
   }
+
+  async function sincronizarTokenMP(userId: string, token: string): Promise<boolean> { const limpio = (token || '').trim(); if (limpio === tokenGuardadoRef.current) return true; const supabase = createClient(); const { error } = limpio ? await supabase.from('mp_credenciales').upsert({ user_id: userId, access_token: limpio, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }) : await supabase.from('mp_credenciales').delete().eq('user_id', userId); if (error) { console.error('Error guardando token MP:', error); return false } tokenGuardadoRef.current = limpio; return true }
 
   async function guardar(silencioso: boolean) {
     if (!cargadoRef.current) return
@@ -316,9 +471,26 @@ export default function AjustesPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         if (!silencioso) alert('Tu sesión expiró. Volvé a iniciar sesión para guardar los cambios.')
+        setEstadoGuardado('error')
         return
       }
-      const slugFijo = perfil.slug || perfil.nombre_profesional?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || ''
+      // la dirección: si no la tocó, queda exactamente igual (no cambiamos links que ya compartió);
+      // si la cambió, se limpia; si está vacía, se propone a partir del nombre profesional
+      const slugEscrito = perfil.slug || ''
+      let slugFijo = slugEscrito && slugEscrito === slugGuardadoRef.current
+        ? slugEscrito
+        : (limpiarSlug(slugEscrito) || limpiarSlug(perfil.nombre_profesional || ''))
+      let slugOcupado = false
+      if (slugFijo && slugFijo !== slugGuardadoRef.current) {
+        const { data: ocupada } = await supabase.from('therapist_profiles').select('user_id').eq('slug', slugFijo).neq('user_id', user.id).limit(1)
+        if (ocupada && ocupada.length > 0) {
+          slugOcupado = true
+          setSlugAviso(`La dirección «${slugFijo}» ya está en uso. Probá con otra, por ejemplo «${slugFijo}-tarot» o «${slugFijo}-terapias».`)
+          slugFijo = slugGuardadoRef.current // guardamos todo lo demás con la dirección anterior
+        } else {
+          setSlugAviso('')
+        }
+      }
       const datos = {
         user_id: user.id,
         nombre_profesional: perfil.nombre_profesional,
@@ -334,7 +506,7 @@ export default function AjustesPage() {
         template: perfil.template,
         secciones: perfil.secciones,
         faq: perfil.faq,
-        mp_access_token: perfil.mp_access_token,
+        mp_access_token: null,
         mp_activo: perfil.mp_activo,
         acepta_transferencia: perfil.acepta_transferencia || false,
         alias_pago: perfil.alias_pago || '',
@@ -355,16 +527,31 @@ export default function AjustesPage() {
         : await supabase.from('therapist_profiles').insert(datos).select('id')
       if (errGuardar || !filas || filas.length === 0) {
         console.error('Error guardando perfil:', errGuardar)
+        const esDireccionRepetida = errGuardar?.code === '23505' && /slug/i.test(`${errGuardar?.message || ''} ${errGuardar?.details || ''}`)
+        if (esDireccionRepetida) {
+          // alguien la tomó justo ahora: avisamos y volvemos a la dirección anterior para no trabar el resto
+          setSlugAviso(`La dirección «${slugFijo}» ya está en uso. Probá con otra.`)
+          const alternativa = slugGuardadoRef.current || `${slugFijo || 'mi-pagina'}-${Math.floor(100 + Math.random() * 900)}`
+          setPerfil(prev => ({ ...prev, slug: alternativa }))
+          setEstadoGuardado('error')
+          return
+        }
         if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
-        else alert('No se pudo guardar: ' + (errGuardar?.message || 'volvé a iniciar sesión e intentá de nuevo.'))
+        else { setEstadoGuardado('error'); alert('No se pudo guardar: ' + (errGuardar?.message || 'volvé a iniciar sesión e intentá de nuevo.')) }
         return
       }
 
-      // perfil nuevo: guardamos su id y fijamos el link (así no se crea otro perfil ni cambia la dirección de su página)
+      // perfil nuevo: guardamos su id; dirección: dejamos en pantalla la que quedó guardada
+      slugGuardadoRef.current = slugFijo
+      setSlugPublicado(slugFijo)
       const cambios: Partial<Perfil> = {}
       if (!perfil.id && filas[0]?.id) cambios.id = filas[0].id
-      if (!perfil.slug && slugFijo) cambios.slug = slugFijo
-      if (Object.keys(cambios).length > 0) {
+      if (!slugOcupado && slugFijo !== perfil.slug) cambios.slug = slugFijo
+      if (slugOcupado) {
+        // lo escrito sigue en pantalla para que lo corrija, pero no figura como guardado
+        perfilGuardadoRef.current = JSON.stringify({ ...perfil, ...cambios, slug: slugFijo })
+        if (Object.keys(cambios).length > 0) setPerfil(prev => ({ ...prev, ...cambios }))
+      } else if (Object.keys(cambios).length > 0) {
         const actualizado = { ...perfil, ...cambios }
         perfilGuardadoRef.current = JSON.stringify(actualizado)
         setPerfil(prev => ({ ...prev, ...cambios }))
@@ -372,7 +559,7 @@ export default function AjustesPage() {
         perfilGuardadoRef.current = foto
       }
       ok = true
-      setEstadoGuardado('guardado')
+      if (!(await sincronizarTokenMP(user.id, perfil.mp_access_token))) { setEstadoGuardado('error'); if (!silencioso) alert('Se guardó tu perfil, pero no se pudo guardar el token de Mercado Pago. Probá de nuevo.'); return } setEstadoGuardado('guardado')
       if (!silencioso) {
         setMsgExito('Perfil guardado correctamente')
         setTimeout(() => setMsgExito(''), 3000)
@@ -380,7 +567,7 @@ export default function AjustesPage() {
     } catch (err) {
       console.error('Error guardando:', err)
       if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
-      else alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
+      else { setEstadoGuardado('error'); alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.') }
     } finally {
       guardandoRef.current = false
       setGuardando(false)
@@ -526,9 +713,122 @@ export default function AjustesPage() {
     ? Math.max(0, Math.ceil((new Date(suscripcion.trial_ends_at).getTime() - Date.now()) / (1000*60*60*24)))
     : 0
 
+  // ── progreso de Página de reservas (la misma regla que usa el cartel de Inicio)
+  const pasos = calcularPasos({
+    avatar_url: perfil.avatar_url,
+    nombre_profesional: perfil.nombre_profesional,
+    whatsapp: perfil.whatsapp,
+    tipo_pago: perfil.tipo_pago,
+    mp_activo: perfil.mp_activo,
+    tiene_token_mp: !!(perfil.mp_access_token || '').trim(),
+    acepta_transferencia: perfil.acepta_transferencia,
+    alias_pago: perfil.alias_pago,
+    slug: slugPublicado,
+    pagina_activa: perfil.pagina_activa,
+    servicios_activos: serviciosActivos.length,
+    franjas_activas: franjas.length,
+    avisos_activos: avisosEnCuenta,
+  })
+  const listos = contarListos(pasos)
+
+  // qué bloque se abre al entrar: el que pidió el link (?bloque=...), si no el primero sin completar
+  useEffect(() => {
+    if (loading || errorCarga || abiertoInicialRef.current) return
+    abiertoInicialRef.current = true
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('tab')
+    let b = params.get('bloque')
+    if (t === 'perfil') b = 'perfil' // los links viejos a la pestaña Perfil abren el bloque 1
+    if (t === 'seguridad' || t === 'datos' || t === 'preferencias') { setTab(t); return }
+    const pedido = PASOS.some(p => p.id === b)
+    const inicial = (pedido ? b : (primerIncompleto(pasos) || 'compartir')) as IdPaso
+    setAbiertos([inicial])
+    if (pedido) setTimeout(() => document.getElementById(`bloque-${inicial}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200)
+  }, [loading, errorCarga])
+
+  function alternar(id: IdPaso) {
+    setAbiertos(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function irABloque(id: IdPaso) {
+    setAbiertos(prev => prev.includes(id) ? prev : [...prev, id])
+    setTimeout(() => document.getElementById(`bloque-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+  }
+
+  const URL_PUBLICA = `https://lumaapp.lat/p/${slugPublicado}`
+  async function copiarLink() {
+    try {
+      await navigator.clipboard.writeText(URL_PUBLICA)
+    } catch {
+      window.prompt('Copiá tu link:', URL_PUBLICA)
+    }
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2500)
+  }
+
+  // interruptor reutilizable (mismo diseño que los de antes)
+  const interruptor = (activo: boolean, alCambiar: (v: boolean) => void, color = '#8B5CF6') => (
+    <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block',flexShrink:0}}>
+      <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
+        checked={activo} onChange={e => alCambiar(e.target.checked)}/>
+      <span style={{position:'absolute',inset:0,background:activo?color:'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
+        <span style={{position:'absolute',width:'16px',height:'16px',left:activo?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
+      </span>
+    </label>
+  )
+
+  // cada bloque: número, título, para qué sirve, estado y flechita. Se pueden abrir varios a la vez.
+  const bloque = (id: IdPaso, contenido: React.ReactNode) => {
+    const paso = PASOS.find(p => p.id === id)!
+    const abierto = abiertos.includes(id)
+    const listo = pasos[id]
+    return (
+      <section id={`bloque-${id}`} className={`pr-bloque${abierto ? ' abierto' : ''}`}>
+        <button type="button" className="pr-cab" onClick={() => alternar(id)} aria-expanded={abierto}>
+          <span className={`pr-num${listo ? ' listo' : ''}`}>{listo ? <Check size={14}/> : paso.numero}</span>
+          <span className="pr-cab-txt">
+            <span className="pr-tit">
+              {paso.numero}. {paso.titulo}
+              {ultimoBloque === id && estadoGuardado === 'guardado' && <span className="pr-guardado">Guardado ✓</span>}
+              {ultimoBloque === id && estadoGuardado === 'guardando' && <span className="pr-guardado gris">Guardando…</span>}
+            </span>
+            <span className="pr-exp">{paso.explicacion}</span>
+          </span>
+          <span className={`pr-estado${listo ? ' listo' : ''}`}>{listo ? 'Listo' : 'Falta completar'}</span>
+          <ChevronDown size={16} className="pr-flecha"/>
+        </button>
+        {abierto && (
+          <div className="pr-cuerpo" onFocusCapture={() => setUltimoBloque(id)} onClickCapture={() => setUltimoBloque(id)}>
+            {contenido}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  const tieneMedioDePago = (perfil.mp_activo && !!(perfil.mp_access_token || '').trim()) || (!!perfil.acepta_transferencia && !!(perfil.alias_pago || '').trim())
+  const faltanParaCompartir = [
+    !pasos.servicios && { id: 'servicios' as IdPaso, txt: 'tus servicios' },
+    !pasos.horarios && { id: 'horarios' as IdPaso, txt: 'tus horarios' },
+  ].filter(Boolean) as { id: IdPaso; txt: string }[]
+
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'13px',color:'var(--text-muted)',background:'var(--bg)'}}>
       Cargando...
+    </div>
+  )
+
+  if (errorCarga) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',padding:'24px',background:'var(--bg)'}}>
+      <div style={{maxWidth:'360px',textAlign:'center',background:'var(--bg-card)',borderRadius:'20px',padding:'28px 22px',border:'0.5px solid var(--border-light)',boxShadow:'0 8px 32px var(--shadow)'}}>
+        <div style={{fontSize:'32px',marginBottom:'10px'}}>☁️</div>
+        <div style={{fontSize:'16px',fontWeight:800,color:'var(--text-primary)',marginBottom:'8px',fontFamily:"'Manrope',sans-serif"}}>No pudimos cargar tus datos</div>
+        <p style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:1.6,margin:'0 0 18px'}}>Revisá tu conexión y reintentá. No se cambió nada de tu perfil.</p>
+        <button className="save-btn" onClick={() => { setLoading(true); cargarDatos() }}
+          style={{padding:'11px 22px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'11px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          Reintentar
+        </button>
+      </div>
     </div>
   )
 
@@ -630,6 +930,73 @@ export default function AjustesPage() {
   .autosave-error,.autosave-sin_conexion{color:#B45309;border-color:#FDE68A;background:#FFFBEB}
   .autosave-pill button{background:none;border:none;color:inherit;font-weight:800;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:12px;padding:0}
   @media(max-width:767px){.autosave-pill{right:50%;transform:translateX(50%);bottom:calc(84px + env(safe-area-inset-bottom));white-space:nowrap}}
+  .pr-progreso{background:var(--bg-card);border:0.5px solid var(--border-light);border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 12px var(--shadow)}
+  .pr-prog-txt{font-size:13px;color:var(--text-secondary);margin-bottom:8px}
+  .pr-prog-txt strong{color:var(--text-primary)}
+  .pr-barra{height:8px;border-radius:8px;background:var(--bg-input);overflow:hidden}
+  .pr-barra>div{height:100%;background:linear-gradient(90deg,#8B5CF6,#C084FC);border-radius:8px;transition:width .4s}
+  .pr-bloque{background:var(--bg-card);border:0.5px solid var(--border-light);border-radius:18px;margin-bottom:10px;box-shadow:0 2px 12px var(--shadow);overflow:hidden;scroll-margin-top:16px}
+  .pr-bloque.abierto{border-color:var(--border)}
+  .pr-cab{display:flex;align-items:center;gap:12px;width:100%;padding:16px 18px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;color:inherit}
+  .pr-num{width:30px;height:30px;border-radius:50%;background:var(--bg-input);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--text-secondary);flex-shrink:0}
+  .pr-num.listo{background:#059669;border-color:#059669;color:white}
+  .pr-cab-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .pr-tit{font-size:14px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pr-exp{font-size:11.5px;color:var(--text-muted);line-height:1.45}
+  .pr-guardado{font-size:10.5px;font-weight:700;color:#059669}
+  .pr-guardado.gris{color:var(--text-muted)}
+  .pr-estado{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:#FEF3C7;color:#92400E;white-space:nowrap;flex-shrink:0}
+  .pr-estado.listo{background:#DCFCE7;color:#166534}
+  .pr-flecha{color:var(--text-muted);transition:transform .2s;flex-shrink:0}
+  .pr-bloque.abierto .pr-flecha{transform:rotate(180deg)}
+  .pr-cuerpo{padding:14px 18px 18px;border-top:0.5px solid var(--border-light)}
+  .pr-resumen{font-size:13px;color:var(--text-secondary);line-height:1.6;background:var(--bg-input);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .pr-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;box-shadow:0 4px 12px rgba(139,92,246,.3);text-decoration:none}
+  .pr-btn.sec{background:var(--accent-light);color:var(--accent);box-shadow:none}
+  .pr-btn:disabled{opacity:.5;cursor:not-allowed}
+  .pr-aviso{font-size:12px;line-height:1.5;padding:10px 12px;border-radius:10px;background:#FFFBEB;border:0.5px solid #FDE68A;color:#92400E;margin:8px 0}
+  html.dark .pr-aviso{background:#2A2108;border-color:#713F12;color:#FDE68A}
+  .pr-aviso button{background:none;border:none;color:inherit;font-weight:800;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:12px;padding:0}
+  .pr-info{font-size:12px;line-height:1.55;padding:10px 12px;border-radius:10px;background:var(--bg-input);color:var(--text-secondary);margin:8px 0}
+  .pr-sec{border-bottom:0.5px solid var(--border-light)}
+  .pr-sec:last-child{border-bottom:none}
+  .pr-sec-form{padding:2px 0 14px}
+  .pr-opciones{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .pr-opcion{text-align:left;padding:14px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg-input);cursor:pointer;font-family:inherit;color:var(--text-primary)}
+  .pr-opcion.sel{border-color:var(--accent);background:var(--accent-light)}
+  .pr-opcion strong{display:block;font-size:13px;margin-bottom:3px}
+  .pr-opcion span{font-size:11.5px;color:var(--text-muted);line-height:1.4}
+  .pr-fieldset{border:none;padding:0;margin:0;min-width:0}
+  .pr-fieldset:disabled{opacity:.45}
+  .pr-sub{font-size:12.5px;font-weight:800;color:var(--text-primary);margin:18px 0 8px;font-family:'Manrope',sans-serif}
+  .pr-pasos-mini{margin:0 0 14px;padding-left:20px;font-size:13px;color:var(--text-secondary);line-height:1.8}
+  .pr-slug{display:flex;align-items:stretch;border:0.5px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg-input)}
+  .pr-slug span{padding:11px 2px 11px 12px;font-size:13px;color:var(--text-muted);white-space:nowrap}
+  .pr-slug input{flex:1;min-width:0;border:none;background:transparent;padding:11px 12px 11px 0;font-size:13px;font-family:inherit;color:var(--text-primary);outline:none}
+  .pr-acciones{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  .pr-copiar{position:relative;border-radius:13px;padding:2px;overflow:hidden;display:inline-flex;isolation:isolate}
+  .pr-copiar::after{content:'';position:absolute;inset:0;border-radius:13px;background:var(--border);z-index:-2}
+  .pr-copiar::before{content:'';position:absolute;left:50%;top:50%;width:300%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(0deg);background:conic-gradient(from 0deg,transparent 0deg,transparent 240deg,#C084FC 300deg,#FDE68A 330deg,transparent 360deg);animation:pr-girar 7s linear infinite;z-index:-1}
+  .pr-copiar button{border-radius:11px;padding:12px 18px;border:none;background:var(--bg-card);color:var(--text-primary);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%}
+  .pr-copiar button:disabled{opacity:.5;cursor:not-allowed}
+  @keyframes pr-girar{to{transform:translate(-50%,-50%) rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){.pr-copiar::before{animation:none;background:#A78BFA}}
+  .pr-ver{font-size:14px;padding:13px 22px}
+  .pr-ios{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+  .pr-ios div{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);line-height:1.4}
+  .pr-ios b{width:26px;height:26px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+  .pr-plantillas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  @media(max-width:768px){
+    .pr-cab{padding:14px;gap:10px}
+    .pr-cuerpo{padding:12px 14px 16px}
+    .pr-estado{font-size:9.5px;padding:3px 7px}
+    .pr-opciones{grid-template-columns:1fr}
+    .pr-plantillas{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .pr-acciones{flex-direction:column;align-items:stretch}
+    .pr-acciones>*{width:100%}
+    .pr-btn{width:100%;padding:13px 18px}
+    .pr-cuerpo .pref-row{flex-direction:row;align-items:center;gap:12px}
+  }
 `}</style>
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={subirAvatar}/>
@@ -638,7 +1005,6 @@ export default function AjustesPage() {
       <div className="s-toggle-wrap">
           <div className="s-toggle-title">Ajustes</div>
           {([
-            { id: 'perfil', icon: User, label: 'Perfil profesional' },
             { id: 'pagina', icon: Settings, label: 'Página de reservas' },
             { id: 'seguridad', icon: Shield, label: 'Seguridad' },
             { id: 'datos', icon: Database, label: 'Datos y respaldo' },
@@ -652,7 +1018,6 @@ export default function AjustesPage() {
 
         <div className="s-toggle-mobile-wrap">
   {([
-    { id: 'perfil', label: 'Perfil' },
     { id: 'pagina', label: 'Página de reservas' },
     { id: 'seguridad', label: 'Seguridad' },
     { id: 'datos', label: 'Datos' },
@@ -666,10 +1031,17 @@ export default function AjustesPage() {
 
         <div className="s-content">
 
-          {tab === 'perfil' && (<>
-            <div className="s-section-title">Perfil profesional</div>
-            <div className="s-section-sub">Tu identidad dentro de Luma</div>
-            <div className="s-card">
+          {tab === 'pagina' && (<>
+            <div className="s-section-title">Página de reservas</div>
+            <div className="s-section-sub">Completá los pasos en orden. Todo se guarda solo.</div>
+
+            <div className="pr-progreso">
+              <div className="pr-prog-txt">Tu página: <strong>{listos} de {PASOS.length}</strong> pasos listos</div>
+              <div className="pr-barra"><div style={{width:`${(listos / PASOS.length) * 100}%`}}/></div>
+            </div>
+
+            {/* 1. PERFIL */}
+            {bloque('perfil', (<>
               <div className="avatar-wrap">
                 {perfil.avatar_url
                   ? <img src={perfil.avatar_url} className="avatar-img" alt="avatar"/>
@@ -679,10 +1051,10 @@ export default function AjustesPage() {
                   <div className="avatar-name">{perfil.nombre_profesional || 'Tu nombre'}</div>
                   <div className="avatar-spec">{perfil.especialidad || 'Especialidad'}</div>
                   <button className="avatar-btn" onClick={() => fileInputRef.current?.click()} disabled={subiendoAvatar}>
-                    <Camera size={12}/>{subiendoAvatar ? 'Subiendo...' : 'Cambiar foto'}
+                    <Camera size={12}/>{subiendoAvatar ? 'Subiendo...' : perfil.avatar_url ? 'Cambiar foto' : 'Subir foto'}
                   </button>
                   <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px',lineHeight:'1.5'}}>
-                    Esta foto también se usa en tu página pública de reservas.
+                    Es la foto que ven tus consultantes en tu página y cuando compartís tu link.
                   </div>
                 </div>
               </div>
@@ -691,7 +1063,7 @@ export default function AjustesPage() {
                   <label>Nombre profesional</label>
                   <input placeholder="Ej: Priscila Tarot" value={perfil.nombre_profesional}
                     onChange={e => setPerfil({...perfil, nombre_profesional: e.target.value})}/>
-                  <div className="field-hint">Visible en toda la app</div>
+                  <div className="field-hint">Es el nombre grande de tu página</div>
                 </div>
                 <div className="field">
                   <label>Nombre completo</label>
@@ -704,76 +1076,59 @@ export default function AjustesPage() {
                     onChange={e => setPerfil({...perfil, especialidad: e.target.value})}/>
                 </div>
                 <div className="field">
-  <label>WhatsApp</label>
-  <input placeholder="Ej: 5492236789012 (con código de país sin +)" value={perfil.whatsapp}
-    onChange={e => setPerfil({...perfil, whatsapp: e.target.value})}/>
-  <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5'}}>
-    💡 Este número aparece en tu página pública para que las consultantes puedan contactarte por WhatsApp.
-  </div>
-
-
-</div>
+                  <label>WhatsApp</label>
+                  <input placeholder="Ej: 5492236789012 (con código de país sin +)" value={perfil.whatsapp}
+                    onChange={e => setPerfil({...perfil, whatsapp: e.target.value})}/>
+                  <div className="field-hint">Aparece en tu página para que te puedan escribir.</div>
+                </div>
                 <div className="field full">
-                  <label>Bio corta</label>
-                  <textarea placeholder="Una descripción breve de tu práctica profesional..."
-                    value={perfil.bio} onChange={e => setPerfil({...perfil, bio: e.target.value})}/>
+                  <label>Frase de bienvenida</label>
+                  <input placeholder="Ej: Elegí lo que resuena con vos en este momento" value={perfil.mensaje_bienvenida} maxLength={140}
+                    onChange={e => setPerfil({...perfil, mensaje_bienvenida: e.target.value})}/>
+                  <div className="field-hint">La frase corta que aparece arriba de todo, debajo de tu nombre, apenas alguien abre tu página.</div>
+                </div>
+                <div className="field full">
+                  <label>Bio (tu presentación)</label>
+                  <textarea placeholder="Contá quién sos y cómo acompañás..."
+                    value={perfil.bio} onChange={e => setPerfil({...perfil, bio: e.target.value})}
+                    style={{minHeight:'90px'}}/>
+                  <div className="field-hint">El texto más largo, que aparece más abajo en la sección «Sobre mí». Se muestra si tenés activada esa sección (bloque 5).</div>
                 </div>
                 <div className="field">
                   <label>Email</label>
                   <input value={email} disabled style={{opacity:0.5,cursor:'not-allowed'}}/>
-                  <div className="field-hint">No se puede cambiar desde acá</div>
+                  <div className="field-hint">Para cambiar tu mail, escribinos a soporte.</div>
                 </div>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px',flexWrap:'wrap'}}>
                 <button className="save-btn" onClick={guardarPerfil} disabled={guardando}>
                   {guardando ? 'Guardando...' : 'Guardar perfil'}
                 </button>
                 {msgExito && <span className="msg-exito">✓ {msgExito}</span>}
               </div>
-            </div>
-            <div className="subs-card">
-              <div className="subs-label">Plan actual</div>
-              <div className="subs-plan">
-                {suscripcion?.status === 'trial' ? 'Período de prueba' : suscripcion?.status === 'active' ? 'Plan activo' : 'Sin plan activo'}
-              </div>
-              <div className="subs-info">
-                {suscripcion?.status === 'trial' ? `${diasTrial} días restantes de prueba gratuita` :'$9.900 ARS/mes · Facturación mensual'}
-              </div>
-              {suscripcion?.status === 'trial' && (<>
-                <div className="subs-trial-bar">
-                  <div className="subs-trial-fill" style={{width:`${Math.max(0,(7-diasTrial)/7*100)}%`}}/>
-                </div>
-                <div className="subs-trial-text">{diasTrial} de 7 días restantes</div>
-              </>)}
-              {suscripcion?.status !== 'active' && (
-                <button
-                  onClick={() => window.location.href = '/suscripcion'}
-                  style={{
-                    marginTop:'14px', width:'100%', padding:'11px',
-                    background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',
-                    color:'white', border:'none', borderRadius:'11px',
-                    fontSize:'13px', fontWeight:600, cursor:'pointer',
-                    fontFamily:'inherit', boxShadow:'0 4px 14px rgba(139,92,246,0.35)',
-                    transition:'all 0.15s',
-                  }}
-                  onMouseOver={e => (e.currentTarget.style.transform='translateY(-1px)')}
-                  onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
-                  {suscripcion?.status === 'expired'
-                    ? '✦ Reactivar suscripción — $9.900 ARS/mes'
-                    : '✦ Activar ahora y no perder acceso — $9.900 ARS/mes'}
-                </button>
-              )}
-            </div>
-          </>)}
+            </>))}
 
-          {tab === 'pagina' && (<>
-            <div className="s-section-title">Página de reservas</div>
-            <div className="s-section-sub">Tu espacio de reservas personalizado</div>
+            {/* 2. SERVICIOS */}
+            {bloque('servicios', (<>
+              <div className="pr-resumen">
+                {serviciosActivos.length === 0
+                  ? 'Todavía no tenés servicios activos.'
+                  : `Tenés ${serviciosActivos.length} ${serviciosActivos.length === 1 ? 'servicio activo' : 'servicios activos'}: ${serviciosActivos.join(', ')}.`}
+              </div>
+              <a className="pr-btn" href="/services?desde=pagina">{serviciosActivos.length === 0 ? 'Crear mi primer servicio' : 'Ir a Servicios'} →</a>
+            </>))}
 
-  {/* TEMPLATE */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Estilo visual</div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:'8px',marginBottom:'4px'}}>
+            {/* 3. HORARIOS */}
+            {bloque('horarios', (<>
+              <div className="pr-resumen">
+                {franjas.length === 0 ? 'Todavía no cargaste tus horarios.' : resumenHorarios(franjas)}
+              </div>
+              <a className="pr-btn" href="/calendar?desde=pagina&abrir=disponibilidad">{franjas.length === 0 ? 'Cargar mis horarios' : 'Ir a Agenda'} →</a>
+            </>))}
+
+            {/* 4. DISEÑO */}
+            {bloque('diseno', (<>
+              <div className="pr-plantillas">
       {[
         { id:'luna', nombre:'Luna', desc:'Oscuro · Místico · Tarot', emoji:'🌙', bg:'#0D0B14', color:'#C9A84C' },
         { id:'aura', nombre:'Aura', desc:'Claro · Limpio · Wellness', emoji:'✨', bg:'#F8F4FF', color:'#8B5CF6' },
@@ -795,196 +1150,24 @@ export default function AjustesPage() {
           <div style={{fontSize:'10px',color:'#888',lineHeight:1.4}}>{t.desc}</div>
         </div>
       ))}
-    </div>
-  </div>
+              </div>
+              <div className="field-hint" style={{marginTop:'8px'}}>Cambiar de estilo no borra ni cambia nada de lo que cargaste.</div>
+            </>))}
 
-  {/* URL */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>URL de tu página</div>
-    <div className="field">
-      <label>Slug</label>
-      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-        <span style={{fontSize:'12px',color:'var(--text-muted)',whiteSpace:'nowrap',padding:'9px 11px',background:'var(--bg-input)',borderRadius:'10px',border:'0.5px solid var(--border)'}}>
-          /p/
-        </span>
-        <input
-          style={{flex:1,padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none'}}
-          placeholder="tu-nombre"
-          value={perfil.slug}
-          onChange={e => setPerfil({...perfil, slug: e.target.value.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')})}/>
-      </div>
-      <div className="field-hint">Solo letras minúsculas, números y guiones</div>
-    </div>
-    <div className="field">
-      <label>Mensaje de bienvenida</label>
-      <textarea
-        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',minHeight:'70px',resize:'none',width:'100%'}}
-        placeholder="Ej: Hola! Reservá tu sesión de forma fácil y rápida..."
-        value={perfil.mensaje_bienvenida}
-        onChange={e => setPerfil({...perfil, mensaje_bienvenida: e.target.value})}/>
-    </div>
-    <div style={{background:'var(--bg-input)',borderRadius:'10px',padding:'12px 14px',border:'0.5px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px'}}>
-      <span style={{fontSize:'13px',color:'var(--text-secondary)',wordBreak:'break-all'}}>
-      const url = `https://lumaapp.lat/p/${perfil.slug || ''}`
-      </span>
-      <button style={{padding:'6px 14px',borderRadius:'8px',background:'var(--accent-light)',color:'var(--accent)',border:'none',fontSize:'11px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}
-        onClick={() => {
-          const url = `${window.location.origin}/p/${perfil.slug || ''}`
-          navigator.clipboard.writeText(url)
-          setMsgExito('Link copiado!')
-          setTimeout(() => setMsgExito(''), 2000)
-        }}>
-        Copiar link
-      </button>
-    </div>
-    {perfil.pagina_activa && perfil.slug && (
-      <a href={`/p/${perfil.slug}`} target="_blank" rel="noopener noreferrer"
-        style={{display:'block',marginTop:'10px',fontSize:'12px',color:'var(--accent)',textDecoration:'none',textAlign:'center'}}>
-        Ver mi página →
-      </a>
-    )}
-  </div>
-
-  {/* NOTIFICACIONES */}
-<div className="s-card">
-  <div className="s-card-title"><Settings size={14}/>Notificaciones</div>
-  <div className="pref-row">
-    <div>
-      <div className="pref-label">Recibir notificaciones de nuevas reservas</div>
-      <div className="pref-sub">Agregá Luma a tu pantalla de inicio para recibirlas</div>
-      <a href="/ayuda#notificaciones" style={{fontSize:'11px',color:'var(--accent)',textDecoration:'underline',marginTop:'4px',display:'inline-block'}}>
-        Ver tutorial
-      </a>
-    </div>
-    <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block',flexShrink:0}}>
-      <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-       checked={notificacionesActivas}
-       onChange={toggleNotificaciones}
-       disabled={loadingNoti}/>
-      <span style={{position:'absolute',inset:0,background:notificacionesActivas?'#8B5CF6':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
-        <span style={{position:'absolute',width:'16px',height:'16px',left:notificacionesActivas?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
-      </span>
-    </label>
-  </div>
-</div>
-
-  {/* SECCIONES */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Secciones visibles</div>
-    {[
-      { key:'sobre_mi', label:'Sobre mí', desc:'Tu historia y valores' },
-      { key:'disponibilidad', label:'Disponibilidad', desc:'Calendario con horarios libres' },
-      { key:'testimonios', label:'Testimonios', desc:'Opiniones de tus consultantes' },
-      { key:'faq', label:'Preguntas frecuentes', desc:'Respondé dudas antes de que pregunten' },
-    ].map(s => (
-      <div key={s.key} className="pref-row">
-        <div>
-          <div className="pref-label">{s.label}</div>
-          <div className="pref-sub">{s.desc}</div>
-        </div>
-        <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
-          <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-            checked={perfil.secciones[s.key as keyof typeof perfil.secciones]}
-            onChange={e => setPerfil({...perfil, secciones: {...perfil.secciones, [s.key]: e.target.checked}})}/>
-          <span style={{
-            position:'absolute',inset:0,
-            background: perfil.secciones[s.key as keyof typeof perfil.secciones] ? '#8B5CF6' : 'var(--border)',
-            borderRadius:'22px',transition:'all 0.2s'
-          }}>
-            <span style={{
-              position:'absolute',width:'16px',height:'16px',
-              left: perfil.secciones[s.key as keyof typeof perfil.secciones] ? '21px' : '3px',
-              top:'3px',background:'white',borderRadius:'50%',
-              transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'
-            }}/>
-          </span>
-        </label>
-      </div>
-    ))}
-  </div>
-
-  {/* FAQ */}
-  {perfil.secciones.faq && (
-    <div className="s-card">
-      <div className="s-card-title"><Settings size={14}/>Preguntas frecuentes</div>
-      {perfil.faq.map((item, i) => (
-        <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px',marginBottom:'8px'}}>
-            <input
-              style={{flex:1,padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none'}}
-              placeholder="Pregunta..."
-              value={item.pregunta}
-              onChange={e => {
-                const nuevo = [...perfil.faq]
-                nuevo[i] = {...nuevo[i], pregunta: e.target.value}
-                setPerfil({...perfil, faq: nuevo})
-              }}/>
-            <button onClick={() => setPerfil({...perfil, faq: perfil.faq.filter((_,j) => j !== i)})}
-              style={{width:'28px',height:'28px',border:'none',background:'#FEF2F2',color:'#EF4444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-              ✕
-            </button>
-          </div>
-          <textarea
-            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',resize:'none',minHeight:'60px'}}
-            placeholder="Respuesta..."
-            value={item.respuesta}
-            onChange={e => {
-              const nuevo = [...perfil.faq]
-              nuevo[i] = {...nuevo[i], respuesta: e.target.value}
-              setPerfil({...perfil, faq: nuevo})
-            }}/>
-        </div>
-      ))}
-      <button
-        onClick={() => setPerfil({...perfil, faq: [...perfil.faq, {pregunta:'',respuesta:''}]})}
-        style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
-        + Agregar pregunta
-      </button>
-    </div>
-  )}
-
-  {/* RESERVAS */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Configuración de reservas</div>
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Página activa</div>
-        <div className="pref-sub">Tus consultantes pueden ver y reservar</div>
-      </div>
-      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
-        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-          checked={perfil.pagina_activa}
-          onChange={e => setPerfil({...perfil, pagina_activa: e.target.checked})}/>
-        <span style={{position:'absolute',inset:0,background:perfil.pagina_activa?'#8B5CF6':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
-          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.pagina_activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
-        </span>
-      </label>
-    </div>
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Tipo de pago</div>
-        <div className="pref-sub">Qué se le pide al consultante al reservar</div>
-      </div>
-      <select className="pref-select" value={perfil.tipo_pago} onChange={e => setPerfil({...perfil, tipo_pago: e.target.value})}>
-        <option value="libre">Sin pago — reserva directa</option>
-        
-        <option value="completo">Pago completo</option>
-      </select>
-    </div>
-  </div>
-
-{/* SOBRE MÍ */}
-<div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Sección "Sobre mí"</div>
-    <div className="field" style={{marginBottom:'16px'}}>
-      <label>Bio</label>
-      <textarea
-        style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',minHeight:'80px',resize:'none',width:'100%'}}
-        placeholder="Contá quién sos y cómo acompañás..."
-        value={perfil.bio}
-        onChange={e => setPerfil({...perfil, bio: e.target.value})}/>
-    </div>
-    <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'10px'}}>Tus valores</div>
+            {/* 5. SECCIONES */}
+            {bloque('secciones', (<>
+              {/* Sobre mí */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">Sobre mí</div><div className="pref-sub">Tu bio y tus valores</div></div>
+                  {interruptor(perfil.secciones.sobre_mi, v => setPerfil({...perfil, secciones: {...perfil.secciones, sobre_mi: v}}))}
+                </div>
+                {perfil.secciones.sobre_mi && (
+                  <div className="pr-sec-form">
+                    {!perfil.bio.trim() && (
+                      <div className="pr-aviso">Activaste Sobre mí pero todavía no escribiste tu bio. <button onClick={() => irABloque('perfil')}>Escribila en el bloque 1</button></div>
+                    )}
+                    <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',margin:'8px 0 10px'}}>Tus valores</div>
     {perfil.valores.map((v, i) => (
       <div key={i} style={{background:'var(--bg-input)',borderRadius:'14px',padding:'14px',border:'0.5px solid var(--border-light)',marginBottom:'12px',display:'flex',flexDirection:'column',gap:'10px'}}>
       <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
@@ -1029,12 +1212,34 @@ export default function AjustesPage() {
                    </div>
       </div>
     ))}
-    </div>
+                  </div>
+                )}
+              </div>
 
+              {/* Disponibilidad */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">Disponibilidad</div><div className="pref-sub">Calendario con tus horarios libres (los del bloque 3)</div></div>
+                  {interruptor(perfil.secciones.disponibilidad, v => setPerfil({...perfil, secciones: {...perfil.secciones, disponibilidad: v}}))}
+                </div>
+                {perfil.secciones.disponibilidad && franjas.length === 0 && (
+                  <div className="pr-sec-form">
+                    <div className="pr-aviso">Activaste Disponibilidad pero no cargaste horarios. <button onClick={() => irABloque('horarios')}>Ir al bloque 3</button></div>
+                  </div>
+                )}
+              </div>
 
-  {/* TESTIMONIOS */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Testimonios</div>
+              {/* Testimonios */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">Testimonios</div><div className="pref-sub">Opiniones de tus consultantes</div></div>
+                  {interruptor(perfil.secciones.testimonios, v => setPerfil({...perfil, secciones: {...perfil.secciones, testimonios: v}}))}
+                </div>
+                {perfil.secciones.testimonios && (
+                  <div className="pr-sec-form">
+                    {!perfil.testimonios.some(t => (t.texto || '').trim()) && (
+                      <div className="pr-aviso">Activaste Testimonios pero no cargaste ninguno.</div>
+                    )}
     {perfil.testimonios.map((testi, i) => (
       <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px',marginBottom:'8px'}}>
@@ -1068,28 +1273,72 @@ export default function AjustesPage() {
       style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
       + Agregar testimonio
     </button>
-  </div>
+                  </div>
+                )}
+              </div>
 
-  {/* SERVICIO DESTACADO */}
-  <div className="s-card">
-    <div className="s-card-title">✦ Servicio destacado</div>
-    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
-      Aparece arriba de todo en tu página, apenas entran. Usalo para tu puerta de entrada: una sesión diagnóstico, una mentoría, un evento, un taller o tu curso estrella. Ideal cuando antes de reservar necesitás conocer a la persona.
-    </div>
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Mostrar en mi página</div>
-        <div className="pref-sub">Podés apagarlo cuando quieras sin perder lo que escribiste</div>
-      </div>
-      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
-        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-          checked={perfil.destacado.activa}
-          onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, activa: e.target.checked}})}/>
-        <span style={{position:'absolute',inset:0,background:perfil.destacado.activa?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
-          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.destacado.activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
-        </span>
-      </label>
-    </div>
+              {/* Preguntas frecuentes */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">Preguntas frecuentes</div><div className="pref-sub">Respondé dudas antes de que pregunten</div></div>
+                  {interruptor(perfil.secciones.faq, v => setPerfil({...perfil, secciones: {...perfil.secciones, faq: v}}))}
+                </div>
+                {perfil.secciones.faq && (
+                  <div className="pr-sec-form">
+                    {!perfil.faq.some(f => (f.pregunta || '').trim()) && (
+                      <div className="pr-aviso">Activaste Preguntas frecuentes pero no cargaste ninguna.</div>
+                    )}
+      {perfil.faq.map((item, i) => (
+        <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px',marginBottom:'8px'}}>
+            <input
+              style={{flex:1,padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none'}}
+              placeholder="Pregunta..."
+              value={item.pregunta}
+              onChange={e => {
+                const nuevo = [...perfil.faq]
+                nuevo[i] = {...nuevo[i], pregunta: e.target.value}
+                setPerfil({...perfil, faq: nuevo})
+              }}/>
+            <button onClick={() => setPerfil({...perfil, faq: perfil.faq.filter((_,j) => j !== i)})}
+              style={{width:'28px',height:'28px',border:'none',background:'#FEF2F2',color:'#EF4444',borderRadius:'8px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              ✕
+            </button>
+          </div>
+          <textarea
+            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'0.5px solid var(--border)',fontSize:'12px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-card)',outline:'none',resize:'none',minHeight:'60px'}}
+            placeholder="Respuesta..."
+            value={item.respuesta}
+            onChange={e => {
+              const nuevo = [...perfil.faq]
+              nuevo[i] = {...nuevo[i], respuesta: e.target.value}
+              setPerfil({...perfil, faq: nuevo})
+            }}/>
+        </div>
+      ))}
+      <button
+        onClick={() => setPerfil({...perfil, faq: [...perfil.faq, {pregunta:'',respuesta:''}]})}
+        style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
+        + Agregar pregunta
+      </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Servicio destacado */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">✦ Servicio destacado</div><div className="pref-sub">Arriba de todo en tu página: tu puerta de entrada</div></div>
+                  {interruptor(perfil.destacado.activa, v => setPerfil({...perfil, destacado: {...perfil.destacado, activa: v}}), '#059669')}
+                </div>
+                {perfil.destacado.activa && (
+                  <div className="pr-sec-form">
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'4px',lineHeight:1.5}}>
+                      Usalo para una sesión diagnóstico, una mentoría, un evento, un taller o tu curso estrella. Ideal cuando antes de reservar necesitás conocer a la persona.
+                    </div>
+                    {!perfil.destacado.titulo.trim() && (
+                      <div className="pr-aviso">Activaste el servicio destacado pero le falta el título: sin título no se muestra.</div>
+                    )}
     <div className="field" style={{marginTop:'12px'}}>
     <label>Imagen de portada (opcional)</label>
       <div style={{width:'100%',aspectRatio:'820/312',borderRadius:'12px',overflow:'hidden',background:'var(--bg-input)',border:'1px dashed var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'8px'}}>
@@ -1109,7 +1358,7 @@ export default function AjustesPage() {
           </button>
         )}
       </div>
-      <div className="field-hint">Recomendado: 820 x 312 px (horizontal, como una portada de Facebook). Lo importante, centrado: los bordes se pueden recortar un poco en el celular. Después tocá "Guardar todo".</div>
+      <div className="field-hint">Recomendado: 820 x 312 px (horizontal, como una portada de Facebook). Lo importante, centrado: los bordes se pueden recortar un poco en el celular.</div>
     </div>
     <div className="field">
       <label>Etiqueta chiquita (arriba de la imagen)</label>
@@ -1148,7 +1397,7 @@ export default function AjustesPage() {
         <textarea placeholder="Ej: Hola! Vi tu página y quiero saber más sobre la sesión diagnóstico." value={perfil.destacado.mensaje_whatsapp} maxLength={200}
           onChange={e => setPerfil({...perfil, destacado: {...perfil.destacado, mensaje_whatsapp: e.target.value}})}
           style={{minHeight:'60px',resize:'none'}}/>
-        <div className="field-hint">{perfil.whatsapp ? `Les abre WhatsApp con tu número (${perfil.whatsapp}).` : '⚠ Primero cargá tu WhatsApp en la pestaña Perfil, si no el bloque no se muestra.'}</div>
+        <div className="field-hint">{perfil.whatsapp ? `Les abre WhatsApp con tu número (${perfil.whatsapp}).` : '⚠ Primero cargá tu WhatsApp en el bloque 1 (Tu perfil); si no, este bloque no se muestra.'}</div>
       </div>
     )}
     {perfil.destacado.accion === 'link' && (
@@ -1173,28 +1422,21 @@ export default function AjustesPage() {
         )}
       </div>
     )}
-  </div>
+                  </div>
+                )}
+              </div>
 
-  {/* ANUNCIO CON CONTADOR */}
-  <div className="s-card">
-    <div className="s-card-title">⏳ Anuncio con cuenta regresiva</div>
-    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
-      Para avisar algo que se viene: el inicio de un curso, un taller, un evento o la apertura de cupos. En tu página aparece con un contador de días, horas, minutos y segundos. Cuando llega la fecha, desaparece solo.
-    </div>
-    <div className="pref-row">
-      <div>
-        <div className="pref-label">Mostrar en mi página</div>
-        <div className="pref-sub">Se oculta automáticamente cuando pasa la fecha</div>
-      </div>
-      <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block'}}>
-        <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
-          checked={perfil.anuncio.activa}
-          onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, activa: e.target.checked}})}/>
-        <span style={{position:'absolute',inset:0,background:perfil.anuncio.activa?'#059669':'var(--border)',borderRadius:'22px',transition:'all 0.2s'}}>
-          <span style={{position:'absolute',width:'16px',height:'16px',left:perfil.anuncio.activa?'21px':'3px',top:'3px',background:'white',borderRadius:'50%',transition:'all 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.1)'}}/>
-        </span>
-      </label>
-    </div>
+              {/* Anuncio con cuenta regresiva */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">⏳ Anuncio con cuenta regresiva</div><div className="pref-sub">Para algo que se viene. Se oculta solo cuando llega la fecha</div></div>
+                  {interruptor(perfil.anuncio.activa, v => setPerfil({...perfil, anuncio: {...perfil.anuncio, activa: v}}), '#059669')}
+                </div>
+                {perfil.anuncio.activa && (
+                  <div className="pr-sec-form">
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'4px',lineHeight:1.5}}>
+                      El inicio de un curso, un taller, un evento o la apertura de cupos. En tu página aparece con un contador de días, horas, minutos y segundos.
+                    </div>
     <div className="field" style={{marginTop:'12px'}}>
       <label>Etiqueta chiquita</label>
       <input placeholder="Ej: Próximamente" value={perfil.anuncio.etiqueta} maxLength={40}
@@ -1244,7 +1486,7 @@ export default function AjustesPage() {
         <textarea placeholder="Ej: Hola! Quiero anotarme al curso que empieza el 23 de octubre." value={perfil.anuncio.mensaje_whatsapp} maxLength={200}
           onChange={e => setPerfil({...perfil, anuncio: {...perfil.anuncio, mensaje_whatsapp: e.target.value}})}
           style={{minHeight:'60px',resize:'none'}}/>
-        {!perfil.whatsapp && <div className="field-hint">⚠ Primero cargá tu WhatsApp en la pestaña Perfil, si no el botón no aparece.</div>}
+        {!perfil.whatsapp && <div className="field-hint">⚠ Primero cargá tu WhatsApp en el bloque 1 (Tu perfil); si no, el botón no aparece.</div>}
       </div>
     )}
     {perfil.anuncio.accion === 'link' && (
@@ -1269,14 +1511,17 @@ export default function AjustesPage() {
         )}
       </div>
     )}
-  </div>
+                  </div>
+                )}
+              </div>
+              <div className="field-hint" style={{marginTop:'6px'}}>Si apagás una sección, lo que escribiste no se borra: al volver a activarla está todo.</div>
+            </>))}
 
-  {/* LINKS */}
-  <div className="s-card">
-    <div className="s-card-title"><Settings size={14}/>Links</div>
-    <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
-      Tus redes, podcast o cualquier link extra — aparecen en una pestaña aparte de tu página pública.
-    </div>
+            {/* 6. LINKS */}
+            {bloque('links', (<>
+              <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'12px',lineHeight:1.5}}>
+                Podcast, comunidad, regalos, descargables o redes. Opcional.
+              </div>
     {perfil.links.map((link, i) => (
       <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
         <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
@@ -1334,11 +1579,33 @@ export default function AjustesPage() {
       style={{width:'100%',padding:'9px',borderRadius:'10px',border:'1.5px dashed var(--border)',background:'transparent',fontSize:'12px',color:'var(--text-muted)',cursor:'pointer',fontFamily:'inherit',marginTop:'4px'}}>
       + Agregar link
     </button>
-  </div>
+            </>))}
 
-  {/* MERCADO PAGO */}
-  <div className="s-card">
-    <div className="s-card-title">💳 Mercado Pago</div>
+            {/* 7. COBROS */}
+            {bloque('cobros', (<>
+              <div className="pr-sub" style={{marginTop:0}}>1. ¿Cómo te pagan cuando reservan?</div>
+              <div className="pr-opciones">
+                <button type="button" className={`pr-opcion${perfil.tipo_pago === 'completo' ? ' sel' : ''}`} onClick={() => setPerfil({...perfil, tipo_pago: 'completo'})}>
+                  <strong>💳 Pago completo al reservar</strong>
+                  <span>Pagan todo en el momento de reservar.</span>
+                </button>
+                <button type="button" className={`pr-opcion${perfil.tipo_pago === 'libre' ? ' sel' : ''}`} onClick={() => setPerfil({...perfil, tipo_pago: 'libre'})}>
+                  <strong>🤝 Sin pago previo</strong>
+                  <span>Reservan y te pagan después, por fuera de Luma.</span>
+                </button>
+              </div>
+              {perfil.tipo_pago !== 'completo' && perfil.tipo_pago !== 'libre' && (
+                <div className="pr-aviso">Elegí una de las dos opciones.</div>
+              )}
+              {perfil.tipo_pago === 'completo' && !tieneMedioDePago && (
+                <div className="pr-aviso">Elegiste cobrar al reservar pero no activaste ningún medio de pago. Activá Mercado Pago o transferencia acá abajo.</div>
+              )}
+
+              <div className="pr-sub">2. Mercado Pago</div>
+              {perfil.tipo_pago === 'libre' && (
+                <div className="pr-info">Para tus reservas no hace falta: tus consultantes reservan sin pagar. Igual lo podés conectar para cobrar tus cursos.</div>
+              )}
+              <div style={{fontSize:'11.5px',color:'var(--text-muted)',marginBottom:'8px'}}>También sirve para cobrar tus cursos.</div>
     <div style={{background:'#EFF6FF',borderRadius:'12px',padding:'12px 14px',border:'0.5px solid #BFDBFE',marginBottom:'14px',fontSize:'12px',color:'#1D4ED8',lineHeight:1.6}}>
       Para integrar Mercado Pago necesitás tu <strong>Access Token</strong>. Lo encontrás en <strong>mercadopago.com/developers</strong> → Tu aplicación → Credenciales → Access Token de producción.
     </div>
@@ -1365,14 +1632,15 @@ export default function AjustesPage() {
           value={perfil.mp_access_token}
           onChange={e => setPerfil({...perfil, mp_access_token: e.target.value})}
           style={{padding:'9px 11px',borderRadius:'10px',border:'0.5px solid var(--border)',fontSize:'13px',fontFamily:'inherit',color:'var(--text-primary)',background:'var(--bg-input)',outline:'none',width:'100%'}}/>
-        <div className="field-hint">Se guarda cifrado. Nunca lo compartás con nadie.</div>
+        <div className="field-hint">Se guarda en un lugar privado: solo vos y el sistema de cobros lo pueden usar. Nunca lo compartás con nadie.</div>
       </div>
     )}
-  </div>
 
-  {/* TRANSFERENCIA BANCARIA */}
-  <div className="s-card">
-    <div className="s-card-title">🏦 Transferencia bancaria</div>
+              <div className="pr-sub">3. Transferencia</div>
+              {perfil.tipo_pago === 'libre' && (
+                <div className="pr-info">No hace falta: tus consultantes reservan sin pagar.</div>
+              )}
+              <fieldset className="pr-fieldset" disabled={perfil.tipo_pago === 'libre'}>
     <div className="pref-row">
       <div>
         <div className="pref-label">Aceptar transferencias</div>
@@ -1416,14 +1684,152 @@ export default function AjustesPage() {
           style={{minHeight:'70px',resize:'none'}}/>
       </div>
     </>)}
-  </div>
+              </fieldset>
+            </>))}
 
-  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'24px'}}>
-    <button className="save-btn" onClick={guardarPerfil} disabled={guardando}>
-      {guardando ? 'Guardando...' : 'Guardar todo'}
-    </button>
-    {msgExito && <span className="msg-exito">✓ {msgExito}</span>}
-  </div>
+            {/* 8. AVISOS */}
+            {bloque('avisos', (<>
+              {!instalada ? (<>
+                <div className="pr-aviso">🔒 Para recibir avisos, primero instalá Luma en tu celular. En el navegador los avisos no llegan bien, y en iPhone no llegan nunca.</div>
+                {esIOS ? (
+                  <div className="pr-ios">
+                    <div><b>1</b><span>Abrí Luma en Safari y tocá el botón Compartir (el cuadrado con la flecha ↑).</span></div>
+                    <div><b>2</b><span>Elegí «Agregar a pantalla de inicio».</span></div>
+                    <div><b>3</b><span>Abrí Luma desde el ícono nuevo y volvé a este paso.</span></div>
+                  </div>
+                ) : puedeInstalar ? (
+                  <button className="pr-btn" onClick={instalarApp}>📲 Instalar Luma</button>
+                ) : (
+                  <div className="pr-ios">
+                    <div><b>1</b><span>Abrí el menú del navegador (los tres puntitos ⋮).</span></div>
+                    <div><b>2</b><span>Tocá «Instalar app» o «Agregar a pantalla de inicio».</span></div>
+                    <div><b>3</b><span>Abrí Luma desde el ícono nuevo y volvé a este paso.</span></div>
+                  </div>
+                )}
+                <div className="pr-acciones">
+                  <button className="pr-btn sec" disabled>🔒 Activar avisos</button>
+                </div>
+                {avisosEnCuenta && <div className="pr-info">Ya tenés los avisos activados en otro dispositivo.</div>}
+              </>) : permisoNoti === 'no-soportado' ? (
+                <div className="pr-aviso">Este celular no permite avisos. Probá actualizando el sistema.</div>
+              ) : permisoNoti === 'denied' ? (
+                <div className="pr-aviso">
+                  Bloqueaste los avisos de Luma. Para habilitarlos: andá a la configuración de tu celular → Notificaciones → Luma → Permitir. Después cerrá Luma y volvé a abrirla.
+                </div>
+              ) : (<>
+                {notificacionesActivas
+                  ? <div className="pr-info">✅ Los avisos están activados en este celular.</div>
+                  : avisosEnCuenta
+                    ? <div className="pr-info">Ya tenés los avisos activados en otro dispositivo. Activalos acá para recibirlos también en este.</div>
+                    : null}
+                <div className="pr-acciones">
+                  <button className="pr-btn" onClick={toggleNotificaciones} disabled={loadingNoti}>
+                    {loadingNoti ? 'Un momento…' : notificacionesActivas ? 'Desactivar avisos' : 'Activar avisos'}
+                  </button>
+                  {notificacionesActivas && <button className="pr-btn sec" onClick={avisoPrueba}>Enviar aviso de prueba</button>}
+                </div>
+              </>)}
+              {msgAvisos && <div className="pr-info">{msgAvisos}</div>}
+              <a href="/ayuda#notificaciones" style={{fontSize:'11px',color:'var(--accent)',textDecoration:'underline',marginTop:'10px',display:'inline-block'}}>Ver tutorial</a>
+            </>))}
+
+            {/* 9. ACTIVÁ Y COMPARTÍ */}
+            {bloque('compartir', (<>
+              <ol className="pr-pasos-mini">
+                <li>Para que tu página exista necesita un nombre: tu dirección.</li>
+                <li>Sin dirección no hay a dónde llevar a tu consultante.</li>
+                <li>Copiá tu link y ponelo en tu bio de Instagram.</li>
+              </ol>
+              <div className="field">
+                <label>Tu dirección</label>
+                <div className="pr-slug">
+                  <span>lumaapp.lat/p/</span>
+                  <input placeholder="tu-nombre" value={perfil.slug} maxLength={60}
+                    onChange={e => setPerfil({...perfil, slug: limpiarSlug(e.target.value, true)})}
+                    onBlur={() => { if (perfil.slug === slugGuardadoRef.current) return; const s = limpiarSlug(perfil.slug); if (s !== perfil.slug) setPerfil(prev => ({...prev, slug: s})) }}/>
+                </div>
+                <div className="field-hint">Solo letras minúsculas, números y guiones. Si la cambiás, el link viejo deja de funcionar.</div>
+                {!perfil.slug && limpiarSlug(perfil.nombre_profesional) && (
+                  <button type="button" className="pr-btn sec" style={{marginTop:'8px',alignSelf:'flex-start'}}
+                    onClick={() => setPerfil({...perfil, slug: limpiarSlug(perfil.nombre_profesional)})}>
+                    Usar lumaapp.lat/p/{limpiarSlug(perfil.nombre_profesional)}
+                  </button>
+                )}
+                {slugAviso && <div className="pr-aviso">{slugAviso}</div>}
+              </div>
+
+              {faltanParaCompartir.length > 0 && (
+                <div className="pr-aviso">
+                  Tu página se va a ver incompleta: faltan {faltanParaCompartir.map((f, i) => (
+                    <span key={f.id}>{i > 0 ? ' y ' : ''}<button onClick={() => irABloque(f.id)}>{f.txt}</button></span>
+                  ))}.
+                </div>
+              )}
+
+              <div className="pref-row">
+                <div>
+                  <div className="pref-label">Página activa</div>
+                  <div className="pref-sub">{perfil.pagina_activa ? 'Tus consultantes pueden ver tu página y reservar' : 'Apagada: nadie puede ver tu página todavía'}</div>
+                </div>
+                {interruptor(perfil.pagina_activa, v => setPerfil({...perfil, pagina_activa: v}))}
+              </div>
+
+              <div className="pr-acciones">
+                <div className="pr-copiar">
+                  <button type="button" onClick={copiarLink} disabled={!slugPublicado}>
+                    {copiado ? <><Check size={14}/>¡Copiado! Pegalo en tu bio</> : <><Copy size={14}/>Copiar link</>}
+                  </button>
+                </div>
+                {slugPublicado && (
+                  <a className="pr-btn pr-ver" href={`/p/${slugPublicado}`} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink size={15}/>Ver mi página
+                  </a>
+                )}
+              </div>
+              {perfil.slug !== slugPublicado && (
+                <div className="field-hint" style={{marginTop:'8px'}}>Tu dirección nueva se guarda cuando salís del campo. Hasta entonces, el link que se copia es el anterior{slugPublicado ? '' : ' (todavía no tenés uno)'}.</div>
+              )}
+              {slugPublicado && !perfil.pagina_activa && (
+                <div className="field-hint" style={{marginTop:'8px'}}>Ojo: tu página está apagada. Activala para que puedan entrar y reservar.</div>
+              )}
+            </>))}
+
+            {/* TU PLAN (sin desplegable, no cuenta como paso) */}
+            <div style={{marginTop:'18px'}}>
+            <div className="subs-card">
+              <div className="subs-label">Plan actual</div>
+              <div className="subs-plan">
+                {suscripcion?.status === 'trial' ? 'Período de prueba' : suscripcion?.status === 'active' ? 'Plan activo' : 'Sin plan activo'}
+              </div>
+              <div className="subs-info">
+                {suscripcion?.status === 'trial' ? `${diasTrial} días restantes de prueba gratuita` :'$9.900 ARS/mes · Facturación mensual'}
+              </div>
+              {suscripcion?.status === 'trial' && (<>
+                <div className="subs-trial-bar">
+                  <div className="subs-trial-fill" style={{width:`${Math.max(0,(7-diasTrial)/7*100)}%`}}/>
+                </div>
+                <div className="subs-trial-text">{diasTrial} de 7 días restantes</div>
+              </>)}
+              {suscripcion?.status !== 'active' && (
+                <button
+                  onClick={() => window.location.href = '/suscripcion'}
+                  style={{
+                    marginTop:'14px', width:'100%', padding:'11px',
+                    background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',
+                    color:'white', border:'none', borderRadius:'11px',
+                    fontSize:'13px', fontWeight:600, cursor:'pointer',
+                    fontFamily:'inherit', boxShadow:'0 4px 14px rgba(139,92,246,0.35)',
+                    transition:'all 0.15s',
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.transform='translateY(-1px)')}
+                  onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
+                  {suscripcion?.status === 'expired'
+                    ? '✦ Reactivar suscripción — $9.900 ARS/mes'
+                    : '✦ Activar ahora y no perder acceso — $9.900 ARS/mes'}
+                </button>
+              )}
+            </div>
+            </div>
 </>)}
 
           {tab === 'seguridad' && (<>

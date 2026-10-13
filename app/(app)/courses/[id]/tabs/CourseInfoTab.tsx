@@ -15,6 +15,7 @@ type Curso = {
   politica_reembolso: string; dias_garantia: number | null
   para_quien: string[]; que_aprenderas: string[]; requisitos: string[]
   estado: string
+  cobro_automatico?: boolean
 }
 
 type Testimonio = {
@@ -39,6 +40,11 @@ type Testimonio = {
   const cursoRef = useRef(curso)
   cursoRef.current = curso
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [avisoCobro, setAvisoCobro] = useState('')
+  // pregunta sobre las alumnas suscriptas cuando cambia el precio o pasa a pago único
+  const [pregunta, setPregunta] = useState<null | { tipo: 'precio' | 'modalidad'; suscriptas: number; precioAntes: number; precioAhora: number }>(null)
+  const [resolviendo, setResolviendo] = useState(false)
+  const [revisandoMP, setRevisandoMP] = useState(false)
   const [msg, setMsg] = useState('')
 
   const [testimonios, setTestimonios] = useState<Testimonio[]>([])
@@ -165,6 +171,8 @@ type Testimonio = {
         para_quien: f.para_quien.filter(x => x.trim()),
         que_aprenderas: f.que_aprenderas.filter(x => x.trim()),
         requisitos: f.requisitos.filter(x => x.trim()),
+        // el cobro automático solo vale para cursos mensuales
+        cobro_automatico: !!f.cobro_automatico && f.modalidad === 'suscripcion',
         updated_at: new Date().toISOString(),
         ...(estado ? { estado } : {}),
       }
@@ -178,7 +186,22 @@ type Testimonio = {
         return
       }
       guardadoRef.current = precioVacio ? JSON.stringify({ ...f, precio: '' }) : foto
+      const anterior = cursoRef.current
       onUpdate(data)
+      // ¿cambió el precio o dejó de ser mensual? si tiene alumnas suscriptas, le preguntamos qué hacer con ellas
+      const cambioPrecio = anterior.modalidad === 'suscripcion' && data.modalidad === 'suscripcion' && Number(anterior.precio) > 0 && Number(data.precio) > 0 && Number(anterior.precio) !== Number(data.precio)
+      const dejoDeSerMensual = anterior.modalidad === 'suscripcion' && data.modalidad !== 'suscripcion'
+      if (cambioPrecio || dejoDeSerMensual) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const res = await fetch('/api/cursos/suscripcion/cambio-curso', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId: curso.id, accion: 'contar', accessToken: session?.access_token }),
+          })
+          const r = await res.json().catch(() => ({}))
+          if (r.suscriptas > 0) setPregunta({ tipo: dejoDeSerMensual ? 'modalidad' : 'precio', suscriptas: r.suscriptas, precioAntes: Number(anterior.precio), precioAhora: Number(data.precio) })
+        } catch (e) { console.error('Error contando suscriptas:', e) }
+      }
       ok = true
       setMsg('✓ Guardado')
     } catch (err) {
@@ -223,6 +246,47 @@ type Testimonio = {
       guardarCurso({ silencioso: true })
     }
   }, [])
+
+  async function resolverPregunta(accion: 'aplicar_precio' | 'cancelar_todas' | null) {
+    if (!accion) { setPregunta(null); return } // mantener: no se toca nada
+    setResolviendo(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/cursos/suscripcion/cambio-curso', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: curso.id, accion, accessToken: session?.access_token }),
+      })
+      const r = await res.json().catch(() => ({ ok: false }))
+      if (!r.ok) { alert(r.mensaje || 'No se pudo completar. Probá de nuevo.'); return }
+      const fallidas = Number(r.fallidas) || 0
+      alert(accion === 'aplicar_precio'
+        ? `Listo: ${r.cambiadas || 0} alumna(s) pasan a pagar el precio nuevo desde su próxima cuota. Les dejamos un aviso en su cuenta.${fallidas ? `\n\n${fallidas} no se pudieron cambiar: siguen con el precio anterior.` : ''}`
+        : `Listo: se cancelaron ${r.canceladas || 0} suscripción(es). Cada alumna conserva el acceso que ya pagó.${fallidas ? `\n\n${fallidas} no se pudieron cancelar: probá de nuevo desde la pestaña Alumnas.` : ''}`)
+      setPregunta(null)
+    } finally { setResolviendo(false) }
+  }
+
+  // antes de prender el cobro automático, revisamos que tenga Mercado Pago conectado
+  async function cambiarCobroAutomatico(prender: boolean) {
+    setAvisoCobro('')
+    if (!prender) { setForm(prev => ({ ...prev, cobro_automatico: false })); return }
+    setRevisandoMP(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setAvisoCobro('Tu sesión venció. Volvé a entrar.'); return }
+      const [{ data: perfil }, { data: cred }] = await Promise.all([
+        supabase.from('therapist_profiles').select('mp_activo').eq('user_id', user.id).maybeSingle(),
+        supabase.from('mp_credenciales').select('user_id').eq('user_id', user.id).maybeSingle(),
+      ])
+      if (!perfil?.mp_activo || !cred) {
+        setAvisoCobro('Para cobrar solo cada mes necesitás Mercado Pago conectado y activado.')
+        return
+      }
+      setForm(prev => ({ ...prev, cobro_automatico: true }))
+    } finally { setRevisandoMP(false) }
+  }
 
   function agregarItem(campo: 'para_quien' | 'que_aprenderas' | 'requisitos') {
     setForm(prev => ({ ...prev, [campo]: [...prev[campo], ''] }))
@@ -326,6 +390,34 @@ type Testimonio = {
           <span className="field-hint">Al ser gratuito, las alumnas tienen acceso para siempre, sin importar la modalidad.</span>
         )}
       </div>
+
+      {form.modalidad === 'suscripcion' && Number(form.precio) > 0 && (
+        <div style={{border:'0.5px solid var(--border)',borderRadius:'12px',padding:'14px',marginBottom:'16px',background:'var(--bg-input)'}}>
+          <label style={{display:'flex',alignItems:'flex-start',gap:'10px',cursor:'pointer'}}>
+            <input type="checkbox" checked={!!form.cobro_automatico} disabled={revisandoMP}
+              onChange={e => cambiarCobroAutomatico(e.target.checked)}
+              style={{width:'18px',height:'18px',marginTop:'2px',flexShrink:0,accentColor:'#8B5CF6'}}/>
+            <span>
+              <span style={{display:'block',fontSize:'13px',fontWeight:700,color:'var(--text-primary)'}}>🔁 Cobro automático con Mercado Pago</span>
+              <span style={{display:'block',fontSize:'11.5px',color:'var(--text-muted)',lineHeight:1.55,marginTop:'4px'}}>
+                Mercado Pago le cobra a cada alumna todos los meses, solo, y la plata entra en tu cuenta de Mercado Pago. Si la alumna deja de pagar, pierde el acceso sola: no tenés que perseguir a nadie.
+                Las alumnas que hoy te pagan a mano no cambian nada: ven un botón para activar la renovación automática si quieren.
+              </span>
+            </span>
+          </label>
+          {revisandoMP && <div className="field-hint" style={{marginTop:'8px'}}>Revisando tu Mercado Pago…</div>}
+          {avisoCobro && (
+            <div style={{marginTop:'10px',fontSize:'12px',color:'#92400E',background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'8px 10px',lineHeight:1.5}}>
+              {avisoCobro} <a href="/settings?bloque=cobros" style={{color:'#92400E',fontWeight:700}}>Conectalo en Página de reservas → Cobros</a>
+            </div>
+          )}
+          {!form.cobro_automatico && curso.cobro_automatico && (
+            <div className="field-hint" style={{marginTop:'8px',color:'#B45309'}}>
+              Si lo apagás, las alumnas nuevas pagan a mano. Las que ya están suscriptas siguen con su cobro automático (podés cancelarlas una por una desde la pestaña Alumnas).
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="section-title">Detalles</div>
       <div className="precio-row">
@@ -441,6 +533,46 @@ type Testimonio = {
           <Plus size={11}/>{guardandoTesti ? 'Agregando...' : 'Agregar testimonio'}
         </button>
       </div>
+
+      {pregunta && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+          <div style={{background:'var(--bg-card)',borderRadius:'20px',padding:'24px',width:'100%',maxWidth:'440px'}}>
+            {pregunta.tipo === 'precio' ? (<>
+              <div style={{fontSize:'16px',fontWeight:800,color:'var(--text-primary)',marginBottom:'8px'}}>
+                {pregunta.precioAhora > pregunta.precioAntes ? 'Subiste el precio' : 'Bajaste el precio'}: ${pregunta.precioAntes.toLocaleString('es-AR')} → ${pregunta.precioAhora.toLocaleString('es-AR')}
+              </div>
+              <p style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:1.6,marginBottom:'16px'}}>
+                Tenés {pregunta.suscriptas} alumna{pregunta.suscriptas !== 1 ? 's' : ''} con cobro automático. ¿Qué precio pagan ellas? Las alumnas nuevas pagan el precio nuevo igual.
+              </p>
+              <button disabled={resolviendo} onClick={() => resolverPregunta(null)}
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid #8B5CF6',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
+                Mantienen su precio de ${pregunta.precioAntes.toLocaleString('es-AR')}
+                <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px'}}>Recomendado: es lo que menos reclamos genera</span>
+              </button>
+              <button disabled={resolviendo} onClick={() => resolverPregunta('aplicar_precio')}
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'0.5px solid var(--border)',background:'var(--bg-input)',color:'var(--text-primary)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
+                {resolviendo ? 'Aplicando…' : `Pasan a pagar $${pregunta.precioAhora.toLocaleString('es-AR')}`}
+                <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px',color:'var(--text-muted)'}}>Desde su próxima cuota, nunca la de este mes. Les dejamos un aviso en su cuenta.</span>
+              </button>
+            </>) : (<>
+              <div style={{fontSize:'16px',fontWeight:800,color:'var(--text-primary)',marginBottom:'8px'}}>Pasaste el curso a pago único</div>
+              <p style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:1.6,marginBottom:'16px'}}>
+                Tenés {pregunta.suscriptas} alumna{pregunta.suscriptas !== 1 ? 's' : ''} con cobro automático mensual. ¿Qué hacemos con ellas?
+              </p>
+              <button disabled={resolviendo} onClick={() => resolverPregunta(null)}
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid #8B5CF6',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
+                Siguen pagando por mes
+                <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px'}}>Sus suscripciones siguen como están. Las nuevas pagan una sola vez.</span>
+              </button>
+              <button disabled={resolviendo} onClick={() => resolverPregunta('cancelar_todas')}
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'0.5px solid #FECACA',background:'#FEF2F2',color:'#B91C1C',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
+                {resolviendo ? 'Cancelando…' : 'Cancelar todas las suscripciones'}
+                <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px'}}>No se les cobra más. Cada una conserva el acceso que ya pagó, hasta su fecha de vencimiento.</span>
+              </button>
+            </>)}
+          </div>
+        </div>
+      )}
 
       <div className="bottom-bar">
         {msg && <span style={{fontSize:'12px',color: msg.startsWith('✓') ? '#10B981' : msg === 'Guardando…' ? 'var(--text-muted)' : '#B45309',fontWeight:600,background:'var(--bg-card)',padding:'4px 10px',borderRadius:'20px'}}>{msg}</span>}

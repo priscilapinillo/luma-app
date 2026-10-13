@@ -852,10 +852,26 @@ export default function LandingPage() {
           display:flex;align-items:center;justify-content:center;
           z-index:1;
         }
-        .c-card-img{
+        .c-card-img{ 
           max-width:min(420px,80vw);
           width:100%;height:auto;
           filter:drop-shadow(0 30px 60px rgba(0,0,0,0.2));
+        }
+                  /* ── AJUSTE: cada función queda quieta un rato antes de que pase la siguiente ── */
+        .funcion-slide{margin-bottom:60vh}
+        .funcion-slide:last-child{margin-bottom:0 !important}
+        @media(max-width:860px){
+          .funcion-slide{margin-bottom:45vh}
+        }
+        /* ── AJUSTE: fondo de las cartas sin zoom en el celular ── */
+        @media(max-width:860px),(hover:none){
+          .cards-section{background-image:none;background-attachment:scroll;isolation:isolate}
+          .cards-section::before{
+            content:'';display:block;position:sticky;top:0;
+            height:100vh;height:100lvh;margin-bottom:-100vh;margin-bottom:-100lvh;
+            background:url('/landing/fondo-seccion-2.png') center/cover no-repeat;
+            z-index:-1;pointer-events:none;
+          }
         }
       `}</style>
 

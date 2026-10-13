@@ -1,38 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import webpush from 'web-push'
+import { enviarAviso } from '@/lib/push'
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
-
+// Solo para uso interno del servidor de Luma (pide la clave secreta del servidor).
+// Antes cualquiera podía mandarle avisos a cualquier terapeuta.
+// Las páginas públicas ahora usan /api/push/aviso, que arma el aviso a partir de la reserva real.
 export async function POST(req: NextRequest) {
   try {
-    const { userId, titulo, cuerpo } = await req.json()
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    const { data: sub } = await supabase
-      .from('push_subscriptions')
-      .select('subscription')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (!sub) return NextResponse.json({ ok: false, reason: 'sin suscripción' })
-
-    const subscription = JSON.parse(sub.subscription)
-    await webpush.sendNotification(subscription, JSON.stringify({
-      title: titulo,
-      body: cuerpo,
-      icon: '/favicon.ico',
-    }))
-
-    return NextResponse.json({ ok: true })
+    const clave = (req.headers.get('authorization') || '').replace('Bearer ', '')
+    if (!clave || clave !== process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
+    const { userId, titulo, cuerpo } = await req.json().catch(() => ({}))
+    if (!userId || !titulo) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
+    const enviados = await enviarAviso(String(userId), String(titulo), String(cuerpo || ''))
+    return NextResponse.json({ ok: enviados > 0, enviados })
   } catch (err) {
     console.error('Error enviando notificación:', err)
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })

@@ -29,27 +29,18 @@ export async function POST(req: NextRequest) {
     const { data: { user }, error: errorUser } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
     if (errorUser || !user) {
       console.error('Fallo de autenticación en create-subscription:', errorUser)
-      return NextResponse.json({ error: 'No autenticado', detalle: errorUser?.message }, { status: 401 })
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
     }
 
-    // Si ya tiene una suscripción vigente en MP, la cancelamos primero —
-    // así "Pasarme a Premium" desde Básico no termina pagando dos planes a la vez
-    const { data: subActual } = await supabase
-      .from('subscriptions')
-      .select('mp_subscription_id, status')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    // El plan anterior YA NO se cancela acá: se cancela recién cuando Mercado Pago avisa que el plan
+    // nuevo quedó autorizado (ver /api/mp/webhook). Así, si abandona el pago, no se queda sin plan.
 
-    if (subActual?.mp_subscription_id && subActual.status === 'active') {
-      await fetch(`https://api.mercadopago.com/preapproval/${subActual.mp_subscription_id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'cancelled' }),
-      }).catch(e => console.error('Error cancelando suscripción vieja (se sigue igual con la nueva):', e))
-    }
+    // el link de vuelta siempre es de Luma (nunca una dirección que venga de afuera)
+    const origen = req.headers.get('origin') || new URL(req.url).origin
+    const vuelta = typeof backUrl === 'string' && backUrl.startsWith('https://lumaapp.lat/')
+      ? backUrl
+      : origen.startsWith('https://') ? `${origen}/dashboard?pago=ok` : 'https://lumaapp.lat/dashboard?pago=ok'
+
     const response = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {
@@ -60,7 +51,7 @@ export async function POST(req: NextRequest) {
         reason: NOMBRES[plan],
         external_reference: `${user.id}:${plan}`,
         payer_email: user.email,
-        back_url: backUrl,
+        back_url: vuelta,
         auto_recurring: {
           frequency: 1,
           frequency_type: 'months',

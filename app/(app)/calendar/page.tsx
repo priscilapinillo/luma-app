@@ -70,6 +70,11 @@ export default function AgendaPage() {
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>(DISPONIBILIDAD_DEFAULT)
   const [loading, setLoading] = useState(true)
+  // si viene desde Página de reservas, mostramos el aviso fijo para volver
+  const [desdePagina, setDesdePagina] = useState(false)
+  useEffect(() => {
+    try { setDesdePagina(new URLSearchParams(window.location.search).get('desde') === 'pagina') } catch {}
+  }, [])
   const [toastMsg, setToastMsg] = useState('')
 const [toastVisible, setToastVisible] = useState(false)
 
@@ -154,6 +159,10 @@ function toast(msg: string) {
       } else {
         setDispLocal(DISPONIBILIDAD_DEFAULT)
       }
+      try {
+        const params = new URLSearchParams(window.location.search)
+        if (params.get('abrir') === 'disponibilidad') setModalDisponibilidad(true)
+      } catch {}
     } catch (err) {
       console.error('Error en agenda:', err)
     } finally {
@@ -297,19 +306,36 @@ function toast(msg: string) {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      await supabase.from('availability').delete().eq('user_id', user.id)
-      const franjasAGuardar = dispLocal.filter(d => d.hora_inicio && d.hora_fin && (d.id || d.esNueva))
-      await supabase.from('availability').insert(
-        franjasAGuardar.map(d => ({
-          user_id: user.id, dia_semana: d.dia_semana,
-          hora_inicio: d.hora_inicio, hora_fin: d.hora_fin, activo: d.activo,
-        }))
-      )
+      if (!user) { alert('Tu sesión expiró. Volvé a iniciar sesión para guardar tus horarios.'); return }
+      // se guarda exactamente lo que se ve en la ventana
+      // (antes, los horarios que venían cargados por defecto no se guardaban y la página quedaba sin horarios)
+      const filas = dispLocal
+        .filter(d => d.hora_inicio && d.hora_fin)
+        .map(d => ({ user_id: user.id, dia_semana: d.dia_semana, hora_inicio: d.hora_inicio, hora_fin: d.hora_fin, activo: d.activo }))
+      const { data: anteriores, error: errLeer } = await supabase.from('availability').select('dia_semana,hora_inicio,hora_fin,activo').eq('user_id', user.id)
+      if (errLeer) throw errLeer
+      const { error: errBorrar } = await supabase.from('availability').delete().eq('user_id', user.id)
+      if (errBorrar) throw errBorrar
+      if (filas.length > 0) {
+        const { error: errInsertar } = await supabase.from('availability').insert(filas)
+        if (errInsertar) {
+          // si no se pudo guardar lo nuevo, devolvemos lo que había para no dejarla sin horarios
+          if (anteriores && anteriores.length > 0) {
+            await supabase.from('availability').insert(anteriores.map((a: any) => ({ ...a, user_id: user.id })))
+          }
+          throw errInsertar
+        }
+      }
       setDisponibilidad(dispLocal)
       setModalDisponibilidad(false)
+      if (desdePagina) {
+        setToastMsg('Horarios guardados. Tocá «Volver a Página de reservas» para seguir.')
+        setToastVisible(true)
+        setTimeout(() => setToastVisible(false), 3500)
+      }
     } catch (err) {
       console.error('Error guardando disponibilidad:', err)
+      alert('No se pudieron guardar tus horarios. Revisá tu conexión e intentá de nuevo.')
     } finally {
       setGuardandoDisp(false)
     }
@@ -487,6 +513,11 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .disp-sep{font-size:11px;color:var(--text-muted)}
       `}</style>
 
+      {desdePagina && (
+        <a href="/settings?bloque=diseno" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(139,92,246,0.45)'}}>
+          ← Volver a Página de reservas
+        </a>
+      )}
       <div className="aw">
         <div className="a-header">
           <div>
