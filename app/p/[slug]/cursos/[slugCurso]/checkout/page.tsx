@@ -469,7 +469,7 @@ export default function CheckoutCursoPage() {
               <a className="exito-btn" href="/mi-cuenta/cursos">Ir a mi cuenta</a>
             </>) : suscripcionInfo.suscripcion_estado === 'pendiente' && suscripcionInfo.link ? (<>
               <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Tenés una suscripción sin completar</h2>
-              <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>Todavía no terminaste en Mercado Pago. No se te cobró nada.</p>
+              <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>Todavía no terminaste en Mercado Pago. Si te llegó a descontar dinero, Mercado Pago lo devuelve solo. Para completarla, usá tarjeta de crédito o débito (no dinero en cuenta).</p>
               <a className="exito-btn" href={suscripcionInfo.link}>Completar ahora</a>
             </>) : suscripcionInfo.suscripcion_estado === 'con_problemas' ? (<>
               <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>No pudimos cobrar tu cuota</h2>
@@ -479,7 +479,7 @@ export default function CheckoutCursoPage() {
               <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>
                 {suscripcionInfo.suscripcion_estado === 'rechazada' ? 'Tu tarjeta fue rechazada' : 'La suscripción no se completó'}
               </h2>
-              <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>No se te cobró nada. Podés probar de nuevo, con la misma tarjeta o con otra.</p>
+              <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>Si te llegó a descontar dinero, Mercado Pago lo devuelve solo. Podés probar de nuevo con tarjeta de crédito o débito (no dinero en cuenta).</p>
               {errorMsg && <div className="error-msg" style={{marginTop:'14px'}}>{errorMsg}</div>}
               <button className="confirmar-btn" style={{marginTop:'16px'}} disabled={preparandoMP || !inscripcion}
                 onClick={async () => { if (!inscripcion) return; setErrorMsg(''); setPreparandoMP(true); const seVa = await irASuscripcion(inscripcion.id); if (!seVa) setPreparandoMP(false) }}>
@@ -605,6 +605,11 @@ export default function CheckoutCursoPage() {
                   </div>
                 )}
 
+                {metodoPago === 'mp' && usaSuscripcion && (
+                  <div style={{fontSize:'13px',color:'var(--text-dim)',lineHeight:1.5,margin:'0 0 12px',padding:'10px 12px',border:'1px solid var(--border, rgba(255,255,255,.15))',borderRadius:'10px'}}>
+                    💳 El cobro automático funciona <strong>solo con tarjeta de crédito o débito</strong>. No elijas &quot;dinero en cuenta&quot; de Mercado Pago, porque el pago no se completa.
+                  </div>
+                )}
                 {metodoPago === 'mp' && (
                   <button className="confirmar-btn" onClick={usaSuscripcion ? handleSuscripcion : handleMP} disabled={preparandoMP}>
                     {preparandoMP ? 'Preparando pago...' : usaSuscripcion ? '✦ Suscribirme con Mercado Pago' : '✦ Pagar con Mercado Pago'}

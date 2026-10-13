@@ -303,7 +303,7 @@ export default function MisCursosPage() {
                     <div className="mc-pendiente-txt">Tu suscripción está activa. El acceso se habilita apenas Mercado Pago acredite el cobro (suele tardar unos minutos). No hace falta que pagues de nuevo.</div>
                   </>) : i.suscripcion_estado === 'pendiente' || i.suscripcion_estado === 'rechazada' ? (<>
                     <span className="mc-badge pendiente_pago">{i.suscripcion_estado === 'rechazada' ? '⚠️ Tarjeta rechazada' : '⏳ Suscripción sin completar'}</span>
-                    <div className="mc-pendiente-txt">{i.suscripcion_estado === 'rechazada' ? 'El primer cobro fue rechazado y no se te cobró nada. Podés probar con otra tarjeta.' : 'Todavía no terminaste en Mercado Pago. No se te cobró nada.'}</div>
+                    <div className="mc-pendiente-txt">{i.suscripcion_estado === 'rechazada' ? 'El primer cobro fue rechazado y no se te cobró nada. Podés probar con otra tarjeta.' : 'Todavía no terminaste en Mercado Pago. Si te llegó a descontar dinero, Mercado Pago lo devuelve solo. Para completarla, usá tarjeta de crédito o débito (no dinero en cuenta).'}</div>
                     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}} onClick={e => e.stopPropagation()}>
                       <button className="mc-btn-completar" style={{border:'none',cursor:'pointer',fontFamily:'inherit'}} disabled={accionando === i.id} onClick={() => irASuscripcion(i)}>
                         {accionando === i.id ? 'Preparando…' : i.suscripcion_estado === 'rechazada' ? 'Probar con otra tarjeta →' : 'Completar ahora →'}
