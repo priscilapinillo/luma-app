@@ -1,15 +1,68 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode, SyntheticEvent } from 'react'
 import { ExternalLink, FileText } from 'lucide-react'
 import { detectarContenido } from '@/lib/contenido'
 
 const marco: CSSProperties = { border: 'none', width: '100%', display: 'block', background: '#F5F5F5' }
 
-export default function VisorContenido({ url, tipo }: { url: string; tipo?: string }) {
+// Control del reproductor para el cuaderno de la alumna (marcar momento, volver a un minuto, pausar).
+// Solo existe para YouTube, Vimeo y videos/audios subidos. Drive y Loom no lo permiten.
+export type ControlVideo = {
+  tiempo: () => Promise<number>
+  duracion: () => Promise<number>
+  ir: (segundo: number) => void
+  pausar: () => void
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let apiYouTube: Promise<any> | null = null
+function cargarApiYouTube(): Promise<any> {
+  const w = window as any
+  if (w.YT?.Player) return Promise.resolve(w.YT)
+  if (apiYouTube) return apiYouTube
+  apiYouTube = new Promise((ok, mal) => {
+    const previo = w.onYouTubeIframeAPIReady
+    w.onYouTubeIframeAPIReady = () => { if (typeof previo === 'function') previo(); ok(w.YT) }
+    const sc = document.createElement('script')
+    sc.src = 'https://www.youtube.com/iframe_api'; sc.async = true
+    sc.onerror = () => { apiYouTube = null; mal(new Error('YouTube API')) }
+    document.head.appendChild(sc)
+  })
+  return apiYouTube
+}
+let apiVimeo: Promise<any> | null = null
+function cargarApiVimeo(): Promise<any> {
+  const w = window as any
+  if (w.Vimeo?.Player) return Promise.resolve(w.Vimeo)
+  if (apiVimeo) return apiVimeo
+  apiVimeo = new Promise((ok, mal) => {
+    const sc = document.createElement('script')
+    sc.src = 'https://player.vimeo.com/api/player.js'; sc.async = true
+    sc.onload = () => ok(w.Vimeo)
+    sc.onerror = () => { apiVimeo = null; mal(new Error('Vimeo API')) }
+    document.head.appendChild(sc)
+  })
+  return apiVimeo
+}
+
+function conParametro(src: string, clave: string, valor: string) {
+  const [base, hash] = src.split('#')
+  return `${base}${base.includes('?') ? '&' : '?'}${clave}=${encodeURIComponent(valor)}${hash ? '#' + hash : ''}`
+}
+
+export default function VisorContenido({ url, tipo, alControl, inicio }: {
+  url: string; tipo?: string
+  alControl?: (c: ControlVideo | null) => void   // solo el aula de la alumna lo usa
+  inicio?: number                                 // "Retomá": arranca en este segundo
+}) {
   const [esMovil, setEsMovil] = useState(false)
   const [errorMedia, setErrorMedia] = useState(false)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const mediaRef = useRef<HTMLMediaElement | null>(null)
+  const avisarRef = useRef(alControl)
+  avisarRef.current = alControl
 
   useEffect(() => {
     const ua = navigator.userAgent
@@ -19,7 +72,74 @@ export default function VisorContenido({ url, tipo }: { url: string; tipo?: stri
   useEffect(() => { setErrorMedia(false) }, [url])
 
   const c = detectarContenido(url, tipo)
+  const conControl = !!alControl
+  const visor = c?.visor
+
+  useEffect(() => {
+    const avisar = (x: ControlVideo | null) => avisarRef.current?.(x)
+    if (!conControl) return
+    let vivo = true
+    let reproductor: any = null
+    avisar(null)
+    if (visor === 'youtube' && iframeRef.current) {
+      const el = iframeRef.current
+      cargarApiYouTube().then(YT => {
+        if (!vivo) return
+        reproductor = new YT.Player(el, {
+          events: {
+            onReady: () => {
+              if (!vivo) return
+              avisar({
+                tiempo: async () => Number(reproductor.getCurrentTime?.()) || 0,
+                duracion: async () => Number(reproductor.getDuration?.()) || 0,
+                ir: (seg: number) => { reproductor.seekTo?.(seg, true); reproductor.playVideo?.() },
+                pausar: () => reproductor.pauseVideo?.(),
+              })
+            },
+          },
+        })
+      }).catch(() => avisar(null))
+    } else if (visor === 'vimeo' && iframeRef.current) {
+      const el = iframeRef.current
+      cargarApiVimeo().then(Vimeo => {
+        if (!vivo) return
+        reproductor = new Vimeo.Player(el)
+        reproductor.ready().then(() => {
+          if (!vivo) return
+          avisar({
+            tiempo: () => reproductor.getCurrentTime().catch(() => 0),
+            duracion: () => reproductor.getDuration().catch(() => 0),
+            ir: (seg: number) => { reproductor.setCurrentTime(seg).then(() => reproductor.play()).catch(() => null) },
+            pausar: () => { reproductor.pause().catch(() => null) },
+          })
+        }).catch(() => avisar(null))
+      }).catch(() => avisar(null))
+    } else if ((visor === 'video' || visor === 'audio') && mediaRef.current) {
+      const m = mediaRef.current
+      avisar({
+        tiempo: async () => m.currentTime || 0,
+        duracion: async () => (isFinite(m.duration) ? m.duration : 0),
+        ir: (seg: number) => { m.currentTime = seg; m.play().catch(() => null) },
+        pausar: () => m.pause(),
+      })
+    }
+    return () => { vivo = false; avisar(null) }
+  }, [url, visor, conControl])
+
   if (!c) return null
+
+  // con control: YouTube y Vimeo necesitan permiso para que la página lea el minuto; "inicio" arranca donde quedó
+  const ini = Math.max(0, Math.floor(inicio || 0))
+  let srcVideo = c.embedUrl
+  if (c.visor === 'youtube') {
+    if (conControl) srcVideo = conParametro(conParametro(srcVideo, 'enablejsapi', '1'), 'origin', typeof window !== 'undefined' ? window.location.origin : '')
+    if (ini > 0) srcVideo = conParametro(srcVideo, 'start', String(ini))
+  } else if (c.visor === 'vimeo' && ini > 0) {
+    srcVideo = `${srcVideo.split('#')[0]}#t=${ini}s`
+  }
+  const alCargarMedia = (e: SyntheticEvent<HTMLMediaElement>) => {
+    if (ini > 0 && e.currentTarget.currentTime < 1) { try { e.currentTarget.currentTime = ini } catch { /* nada */ } }
+  }
 
   // link de la compu de la terapeuta: no se puede abrir desde otro lado
   if (c.visor === 'local') {
@@ -48,9 +168,9 @@ export default function VisorContenido({ url, tipo }: { url: string; tipo?: stri
     </div>
   )
 
-  const caja16x9 = (src: string, titulo: string) => (
+  const caja16x9 = (src: string, titulo: string, conRef = false) => (
     <div style={{position:'relative',paddingBottom:'56.25%',height:0,borderRadius:'14px',overflow:'hidden',background:'#000'}}>
-      <iframe src={src} title={titulo} loading="lazy"
+      <iframe ref={conRef ? iframeRef : undefined} src={src} title={titulo} loading={conRef && conControl ? undefined : 'lazy'}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
         referrerPolicy="strict-origin-when-cross-origin" allowFullScreen
         style={{position:'absolute',inset:0,width:'100%',height:'100%',border:'none'}}/>
@@ -65,7 +185,10 @@ export default function VisorContenido({ url, tipo }: { url: string; tipo?: stri
   )
 
   // ── videos de plataformas
-  if (c.visor === 'youtube' || c.visor === 'vimeo' || c.visor === 'loom') {
+  if (c.visor === 'youtube' || c.visor === 'vimeo') {
+    return <div>{caja16x9(srcVideo, 'Video de la lección', true)}{pie()}</div>
+  }
+  if (c.visor === 'loom') {
     return <div>{caja16x9(c.embedUrl, 'Video de la lección')}{pie()}</div>
   }
 
@@ -107,7 +230,7 @@ export default function VisorContenido({ url, tipo }: { url: string; tipo?: stri
     return (
       <div>
         <div style={{padding:'14px',background:'white',border:'1px solid #E5E5E5',borderRadius:'14px'}}>
-          <audio controls preload="metadata" src={c.embedUrl} onError={() => setErrorMedia(true)} style={{width:'100%'}}/>
+          <audio ref={el => { mediaRef.current = el }} onLoadedMetadata={alCargarMedia} controls preload="metadata" src={c.embedUrl} onError={() => setErrorMedia(true)} style={{width:'100%'}}/>
         </div>
         {errorMedia && (
           <div style={{marginTop:'8px',fontSize:'12px',color:'#92400E',background:'#FEF3C7',padding:'10px 12px',borderRadius:'10px',lineHeight:1.5}}>
@@ -124,7 +247,7 @@ export default function VisorContenido({ url, tipo }: { url: string; tipo?: stri
     return (
       <div>
         <div style={{position:'relative',paddingBottom:'56.25%',height:0,borderRadius:'14px',overflow:'hidden',background:'#000'}}>
-          <video controls playsInline preload="metadata" onError={() => setErrorMedia(true)}
+          <video ref={el => { mediaRef.current = el }} onLoadedMetadata={alCargarMedia} controls playsInline preload="metadata" onError={() => setErrorMedia(true)}
             style={{position:'absolute',inset:0,width:'100%',height:'100%'}}>
             <source src={c.embedUrl}/>
           </video>

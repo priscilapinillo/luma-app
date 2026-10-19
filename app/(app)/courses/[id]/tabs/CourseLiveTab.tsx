@@ -11,6 +11,7 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
   const [loading, setLoading] = useState(true)
   const [nuevo, setNuevo] = useState({ titulo: '', descripcion: '', fecha: '', hora: '', link_zoom: '' })
   const [guardando, setGuardando] = useState(false)
+  const [errorFecha, setErrorFecha] = useState('')
 
   useEffect(() => { cargarEncuentros() }, [cursoId])
 
@@ -26,10 +27,20 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
 
   async function agregarEncuentro() {
     if (!nuevo.titulo.trim() || !nuevo.fecha || !nuevo.hora || !nuevo.link_zoom.trim()) return
+    // la fecha y hora se toman con la zona horaria de la terapeuta (antes se guardaban como hora de Londres
+    // y a las alumnas de Argentina les aparecía 3 horas antes)
+    const inicio = new Date(`${nuevo.fecha}T${nuevo.hora}:00`)
+    const anio = Number(nuevo.fecha.slice(0, 4))
+    const esteAnio = new Date().getFullYear()
+    if (isNaN(inicio.getTime()) || anio < esteAnio || anio > esteAnio + 1) {
+      setErrorFecha('Revisá la fecha: el año tiene que ser ' + esteAnio + ' o ' + (esteAnio + 1) + '.'); return
+    }
+    if (inicio.getTime() < Date.now() - 3600000) { setErrorFecha('Esa fecha ya pasó. Elegí una fecha futura.'); return }
+    setErrorFecha('')
     setGuardando(true)
     try {
       const supabase = createClient()
-      const fechaHora = `${nuevo.fecha}T${nuevo.hora}:00`
+      const fechaHora = inicio.toISOString()
       const { data, error } = await supabase.from('course_live_sessions').insert({
         course_id: cursoId,
         titulo: nuevo.titulo.trim(),
@@ -141,8 +152,9 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
               onChange={e => setNuevo({...nuevo, hora: e.target.value})}/>
           </div>
         </div>
+        {errorFecha && <span role="alert" style={{fontSize:'11px',color:'#DC2626',display:'block',marginBottom:'8px'}}>{errorFecha}</span>}
         <span style={{fontSize:'10px',color:'var(--text-muted)',display:'block',marginBottom:'12px'}}>
-          Recomendamos avisar con 3 o 4 días de anticipación, para que a tus alumnas les llegue a tiempo.
+          Poné la hora de tu país. A cada alumna le aparece en su propio horario. Recomendamos avisar con 3 o 4 días de anticipación.
         </span>
         <div className="field">
           <label>Link de Zoom (o Meet, lo que uses)</label>

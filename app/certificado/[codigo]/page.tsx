@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { dibujarCertificadoLuma } from '@/lib/dibujos'
+import { pdfDeCanvas, descargarBlob } from '@/lib/pdfImagenes'
 
 const TEMPLATES: Record<string, any> = {
   luna: { bg: '#0D0B14', bg2: '#1A1628', primary: '#C9A84C', primaryLight: '#E8D5A3', primaryDim: 'rgba(201,168,76,0.3)', accent: '#6B3FA0', accentLight: '#9B6DD0', accentDim: 'rgba(107,63,160,0.25)', cream: '#F0E8D5', textDim: '#7A6B8A', border: 'rgba(201,168,76,0.3)' },
@@ -28,6 +30,7 @@ export default function CertificadoPage() {
   const [cert, setCert] = useState<Cert | null>(null)
   const [loading, setLoading] = useState(true)
   const [noEncontrado, setNoEncontrado] = useState(false)
+  const [armandoPdf, setArmandoPdf] = useState(false)
 
   useEffect(() => { cargar() }, [codigo])
 
@@ -68,6 +71,24 @@ export default function CertificadoPage() {
 
   const t = TEMPLATES[cert.template] || TEMPLATES.luna
   const fecha = new Date(cert.fecha_emision).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  // El PDF se dibuja igual que en pantalla (con el fondo y los colores), sin depender
+  // de la opción "gráficos de fondo" del navegador. Si algo falla, queda la impresión de siempre.
+  async function descargarPdf() {
+    if (!cert || armandoPdf) return
+    setArmandoPdf(true)
+    try {
+      const hoja = await dibujarCertificadoLuma(t, {
+        codigo: cert.codigo_unico, fecha, curso: cert.curso_titulo, alumna: cert.alumna_nombre, terapeuta: cert.terapeuta_nombre,
+      })
+      const blob = await pdfDeCanvas([hoja], 842, 595, 0.92)
+      descargarBlob(blob, `Certificado ${cert.codigo_unico}.pdf`)
+    } catch (e) {
+      console.error('PDF del certificado:', e)
+      document.title = `Certificado ${cert.codigo_unico}`
+      window.print()
+    } finally { setArmandoPdf(false) }
+  }
 
   return (
     <div className="cert-pagina" style={{minHeight:'100vh',background:'#0a0812',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',fontFamily:"'Jost',sans-serif"}}>
@@ -178,8 +199,8 @@ export default function CertificadoPage() {
       </div>
 
       <div className="verificado no-print">✓ Certificado verificado por Luma</div>
-      <button className="btn-descargar no-print" onClick={() => { document.title = `Certificado ${cert.codigo_unico}`; window.print() }}>
-        Descargar PDF
+      <button className="btn-descargar no-print" onClick={descargarPdf} disabled={armandoPdf}>
+        {armandoPdf ? 'Armando el PDF…' : 'Descargar PDF'}
       </button>
     </div>
   )

@@ -1,12 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap, ExternalLink, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, LogOut, Check, ChevronDown, ChevronUp, Play, FileText, Music, StickyNote, GraduationCap, ExternalLink, Eye, EyeOff, Star } from 'lucide-react'
 import { tieneAccesoCurso } from '@/lib/acceso'
-import VisorContenido from '@/components/VisorContenido'
+import VisorContenido, { type ControlVideo } from '@/components/VisorContenido'
 import { detectarContenido } from '@/lib/contenido'
+import LunaProgreso from '@/components/aula/LunaProgreso'
+import Cuaderno from '@/components/aula/Cuaderno'
+import Celebracion, { type TipoCelebracion } from '@/components/aula/Celebracion'
+import CompartirLogro from '@/components/aula/CompartirLogro'
+import type { DatosLogro } from '@/lib/dibujos'
+import {
+  type ContextoLeccion, favoritosDe, marcarFavorito, guardarProgreso, preferenciasDe, guardarPreferencias,
+  sincronizarPendientes, yaCelebrado, anotarCelebrado,
+} from '@/lib/aula'
 
 type Leccion = {
   id: string; titulo: string; tipo: string; contenido_url: string | null
@@ -51,6 +60,17 @@ export default function AulaCursoPage() {
   const [proximoEncuentro, setProximoEncuentro] = useState<{titulo: string; fecha_hora: string; link_zoom: string} | null>(null)
   const [adjuntos, setAdjuntos] = useState<{id: string; nombre: string; url: string}[]>([])
   const [adjuntoAbierto, setAdjuntoAbierto] = useState<string | null>(null)
+  // ── aula nueva: cuaderno, favoritos, retomá, celebración y compartir
+  const [control, setControl] = useState<ControlVideo | null>(null)
+  const [inicio, setInicio] = useState<{ leccion: string; segundo: number } | null>(null)
+  const [pausarAlEscribir, setPausarAlEscribir] = useState(false)
+  const [favoritos, setFavoritos] = useState<Set<string>>(new Set())
+  const [celebracion, setCelebracion] = useState<{ tipo: TipoCelebracion; titulo?: string } | null>(null)
+  const [compartir, setCompartir] = useState<DatosLogro | null>(null)
+  const [nombres, setNombres] = useState<{ alumna: string; terapeuta: string }>({ alumna: '', terapeuta: '' })
+  const textoRef = useRef<HTMLDivElement | null>(null)
+  const controlRef = useRef<ControlVideo | null>(null)
+  controlRef.current = control
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -74,9 +94,10 @@ export default function AulaCursoPage() {
       if (!user) { router.push('/aula'); return }
 
       const { data: persona } = await supabase
-        .from('persons').select('id').eq('auth_user_id', user.id).maybeSingle()
+        .from('persons').select('id, nombre, apellido').eq('auth_user_id', user.id).maybeSingle()
       if (!persona) { setSinAcceso(true); setLoading(false); return }
       setPersonaId(persona.id)
+      const nombreAlumna = [persona.nombre, persona.apellido].filter(Boolean).join(' ').trim()
 
       let { data: enrollment, error: errorEnroll } = await supabase
         .from('enrollments').select('id, estado, modalidad, fecha_vencimiento, mp_preapproval_id, mp_plan_id')
@@ -110,7 +131,11 @@ export default function AulaCursoPage() {
 
       const { data: cursoData } = await supabase
         .from('courses').select('titulo, imagen_url, user_id').eq('id', courseId).maybeSingle()
-      if (cursoData) setCurso(cursoData)
+      if (cursoData) {
+        setCurso(cursoData)
+        supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', cursoData.user_id).maybeSingle()
+          .then(({ data }) => setNombres({ alumna: nombreAlumna, terapeuta: data?.nombre_profesional || '' }), () => setNombres({ alumna: nombreAlumna, terapeuta: '' }))
+      }
 
       const { data: mods } = await supabase
         .from('modules').select('*').eq('course_id', courseId).order('orden')
@@ -122,11 +147,30 @@ export default function AulaCursoPage() {
           lecciones: (lecs || []).filter(l => l.module_id === m.id),
         }))
         setModulos(modulosConLecciones)
-        if (modulosConLecciones.length > 0) {
+        // "Retomá donde dejaste": viene con ?leccion=...&t=segundos
+        let pedida: Leccion | null = null
+        try {
+          const q = new URLSearchParams(window.location.search)
+          const idPedida = q.get('leccion')
+          if (idPedida) {
+            pedida = modulosConLecciones.flatMap(m => m.lecciones).find(l => l.id === idPedida) || null
+            const t = Math.max(0, Math.floor(Number(q.get('t')) || 0))
+            if (pedida && t > 0) setInicio({ leccion: pedida.id, segundo: t })
+          }
+        } catch { /* sin parámetros */ }
+        if (pedida) {
+          setModuloAbierto(pedida.module_id)
+          setLeccionActiva(pedida)
+        } else if (modulosConLecciones.length > 0) {
           setModuloAbierto(modulosConLecciones[0].id)
           if (modulosConLecciones[0].lecciones.length > 0) setLeccionActiva(modulosConLecciones[0].lecciones[0])
         }
       }
+
+      // lo nuevo del aula: si algo de esto falla, el curso se ve igual
+      preferenciasDe(persona.id).then(p => setPausarAlEscribir(p.pausar_al_escribir)).catch(() => null)
+      favoritosDe(persona.id, courseId).then(f => setFavoritos(new Set(f.map(x => x.lesson_id)))).catch(() => null)
+      sincronizarPendientes(persona.id).catch(() => null)
 
       const { data: progreso } = await supabase
         .from('lesson_progress').select('lesson_id, completada')
@@ -155,7 +199,7 @@ export default function AulaCursoPage() {
 
       const { data: encuentro } = await supabase
         .from('course_live_sessions').select('titulo, fecha_hora, link_zoom')
-        .eq('course_id', courseId).gte('fecha_hora', new Date().toISOString())
+        .eq('course_id', courseId).gte('fecha_hora', new Date(Date.now() - 2 * 3600000).toISOString()) // sigue visible hasta 2 horas después de empezar
         .order('fecha_hora').limit(1).maybeSingle()
       if (encuentro) setProximoEncuentro(encuentro)
     } catch (e: any) {
@@ -187,13 +231,47 @@ export default function AulaCursoPage() {
         })
       }
 
-      setCompletadas(prev => {
-        const next = new Set(prev)
-        yaCompletada ? next.delete(leccionId) : next.add(leccionId)
-        return next
-      })
+      const next = new Set(completadas)
+      yaCompletada ? next.delete(leccionId) : next.add(leccionId)
+      setCompletadas(next)
+      if (!yaCompletada) festejar(leccionId, next, !!existente)
     } catch (e) { console.error(e) }
     finally { setGuardandoProgreso(false) }
+  }
+
+  // ── celebración: la grande (módulo / curso) sale una sola vez; si desmarca y vuelve a marcar, no se repite
+  function festejar(leccionId: string, hechas: Set<string>, yaLaHabiaMarcado: boolean) {
+    try {
+      const todas = modulos.flatMap(m => m.lecciones)
+      const mod = modulos.find(m => m.lecciones.some(l => l.id === leccionId))
+      if (todas.length > 0 && todas.every(l => hechas.has(l.id)) && !yaCelebrado(`curso:${courseId}`)) {
+        anotarCelebrado(`curso:${courseId}`); setCelebracion({ tipo: 'curso' }); return
+      }
+      if (mod && mod.lecciones.length > 1 && mod.lecciones.every(l => hechas.has(l.id)) && !yaCelebrado(`modulo:${mod.id}`)) {
+        anotarCelebrado(`modulo:${mod.id}`); setCelebracion({ tipo: 'modulo', titulo: mod.titulo }); return
+      }
+      if (!yaLaHabiaMarcado && !yaCelebrado(`leccion:${leccionId}`)) {
+        anotarCelebrado(`leccion:${leccionId}`); setCelebracion({ tipo: 'leccion' })
+      }
+    } catch { /* el festejo nunca frena nada */ }
+  }
+
+  async function abrirCompartir() {
+    const base: DatosLogro = { alumna: nombres.alumna || 'Alumna', curso: curso?.titulo || 'Curso', terapeuta: nombres.terapeuta, fecha: new Date(), esCertificado: !!certificadoCodigo }
+    if (certificadoCodigo) {
+      try {
+        const { data } = await createClient().rpc('verificar_certificado', { p_codigo: certificadoCodigo })
+        const c = data?.[0]
+        if (c) {
+          base.alumna = c.alumna_nombre || base.alumna
+          base.terapeuta = c.terapeuta_nombre || base.terapeuta
+          base.curso = c.curso_titulo || base.curso
+          if (c.fecha_emision) base.fecha = new Date(c.fecha_emision)
+        }
+      } catch { /* usamos los datos que ya tenemos */ }
+    }
+    setCelebracion(null)
+    setCompartir(base)
   }
 
   async function iniciarExamen() {
@@ -245,6 +323,66 @@ export default function AulaCursoPage() {
 
   const totalLecciones = modulos.reduce((acc, m) => acc + m.lecciones.length, 0)
   const porcentaje = totalLecciones > 0 ? Math.round((completadas.size / totalLecciones) * 100) : 0
+  const todasLasLecciones = useMemo(() => modulos.flatMap(m => m.lecciones), [modulos])
+  const hechasDeVerdad = todasLasLecciones.filter(l => completadas.has(l.id)).length
+  const cursoTerminado = totalLecciones > 0 && hechasDeVerdad === totalLecciones
+  const siguienteLeccion = useMemo(() => {
+    if (!leccionActiva) return null
+    const i = todasLasLecciones.findIndex(l => l.id === leccionActiva.id)
+    return i >= 0 ? todasLasLecciones[i + 1] || null : null
+  }, [leccionActiva, todasLasLecciones])
+  const moduloActivo = leccionActiva ? modulos.find(m => m.id === leccionActiva.module_id) : undefined
+  const ctxLeccion: ContextoLeccion | null = useMemo(() => (personaId && leccionActiva ? {
+    personId: personaId, courseId, lessonId: leccionActiva.id, leccionTitulo: leccionActiva.titulo,
+    leccionOrden: leccionActiva.orden || 0, moduloTitulo: moduloActivo?.titulo || '', moduloOrden: moduloActivo?.orden || 0,
+  } : null), [personaId, courseId, leccionActiva, moduloActivo])
+
+  function irALeccion(l: Leccion) {
+    setLeccionActiva(l); setVista('curso'); setModuloAbierto(l.module_id); setCelebracion(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function cambiarFavorito() {
+    if (!ctxLeccion || !leccionActiva) return
+    const si = !favoritos.has(leccionActiva.id)
+    setFavoritos(prev => { const n = new Set(prev); si ? n.add(leccionActiva.id) : n.delete(leccionActiva.id); return n })
+    try { await marcarFavorito(ctxLeccion, leccionActiva.tipo, si) }
+    catch { setFavoritos(prev => { const n = new Set(prev); si ? n.delete(leccionActiva.id) : n.add(leccionActiva.id); return n }) }
+  }
+
+  function cambiarPausa(v: boolean) {
+    setPausarAlEscribir(v)
+    if (personaId) guardarPreferencias(personaId, { pausar_al_escribir: v }).catch(() => null)
+  }
+
+  // ── progreso para "Retomá donde dejaste" (lección + minuto) y para la luna de Mis cursos
+  const inicioRef = useRef(inicio)
+  inicioRef.current = inicio
+  const progresoRef = useRef({ personaId, leccionActiva, totalLecciones, hechasDeVerdad })
+  progresoRef.current = { personaId, leccionActiva, totalLecciones, hechasDeVerdad }
+  const guardarDondeQuedo = useCallback(async (segundoFijo?: number) => {
+    const { personaId: pid, leccionActiva: l, totalLecciones: tot, hechasDeVerdad: hechas } = progresoRef.current
+    if (!pid || !l) return
+    let seg = segundoFijo ?? 0
+    if (segundoFijo === undefined && controlRef.current) { try { seg = await controlRef.current.tiempo() } catch { seg = 0 } }
+    // si recién entró con "Retomá" y el video todavía no arrancó, no perdemos el minuto guardado
+    const ini = inicioRef.current
+    if (segundoFijo === undefined && seg < 2 && ini && ini.leccion === l.id) seg = ini.segundo
+    guardarProgreso({ personId: pid, courseId, lessonId: l.id, leccionTitulo: l.titulo, segundo: seg, total: tot, completadas: hechas }).catch(() => null)
+  }, [courseId])
+
+  useEffect(() => {
+    if (!leccionActiva || !personaId || loading) return
+    guardarDondeQuedo(inicio?.leccion === leccionActiva.id ? inicio.segundo : 0)
+    const cada = setInterval(() => { if (controlRef.current && document.visibilityState === 'visible') guardarDondeQuedo() }, 20000)
+    const oculta = () => { if (document.visibilityState === 'hidden') guardarDondeQuedo() }
+    document.addEventListener('visibilitychange', oculta)
+    return () => { clearInterval(cada); document.removeEventListener('visibilitychange', oculta) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leccionActiva?.id, personaId, loading])
+
+  // la luna también cuenta lecciones completadas
+  useEffect(() => { if (leccionActiva && personaId && !loading) guardarDondeQuedo() }, [hechasDeVerdad]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:'14px',color:'#6B7280',fontFamily:'sans-serif'}}>
@@ -267,6 +405,7 @@ export default function AulaCursoPage() {
     <div style={{minHeight:'100vh',background:'#FAFAFA',fontFamily:"'Geist',sans-serif"}}>
       <style>{`
         
+        @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
         *{box-sizing:border-box;margin:0;padding:0}
         .aula-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:white;border-bottom:1px solid #E5E5E5}
         .aula-back{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#525252;cursor:pointer;background:none;border:none;font-family:inherit}
@@ -317,9 +456,18 @@ export default function AulaCursoPage() {
       <div className="aula-layout">
         <div className="aula-sidebar">
           <div className="aula-progreso-wrap">
-            <div className="aula-curso-titulo">{curso?.titulo}</div>
+            <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'10px'}}>
+              <LunaProgreso p={totalLecciones > 0 ? hechasDeVerdad / totalLecciones : 0} tamano={52}/>
+              <div className="aula-curso-titulo" style={{marginBottom:0}}>{curso?.titulo}</div>
+            </div>
             <div className="aula-barra"><div className="aula-barra-fill" style={{width:`${porcentaje}%`}}/></div>
             <div className="aula-progreso-txt">{completadas.size} de {totalLecciones} lecciones · {porcentaje}%</div>
+            {cursoTerminado && (!examen || !ultimoResultado?.aprobado) && (
+              <button type="button" onClick={abrirCompartir}
+                style={{marginTop:'10px',padding:'8px 12px',borderRadius:'9px',border:'1px solid #C9A84C',background:'#FFFBEB',color:'#8A6D1F',fontWeight:700,fontSize:'12px',cursor:'pointer',fontFamily:'inherit'}}>
+                ✦ Compartir mi logro
+              </button>
+            )}
           </div>
 
           {proximoEncuentro && (
@@ -348,6 +496,7 @@ export default function AulaCursoPage() {
                   </div>
                   {l.tipo === 'video' ? <Play size={12} color="#8B5CF6"/> : l.tipo === 'pdf' ? <FileText size={12} color="#8B5CF6"/> : l.tipo === 'audio' ? <Music size={12} color="#8B5CF6"/> : <StickyNote size={12} color="#8B5CF6"/>}
                   <div className="aula-leccion-titulo">{l.titulo}</div>
+                  {favoritos.has(l.id) && <Star size={12} color="#C9A84C" fill="#C9A84C" style={{flexShrink:0}}/>}
                 </div>
               ))}
             </div>
@@ -366,10 +515,16 @@ export default function AulaCursoPage() {
               </div>
               {ultimoResultado?.aprobado ? (
                 certificadoCodigo ? (
-                  <a href={`/certificado/${certificadoCodigo}`} target="_blank" rel="noopener noreferrer"
-                    style={{fontSize:'10px',fontWeight:700,color:'#166534',textDecoration:'none',background:'#DCFCE7',padding:'6px 12px',borderRadius:'8px'}}>
-                    🎓 Ver certificado
-                  </a>
+                  <div style={{display:'flex',flexDirection:'column',gap:'6px',alignItems:'flex-end'}}>
+                    <a href={`/certificado/${certificadoCodigo}`} target="_blank" rel="noopener noreferrer"
+                      style={{fontSize:'10px',fontWeight:700,color:'#166534',textDecoration:'none',background:'#DCFCE7',padding:'6px 12px',borderRadius:'8px'}}>
+                      🎓 Ver certificado
+                    </a>
+                    <button type="button" onClick={abrirCompartir}
+                      style={{fontSize:'10px',fontWeight:700,color:'#8A6D1F',background:'#FFFBEB',border:'1px solid #E9D9A6',padding:'6px 12px',borderRadius:'8px',cursor:'pointer',fontFamily:'inherit'}}>
+                      ✦ Compartir certificado
+                    </button>
+                  </div>
                 ) : (
                   <span style={{fontSize:'10px',fontWeight:700,color:'#166534'}}>✓ Aprobado</span>
                 )
@@ -410,14 +565,23 @@ export default function AulaCursoPage() {
           ) : leccionActiva ? (<>
             {leccionActiva.tipo !== 'texto' && leccionActiva.contenido_url && leccionActiva.contenido_url.trim() !== '' && (
               <div style={{marginBottom:'20px'}}>
-                <VisorContenido key={leccionActiva.id} url={leccionActiva.contenido_url} tipo={leccionActiva.tipo}/>
+                <VisorContenido key={leccionActiva.id} url={leccionActiva.contenido_url} tipo={leccionActiva.tipo}
+                  alControl={setControl} inicio={inicio?.leccion === leccionActiva.id ? inicio.segundo : undefined}/>
               </div>
             )}
 
-            <h1 className="aula-leccion-main-titulo">{leccionActiva.titulo}</h1>
+            <div style={{display:'flex',alignItems:'flex-start',gap:'10px'}}>
+              <h1 className="aula-leccion-main-titulo" style={{flex:1}}>{leccionActiva.titulo}</h1>
+              <button type="button" onClick={cambiarFavorito} aria-pressed={favoritos.has(leccionActiva.id)}
+                aria-label={favoritos.has(leccionActiva.id) ? 'Sacar de favoritos' : 'Guardar en favoritos'}
+                title={favoritos.has(leccionActiva.id) ? 'Sacar de favoritos' : 'Guardar en favoritos'}
+                style={{flexShrink:0,display:'inline-flex',alignItems:'center',gap:'5px',padding:'7px 11px',borderRadius:'10px',border:`1px solid ${favoritos.has(leccionActiva.id) ? '#E9D9A6' : '#E5E5E5'}`,background:favoritos.has(leccionActiva.id) ? '#FFFBEB' : 'white',color:favoritos.has(leccionActiva.id) ? '#8A6D1F' : '#737373',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+                <Star size={14} color="#C9A84C" fill={favoritos.has(leccionActiva.id) ? '#C9A84C' : 'none'}/> {favoritos.has(leccionActiva.id) ? 'Favorita' : 'Favorito'}
+              </button>
+            </div>
             {leccionActiva.descripcion && <p className="aula-leccion-desc">{leccionActiva.descripcion}</p>}
             {leccionActiva.tipo === 'texto' && leccionActiva.contenido_texto && (
-              <div className="aula-leccion-desc" style={{whiteSpace:'pre-line'}}>{leccionActiva.contenido_texto}</div>
+              <div ref={textoRef} className="aula-leccion-desc" style={{whiteSpace:'pre-line'}}>{leccionActiva.contenido_texto}</div>
             )}
 
             <button className={`aula-btn-completar${completadas.has(leccionActiva.id) ? ' done' : ''}`}
@@ -427,6 +591,13 @@ export default function AulaCursoPage() {
 
             {leccionActiva.notas && (
               <div className="aula-notas"><strong>Notas:</strong> {leccionActiva.notas}</div>
+            )}
+
+            {ctxLeccion && (
+              <Cuaderno key={leccionActiva.id} ctx={ctxLeccion} control={control}
+                esTexto={leccionActiva.tipo === 'texto' && !!leccionActiva.contenido_texto}
+                zonaTexto={textoRef} pausarAlEscribir={pausarAlEscribir} onPausarAlEscribir={cambiarPausa}
+                hrefCuaderno={`/mi-cuenta/cursos/${courseId}/cuaderno`}/>
             )}
 
             {adjuntos.length > 0 && (
@@ -470,6 +641,16 @@ export default function AulaCursoPage() {
           )}
         </div>
       </div>
+
+      {celebracion && (
+        <Celebracion tipo={celebracion.tipo} titulo={celebracion.titulo}
+          avance={totalLecciones > 0 ? hechasDeVerdad / totalLecciones : 0}
+          haySiguiente={!!siguienteLeccion}
+          onSiguiente={() => { if (siguienteLeccion) irALeccion(siguienteLeccion) }}
+          onCerrar={() => setCelebracion(null)}
+          onCompartir={abrirCompartir}/>
+      )}
+      {compartir && <CompartirLogro datos={compartir} onCerrar={() => setCompartir(null)}/>}
     </div>
   )
 }
