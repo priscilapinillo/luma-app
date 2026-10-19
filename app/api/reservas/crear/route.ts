@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const [{ data: perfil }, { data: servicio }, { data: sub }] = await Promise.all([
       s.from('therapist_profiles').select('user_id, pagina_activa, acepta_transferencia, alias_pago').eq('user_id', therapistId).maybeSingle(),
       s.from('services').select('id, user_id, nombre, precio_base, duracion_estimada, tipo_servicio, activo').eq('id', serviceId).maybeSingle(),
-      s.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan').eq('user_id', therapistId).maybeSingle(),
+      s.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id').eq('user_id', therapistId).maybeSingle(),
     ])
     if (!perfil || !perfil.pagina_activa) return NextResponse.json({ ok: false, motivo: 'no_disponible' }, { status: 400 })
     if (!servicio || servicio.user_id !== therapistId || !servicio.activo) return NextResponse.json({ ok: false, motivo: 'servicio_invalido' }, { status: 400 })

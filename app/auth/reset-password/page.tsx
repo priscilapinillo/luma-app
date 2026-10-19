@@ -94,7 +94,7 @@ export default function ResetPasswordPage() {
           min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
           background-image:
             linear-gradient(160deg,rgba(30,27,46,0.85),rgba(13,11,20,0.92)),
-            url('/landing/hero-bgg.png');
+            url('/landing/hero-bgg.webp');
           background-size:cover;background-position:center;
         }
         .card{width:100%;max-width:400px;background:#F9F6F0;border-radius:20px;padding:36px 32px;box-shadow:0 30px 70px rgba(0,0,0,0.4)}

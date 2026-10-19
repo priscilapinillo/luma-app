@@ -434,7 +434,7 @@ export default function CursoPublicoPage() {
       <nav className="nav">
         <div className="nav-inner">
           <div className="nav-nombre">{terapeuta.nombre_profesional}</div>
-          <button className="nav-btn" onClick={() => router.push('/auth/login')}>Iniciar sesión</button>
+          <button className="nav-btn" onClick={() => router.push('/aula')}>Iniciar sesión</button>
         </div>
       </nav>
 

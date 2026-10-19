@@ -46,7 +46,7 @@ export default function LinksRegistroPage() {
 
       if (await tieneAccesoLumaActivo(data.user.id)) {
         await supabase.auth.signOut()
-        setError('Ya tenés una cuenta de Luma activa con este email. Iniciá sesión en /auth/login en vez de crear un Luma Links — no se pueden tener las dos cosas a la vez.')
+        setError('Ya tenés Luma activo con este email. Entrá desde "Iniciar sesión → Soy terapeuta": no se pueden tener Luma y Luma Links a la vez.')
         return
       }
 
@@ -83,7 +83,7 @@ export default function LinksRegistroPage() {
         @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
         *{box-sizing:border-box;margin:0;padding:0}
         .lr-page{min-height:100vh;position:relative;overflow:hidden;font-family:'Montserrat',sans-serif;color:#F9F6F0;
-          background:linear-gradient(160deg,rgba(30,27,46,0.88),rgba(13,11,20,0.94)),url('/landing/hero-bgg.png') center/cover no-repeat;
+          background:linear-gradient(160deg,rgba(30,27,46,0.88),rgba(13,11,20,0.94)),url('/landing/hero-bgg.webp') center/cover no-repeat;
           padding:28px 20px 60px}
         .lr-glow{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
         .lr-glow.g1{width:420px;height:420px;background:rgba(139,92,246,0.35);top:-120px;left:50%;transform:translateX(-50%);animation:lrPulse 6s ease-in-out infinite}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import AvisoPortada from '@/components/AvisoPortada'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, X } from 'lucide-react'
@@ -158,6 +159,7 @@ export default function NewCoursePage() {
           <input id="img-curso" type="file" accept="image/*" style={{display:'none'}}
             onChange={e => e.target.files?.[0] && subirImagen(e.target.files[0])}/>
         </div>
+        <AvisoPortada url={form.imagen_url} />
         {form.imagen_url && <button onClick={() => setForm({...form, imagen_url: ''})}
           style={{fontSize:'11px',color:'#EF4444',background:'transparent',border:'none',cursor:'pointer',marginTop:'4px',fontFamily:'inherit'}}>× Eliminar imagen</button>}
       </div>

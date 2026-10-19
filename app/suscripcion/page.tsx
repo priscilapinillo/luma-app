@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Check } from 'lucide-react'
 import MetaPixel from '@/components/MetaPixel'
 import { eventoMeta } from '@/lib/metaPixel'
+import { estadoPlan, type EstadoPlan } from '@/lib/acceso'
+import { fechaLarga } from '@/lib/textoPlan'
 
 const PLANES = [
   {
@@ -41,6 +43,33 @@ export default function SuscripcionPage() {
   const [transferAbierta, setTransferAbierta] = useState(false)
   const [planTransfer, setPlanTransfer] = useState<'basico' | 'premium'>('basico')
   const router = useRouter()
+  const [est, setEst] = useState<EstadoPlan | null>(null)
+
+  // cómo está su plan hoy: para explicarle cuándo es el primer cobro y no ofrecerle pagar dos veces
+  useEffect(() => {
+    (async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: sub } = await supabase.from('subscriptions')
+          .select('status, plan, trial_ends_at, current_period_ends_at, mp_subscription_id').eq('user_id', user.id).maybeSingle()
+        setEst(estadoPlan(sub))
+      } catch {}
+    })()
+  }, [])
+
+  const conAutomatico = !!est?.automatico && est.nivel !== 'sin_acceso'
+  function textoBoton(planId: string, nombre: string) {
+    if (!est) return `✦ Elegir ${nombre}`
+    const mismo = est.plan === planId
+    if (conAutomatico && mismo && (est.tipo === 'pago' || est.tipo === 'prueba')) return 'Es tu plan actual'
+    if (conAutomatico && est.tipo === 'pago' && planId === 'premium') return '✦ Pasar a Premium desde hoy'
+    if (conAutomatico && est.tipo === 'pago' && planId === 'basico') return `✦ Pasar a Básico desde el ${fechaLarga(est.venceEl)}`
+    if (est.tipo === 'gracia' && est.automatico && mismo) return '✦ Pagar con otra tarjeta'
+    return `✦ Elegir ${nombre}`
+  }
+  const esPlanActual = (planId: string) => !!est && conAutomatico && est.plan === planId && (est.tipo === 'pago' || est.tipo === 'prueba')
 
   async function handlePagar(planId: string) {
     setError('')
@@ -105,6 +134,8 @@ export default function SuscripcionPage() {
         .sus-title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;color:white;text-align:center;margin-bottom:8px;letter-spacing:-0.5px}
         .sus-sub{font-size:13px;color:#B8A8DE;text-align:center;margin-bottom:36px}
 
+        .sus-estado{max-width:620px;margin:0 auto 24px;background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.35);color:#EDE6FF;padding:14px 18px;border-radius:14px;font-size:13px;line-height:1.6;text-align:center}
+        .sus-estado strong{color:#F4E3B0}
         .sus-error{max-width:500px;margin:0 auto 20px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#FCA5A5;padding:12px 16px;border-radius:10px;font-size:12px;text-align:center}
 
         .sus-grid{display:grid;grid-template-columns:1fr;gap:20px}
@@ -168,6 +199,17 @@ export default function SuscripcionPage() {
 
           {error && <div className="sus-error">{error}</div>}
 
+          {est && (est.tipo === 'pago' || est.tipo === 'prueba' || est.tipo === 'cancelado_vigente' || est.tipo === 'gracia') && (
+            <div className="sus-estado" role="status">
+              {est.tipo === 'prueba' && !est.automatico && <>Estás en tu prueba gratis hasta el <strong>{fechaLarga(est.venceEl)}</strong>. Si elegís un plan ahora, <strong>el primer cobro es ese día</strong>: no perdés los días que te quedan.</>}
+              {est.tipo === 'prueba' && est.automatico && <>Ya activaste el cobro automático del plan <strong>{est.plan === 'premium' ? 'Premium' : 'Básico'}</strong>. El primer cobro es el <strong>{fechaLarga(est.venceEl)}</strong>, cuando termina tu prueba.</>}
+              {est.tipo === 'pago' && est.automatico && <>Tenés el plan <strong>{est.plan === 'premium' ? 'Premium' : 'Básico'}</strong> con cobro automático. El próximo cobro es el <strong>{fechaLarga(est.venceEl)}</strong>.</>}
+              {est.tipo === 'pago' && !est.automatico && <>Tenés tu plan pago hasta el <strong>{fechaLarga(est.venceEl)}</strong>. Si activás el cobro automático ahora, <strong>el primer cobro es ese día</strong>: nunca pagás dos veces el mismo mes.</>}
+              {est.tipo === 'cancelado_vigente' && <>Cancelaste el cobro automático y tenés todo hasta el <strong>{fechaLarga(est.venceEl)}</strong>. Si lo volvés a activar, <strong>el primer cobro es ese día</strong>.</>}
+              {est.tipo === 'gracia' && <>Tu plan venció el <strong>{fechaLarga(est.venceEl)}</strong>{est.automatico ? ' y Mercado Pago no pudo cobrarlo' : ''}. Todo sigue funcionando hasta el <strong>{fechaLarga(est.graciaHasta)}</strong>. Si pagás ahora, el mes nuevo empieza el {fechaLarga(est.venceEl)}: no pagás de más.</>}
+            </div>
+          )}
+
           <div className="sus-grid">
             {PLANES.map(p => (
               <div key={p.id} className={`sus-card${p.destacado ? ' destacado' : ''}`}>
@@ -185,8 +227,8 @@ export default function SuscripcionPage() {
                   ))}
                 </div>
 
-                <button className="sus-btn" onClick={() => handlePagar(p.id)} disabled={loading !== null}>
-                  {loading === p.id ? '⏳ Redirigiendo...' : `✦ Elegir ${p.nombre}`}
+                <button className="sus-btn" onClick={() => handlePagar(p.id)} disabled={loading !== null || esPlanActual(p.id)}>
+                  {loading === p.id ? '⏳ Redirigiendo...' : textoBoton(p.id, p.nombre)}
                 </button>
               </div>
             ))}
@@ -195,7 +237,9 @@ export default function SuscripcionPage() {
           <div className="sus-seguro">🔒 Pago seguro con Mercado Pago</div>
           <div className="sus-seguro" style={{marginTop:'6px',lineHeight:1.5}}>Podés pagar con cualquier cuenta de Mercado Pago, aunque tenga otro email. No elijas &quot;dinero en cuenta&quot;: el cobro mensual solo funciona con tarjeta.</div>
 
-          {!transferAbierta ? (
+          {conAutomatico ? (
+            <div className="sus-seguro" style={{marginTop:'14px'}}>Como ya tenés el cobro automático, no hace falta pagar por transferencia.</div>
+          ) : !transferAbierta ? (
             <button className="sus-transfer-link" onClick={() => setTransferAbierta(true)}>
               ¿Preferís pagar por transferencia?
             </button>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Lock, Sparkles } from 'lucide-react'
 import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
+import { verificarPlanEnVivo } from '@/lib/verificarPlan'
 
 export default function CoursesLayout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -19,22 +20,15 @@ export default function CoursesLayout({ children }: { children: React.ReactNode 
 
       const { data: sub } = await supabase
         .from('subscriptions')
-        .select('status, trial_ends_at, current_period_ends_at, plan')
+        .select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id')
         .eq('user_id', user.id)
         .maybeSingle()
 
       let nivel = calcularAcceso(sub)
 
       if (nivel !== 'premium' && pareceDesactualizado(sub)) {
-        try {
-          const res = await fetch('/api/mp/verificar-suscripcion', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id }),
-          })
-          const data = await res.json()
-          if (data.vigente && data.plan === 'premium') nivel = 'premium'
-        } catch (e) { console.error('Error verificando en vivo:', e) }
+        const data = await verificarPlanEnVivo()
+        if (data.vigente && data.plan === 'premium') nivel = 'premium'
       }
 
       setTieneAcceso(nivel === 'premium')

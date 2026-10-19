@@ -5,7 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
-import { calcularAcceso } from '@/lib/acceso'
+import { calcularAcceso, estadoPlan } from '@/lib/acceso'
+import { etiquetaPlan } from '@/lib/textoPlan'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -14,7 +15,7 @@ export default function Sidebar() {
   const [perfil, setPerfil] = useState({ nombre: '', plan: 'Trial activo' })
   const [isMobile, setIsMobile] = useState(false)
   const [menuMobile, setMenuMobile] = useState(false)
-  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string} | null>(null)
+  const [sub, setSub] = useState<{status: string, trial_ends_at: string | null, current_period_ends_at: string | null, plan: string, mp_subscription_id?: string | null} | null>(null)
   const [cursosPendientes, setCursosPendientes] = useState(0)
   const [hayNovedad, setHayNovedad] = useState(false)
 
@@ -45,9 +46,12 @@ export default function Sidebar() {
       if (!user) return
       const [{ data: prof }, { data: sub }] = await Promise.all([
         supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', user.id).maybeSingle(),
-        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan').eq('user_id', user.id).maybeSingle(),
+        supabase.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id').eq('user_id', user.id).maybeSingle(),
       ])
-      const planLabel = sub?.status === 'active' ? 'Plan activo' : sub?.status === 'trial' ? 'Trial activo' : 'Sin plan'
+      const est = estadoPlan(sub)
+      const planLabel = est.tipo === 'prueba' ? 'Prueba gratis'
+        : est.nivel !== 'sin_acceso' ? `Plan ${est.plan === 'premium' ? 'Premium' : 'Básico'}`
+        : est.tipo === 'prueba_vencida' ? 'Prueba vencida' : est.tipo === 'sin_plan' ? 'Sin plan' : 'Plan vencido'
       setPerfil({
         nombre: prof?.nombre_profesional || user.email?.split('@')[0] || 'Terapeuta',
         plan: planLabel
@@ -390,21 +394,17 @@ body.modal-ficha-abierto .sb-mobile {
             </div>
 
             {sub && (() => {
-              const ahora = new Date()
-              const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
-              const esTrial = sub.status === 'trial' && sub.trial_ends_at
-              const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
+              const et = etiquetaPlan(estadoPlan(sub))
               return (
                 <>
                   <hr className="sb-dropdown-sep"/>
                   <div style={{padding:'8px 18px'}}>
                     <div className="sb-plan-label">Mi plan</div>
-                    <div className={`sb-plan-status${esActivo ? ' ok' : ''}`}>
-                      {esActivo ? '✓ Plan activo' : esTrial ? `✦ ${diasRestantes} días de prueba` : '⚠️ Prueba vencida'}
-                    </div>
-                    {!esActivo && !esTrial && (
+                    <div className={`sb-plan-status${et.ok ? ' ok' : ''}`}>{et.titulo}</div>
+                    <div style={{fontSize:'11px',opacity:0.75,marginTop:'2px'}}>{et.detalle}</div>
+                    {et.renovar && (
                       <a href="/suscripcion" onClick={() => setMenuMobile(false)} style={{fontSize:'11px',color:'#C4A8FF',fontWeight:600,textDecoration:'none',display:'block',marginTop:'4px'}}>
-                        Activar ahora →
+                        Renovar ahora →
                       </a>
                     )}
                   </div>
@@ -581,24 +581,19 @@ body.modal-ficha-abierto .sb-mobile {
         </button>
 
         {sub && (() => {
-          const ahora = new Date()
-          const esActivo = sub.status === 'active' && sub.current_period_ends_at && new Date(sub.current_period_ends_at) > ahora
-          const esTrial = sub.status === 'trial' && sub.trial_ends_at
-          const diasRestantes = esTrial ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at!).getTime() - ahora.getTime()) / (1000*60*60*24))) : 0
-          const pct = esTrial ? Math.round((diasRestantes / 7) * 100) : 100
+          const e = estadoPlan(sub)
+          const et = etiquetaPlan(e)
+          const diasPrueba = e.tipo === 'prueba' ? Math.max(0, e.dias ?? 0) : 0
+          const pct = Math.round((Math.min(7, diasPrueba) / 7) * 100)
 
           return (
-            <div className="sb-trial" style={{background: esActivo ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: esActivo ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
-              <div className="sb-trial-t" style={{color: esActivo ? '#059669' : 'var(--accent)'}}>
-                {esActivo ? '✓ Plan activo' : esTrial ? '✦ Trial activo' : '⚠️ Trial vencido'}
-              </div>
-              <div className="sb-trial-s">
-                {esActivo ? 'Suscripción vigente' : esTrial ? `${diasRestantes} días restantes` : 'Activá tu suscripción'}
-              </div>
-              {esTrial && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}
-              {!esActivo && !esTrial && (
+            <div className="sb-trial" style={{background: et.ok ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: et.ok ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
+              <div className="sb-trial-t" style={{color: et.ok ? '#059669' : 'var(--accent)'}}>{et.titulo}</div>
+              <div className="sb-trial-s">{et.detalle}</div>
+              {e.tipo === 'prueba' && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}
+              {et.renovar && (
                 <a href="/suscripcion" style={{fontSize:'10px',color:'var(--accent)',fontWeight:600,textDecoration:'none',display:'block',marginTop:'6px'}}>
-                  Activar ahora →
+                  Renovar ahora →
                 </a>
               )}
             </div>
@@ -609,7 +604,7 @@ body.modal-ficha-abierto .sb-mobile {
           <div className="sb-avatar">{iniciales}</div>
           <div className="sb-user-info">
             <div className="sb-user-name">{perfil.nombre}</div>
-            <div className="sb-user-plan">{perfil.plan} · activo</div>
+            <div className="sb-user-plan">{perfil.plan}</div>
           </div>
           <button className="sb-logout" onClick={handleLogout} title="Cerrar sesión">
             <LogOut size={11}/>

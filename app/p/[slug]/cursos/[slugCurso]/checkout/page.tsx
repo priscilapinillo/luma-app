@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { Check, Shield } from 'lucide-react'
@@ -219,6 +219,8 @@ export default function CheckoutCursoPage() {
   }
 
   // la inscripción se crea en el servidor, siempre como "pendiente de pago" (el navegador no elige el estado)
+  // si el servidor explica por qué no se pudo (por ejemplo, inscripciones pausadas), se muestra eso
+  const mensajeInscripcion = useRef('')
   async function crearOActualizarInscripcion(_personaId: string, _estado: string) {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
@@ -227,6 +229,7 @@ export default function CheckoutCursoPage() {
       body: JSON.stringify({ courseId: curso!.id, accessToken: session?.access_token }),
     })
     const r = await res.json().catch(() => ({ ok: false }))
+    mensajeInscripcion.current = r.ok ? '' : (r.mensaje || '')
     if (!r.ok || !r.inscripcion) { console.error('Error creando inscripción:', r); return null }
     if (r.tieneAcceso) {
       setInscripcion({ id: r.inscripcion.id, suscripcion_estado: r.inscripcion.suscripcion_estado || null })
@@ -246,7 +249,7 @@ export default function CheckoutCursoPage() {
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
       if (insc === 'tiene_acceso') return
-      if (!insc) { setErrorMsg('Hubo un error al confirmar. Intentá de nuevo.'); return }
+      if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al confirmar. Intentá de nuevo.'); return }
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
   }
@@ -261,7 +264,7 @@ export default function CheckoutCursoPage() {
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
       if (insc === 'tiene_acceso') return
-      if (!insc) { setErrorMsg('Hubo un error al registrar tu inscripción. Intentá de nuevo.'); return }
+      if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al registrar tu inscripción. Intentá de nuevo.'); return }
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
   }
@@ -325,7 +328,7 @@ export default function CheckoutCursoPage() {
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
       if (insc === 'tiene_acceso') return
-      if (!insc) { setErrorMsg('Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
+      if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
 
       const origin = window.location.origin
       const res = await fetch('/api/mp/create-preference', {
@@ -403,7 +406,7 @@ export default function CheckoutCursoPage() {
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
       if (insc === 'tiene_acceso') return // ya tiene el curso: ve la opción de activar la renovación automática
-      if (!insc) { setErrorMsg('Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
+      if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
       setInscripcion({ id: insc.id, suscripcion_estado: insc.suscripcion_estado || null })
       seVa = await irASuscripcion(insc.id)
     } catch (e) {

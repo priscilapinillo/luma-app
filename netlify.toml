@@ -4,3 +4,21 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Los navegadores guardan las imágenes y la tipografía por 30 días:
+# quien vuelve a entrar no las descarga de nuevo (ahorra ancho de banda de Netlify).
+# Ojo: si algún día cambiás una imagen, ponele un nombre nuevo (por ejemplo carta-1-v2.webp).
+[[headers]]
+  for = "/landing/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/screenshots/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"

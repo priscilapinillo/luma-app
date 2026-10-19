@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       .from('therapist_profiles').select('user_id').eq('slug', slug).maybeSingle()
     if (!perfil?.user_id) return si
     const { data: sub } = await supabase
-      .from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan')
+      .from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id')
       .eq('user_id', perfil.user_id).maybeSingle()
     if (!sub) return si
     if (calcularAcceso(sub) !== 'sin_acceso') return si

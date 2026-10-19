@@ -115,7 +115,7 @@ export default function MisCursosPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
+      if (!user) { router.push('/aula'); return }
 
       const { data: persona, error: errorPersona } = await supabase
         .from('persons').select('id').eq('auth_user_id', user.id).maybeSingle()
@@ -190,7 +190,7 @@ export default function MisCursosPage() {
   async function cerrarSesion() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/auth/login')
+    router.push('/aula')
   }
 
   if (loading) return (

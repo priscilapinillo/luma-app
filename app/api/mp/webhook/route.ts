@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { mpLuma, aplicarPreapproval, duenaDePreapproval } from '@/lib/planLuma'
+import { mpLuma, revisarPlanLuma, duenaDePreapproval } from '@/lib/planLuma'
 
 // Aviso de Mercado Pago sobre los planes de Luma (lo que pagan las terapeutas).
-// Solo cambia el plan con lo que Mercado Pago confirma al consultarlo directamente.
-async function actualizarDesdePreapproval(preapprovalId: string) {
+// El aviso solo dice "mirá esta suscripción": Luma le pregunta todo a Mercado Pago y revisa el plan completo
+// (suscripción + cobros aprobados). Si el aviso llega dos veces, no pasa nada: cada cobro se anota una sola vez.
+export const maxDuration = 26
+
+async function revisarDuenaDe(preapprovalId: string) {
   const r = await mpLuma(`/preapproval/${encodeURIComponent(preapprovalId)}`)
   if (!r.ok || !r.data?.id) { console.error('Webhook: no se pudo leer el preapproval', preapprovalId, r.status); return }
-  const preapproval = r.data
-
-  // "pending" = abrió el pago pero todavía no lo autorizó: no se toca nada
-  if (!['authorized', 'cancelled', 'paused'].includes(preapproval.status)) {
-    console.log(`Webhook: preapproval ${preapprovalId} en estado ${preapproval.status}, no cambia nada`)
-    return
-  }
-
-  // de quién es: por la referencia vieja ("userId:plan") o por el plan que preparó Luma
-  const duena = await duenaDePreapproval(preapproval)
-  if (!duena) { console.error('Webhook: no se sabe de quién es el preapproval', preapprovalId); return }
-
-  await aplicarPreapproval(duena.userId, duena.plan, preapproval)
-  console.log(`Webhook: user ${duena.userId} → ${preapproval.status}, plan=${duena.plan}`)
+  const duena = await duenaDePreapproval(r.data)
+  if (!duena) { console.log('Webhook: el preapproval no es de un plan de Luma', preapprovalId); return }
+  await revisarPlanLuma(duena.userId)
+  console.log(`Webhook: revisado el plan de ${duena.userId} (preapproval ${preapprovalId} → ${r.data.status})`)
 }
 
 function validarFirma(req: NextRequest, dataId: string): boolean {
@@ -68,13 +61,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (type === 'preapproval' || type === 'subscription_preapproval') {
-      await actualizarDesdePreapproval(dataId)
+      await revisarDuenaDe(String(dataId))
     } else if (type === 'subscription_authorized_payment' || type === 'authorized_payment') {
-      const res = await fetch(`https://api.mercadopago.com/authorized_payments/${dataId}`, {
-        headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` },
-      })
-      const pago = await res.json()
-      if (pago.preapproval_id) await actualizarDesdePreapproval(pago.preapproval_id)
+      const r = await mpLuma(`/authorized_payments/${encodeURIComponent(String(dataId))}`)
+      if (r.ok && r.data?.preapproval_id) await revisarDuenaDe(String(r.data.preapproval_id))
+      else console.error('Webhook: no se pudo leer el cobro', dataId, r.status)
     } else {
       console.log(`Webhook: tipo de notificación no manejado todavía: ${type}`)
     }

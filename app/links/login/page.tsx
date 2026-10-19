@@ -38,12 +38,13 @@ export default function LinksLoginPage() {
         .eq('auth_user_id', data.user.id)
         .maybeSingle()
 
+        // si tiene Luma vigente (prueba o plan al día), su lugar es el panel de Luma
+        if (await tieneAccesoLumaActivo(data.user.id)) {
+          router.push('/dashboard')
+          return
+        }
+
         if (!perfil) {
-            if (await tieneAccesoLumaActivo(data.user.id)) {
-              await supabase.auth.signOut()
-              setError('Esta cuenta ya tiene un plan activo de Luma. No se puede tener Luma Links a la vez — cancelá el plan primero si querés usar la versión gratis.')
-              return
-            }
             const nombreSugerido = data.user.email?.split('@')[0] || 'usuaria'
             const slugBase = nombreSugerido.toLowerCase().replace(/[^a-z0-9-]/g, '')
             const slug = `${slugBase}-${data.user.id.slice(0, 6)}`
@@ -88,7 +89,7 @@ export default function LinksLoginPage() {
         @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
         *{box-sizing:border-box;margin:0;padding:0}
         .lr-page{min-height:100vh;position:relative;overflow:hidden;font-family:'Montserrat',sans-serif;color:#F9F6F0;
-          background:linear-gradient(160deg,rgba(30,27,46,0.88),rgba(13,11,20,0.94)),url('/landing/hero-bgg.png') center/cover no-repeat;
+          background:linear-gradient(160deg,rgba(30,27,46,0.88),rgba(13,11,20,0.94)),url('/landing/hero-bgg.webp') center/cover no-repeat;
           padding:28px 20px 60px}
         .lr-glow{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
         .lr-glow.g1{width:420px;height:420px;background:rgba(139,92,246,0.35);top:-120px;left:50%;transform:translateX(-50%);animation:lrPulse 6s ease-in-out infinite}
@@ -169,6 +170,7 @@ export default function LinksLoginPage() {
           </button>
 
           <div className="lr-switch">¿Todavía no tenés tu página? <a href="/links/registro">Creala gratis</a></div>
+          <div className="lr-switch" style={{marginTop:'8px',fontSize:'12px'}}>¿Sos terapeuta de Luma? <a href="/auth/login">Entrá acá</a> · ¿Sos alumna? <a href="/aula">Entrá acá</a></div>
         </form>
       </div>
     </div>

@@ -71,7 +71,7 @@ export default function AulaCursoPage() {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
+      if (!user) { router.push('/aula'); return }
 
       const { data: persona } = await supabase
         .from('persons').select('id').eq('auth_user_id', user.id).maybeSingle()
@@ -240,7 +240,7 @@ export default function AulaCursoPage() {
   async function cerrarSesion() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/auth/login')
+    router.push('/aula')
   }
 
   const totalLecciones = modulos.reduce((acc, m) => acc + m.lecciones.length, 0)

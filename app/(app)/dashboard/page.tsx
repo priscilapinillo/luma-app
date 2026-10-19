@@ -1,7 +1,10 @@
 'use client'
 
 import { toast } from '@/components/ToastProvider'
-import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
+import { calcularAcceso, pareceDesactualizado, estadoPlan, type TipoEstado } from '@/lib/acceso'
+import { verificarPlanEnVivo } from '@/lib/verificarPlan'
+import { cartelPlan } from '@/lib/textoPlan'
+import BloqueoPlan from '@/components/BloqueoPlan'
 import { PASOS, calcularPasos, contarListos, primerIncompleto, type IdPaso } from '@/lib/progresoPagina'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -83,7 +86,8 @@ export default function DashboardPage() {
     } catch { setCartelHoyOculto(false); setCartelListoOculto(false) }
   }, [])
   const [trialVencido, setTrialVencido] = useState(false)
-  const [avisoRenovacion, setAvisoRenovacion] = useState<{dias: number} | null>(null)
+  const [avisoRenovacion, setAvisoRenovacion] = useState<ReturnType<typeof cartelPlan>>(null)
+  const [tipoPlan, setTipoPlan] = useState<TipoEstado | null>(null)
 const [onboardingChecks, setOnboardingChecks] = useState({
   servicio: false,
   disponibilidad: false,
@@ -221,29 +225,20 @@ const [contextoLocal, setContextoLocal] = useState('')
         } catch (e) { console.error('Error calculando el cartel de Inicio:', e) }
         const { data: sub } = await supabase
         .from('subscriptions')
-        .select('status, trial_ends_at, current_period_ends_at, plan')
+        .select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id')
         .eq('user_id', user.id)
         .maybeSingle()
 
       let nivelAcceso = calcularAcceso(sub)
 
       if (nivelAcceso === 'sin_acceso' && pareceDesactualizado(sub)) {
-        try {
-          const resVerif = await fetch('/api/mp/verificar-suscripcion', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id }),
-          })
-          const dataVerif = await resVerif.json()
-          if (dataVerif.vigente) nivelAcceso = dataVerif.plan === 'premium' ? 'premium' : 'basico'
-        } catch (e) { console.error('Error verificando en vivo:', e) }
+        const dataVerif = await verificarPlanEnVivo()
+        if (dataVerif.vigente) nivelAcceso = dataVerif.plan === 'premium' ? 'premium' : 'basico'
       }
 
+      setTipoPlan(estadoPlan(sub).tipo)
       if (nivelAcceso === 'sin_acceso') setTrialVencido(true)
-        else if (sub?.status === 'active' && sub.current_period_ends_at) {
-          const diasParaVencer = Math.ceil((new Date(sub.current_period_ends_at).getTime() - new Date().getTime()) / (1000*60*60*24))
-          if (diasParaVencer <= 5 && diasParaVencer >= 0) setAvisoRenovacion({ dias: diasParaVencer })
-        }
+      else setAvisoRenovacion(cartelPlan(estadoPlan(sub)))
         if (sesiones) {
           const cobrado = sesiones
             .filter((s: any) => s.estado_pago === 'pagado' && esDelMesActual(s.fecha))
@@ -991,9 +986,12 @@ metodo_pago: s.metodo_pago || 'mercadopago',
       `}</style>
 
 {avisoRenovacion && (
-        <div style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'12px',padding:'10px 16px',margin:'10px 16px 0',fontSize:'12px',color:'#92400E',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px'}}>
-          <span>⏳ Tu suscripción se renueva en <strong>{avisoRenovacion.dias === 0 ? 'menos de 1 día' : `${avisoRenovacion.dias} día${avisoRenovacion.dias !== 1 ? 's' : ''}`}</strong> — se cobrará automáticamente por Mercado Pago.</span>
-          <button onClick={() => setAvisoRenovacion(null)} style={{background:'transparent',border:'none',cursor:'pointer',color:'#92400E',fontSize:'14px',flexShrink:0}}>✕</button>
+        <div role="status" style={{background: avisoRenovacion.tono === 'urgente' ? '#FEF2F2' : '#FFFBEB',border: `0.5px solid ${avisoRenovacion.tono === 'urgente' ? '#FECACA' : '#FDE68A'}`,borderRadius:'12px',padding:'10px 16px',margin:'10px 16px 0',fontSize:'12.5px',color: avisoRenovacion.tono === 'urgente' ? '#991B1B' : '#92400E',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',flexWrap:'wrap',lineHeight:1.5}}>
+          <span style={{flex:'1 1 240px'}}>⏳ {avisoRenovacion.texto}</span>
+          <span style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
+            <a href="/suscripcion" style={{padding:'7px 12px',borderRadius:'8px',background: avisoRenovacion.tono === 'urgente' ? '#B91C1C' : '#92400E',color:'white',fontWeight:700,textDecoration:'none',fontSize:'12px'}}>{avisoRenovacion.boton}</a>
+            <button onClick={() => setAvisoRenovacion(null)} aria-label="Cerrar aviso" style={{background:'transparent',border:'none',cursor:'pointer',color:'inherit',fontSize:'14px'}}>✕</button>
+          </span>
         </div>
       )}
       <div className="dw">
@@ -1787,24 +1785,8 @@ setTabDetalle('contexto')
 
 
 
-{/* MODAL TRIAL VENCIDO */}
-{trialVencido && (
-  <div style={{position:'fixed',inset:0,background:'rgba(20,15,35,0.45)',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}>
-    <div style={{background:'var(--bg-card)',borderRadius:'24px',padding:'36px 28px',maxWidth:'400px',width:'100%',textAlign:'center',border:'0.5px solid var(--border-light)',boxShadow:'0 40px 80px rgba(0,0,0,0.5)'}}>
-      <div style={{fontSize:'44px',marginBottom:'16px'}}>✦</div>
-      <div style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800,color:'var(--text-primary)',marginBottom:'10px',letterSpacing:'-0.5px'}}>Tu período de prueba terminó</div>
-      <p style={{fontSize:'14px',color:'var(--text-secondary)',lineHeight:1.7,marginBottom:'28px'}}>Para seguir usando Luma, elegí un plan. Podés cancelar cuando querés.</p>
-      <button onClick={() => window.location.href='/suscripcion'}
-        style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'12px',fontSize:'14px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'10px',boxShadow:'0 4px 20px rgba(139,92,246,0.3)'}}>
-        ✦ Ver planes desde $9.900/mes
-      </button>
-      <button onClick={async () => { const supabase = createClient(); await supabase.auth.signOut(); window.location.href='/auth/login' }}
-        style={{width:'100%',padding:'12px',background:'transparent',color:'var(--text-muted)',border:'0.5px solid var(--border)',borderRadius:'12px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
-        Cerrar sesión
-      </button>
-    </div>
-  </div>
-)}
+{/* MODAL PLAN VENCIDO */}
+{trialVencido && <BloqueoPlan tipo={tipoPlan} />}
     </>
   )
 }

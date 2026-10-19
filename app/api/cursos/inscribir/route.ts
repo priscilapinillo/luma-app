@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { tieneAccesoCurso } from '@/lib/acceso'
+import { tieneAccesoCurso, calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
 import { enviarAviso } from '@/lib/push'
 
 // Crea o actualiza la inscripción de la alumna, siempre como "pendiente de pago".
@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
     // si ya tiene el curso, no tocamos nada (si no, le sacaríamos el acceso)
     if (previa && tieneAccesoCurso({ estado: previa.estado, modalidad: previa.modalidad, fecha_vencimiento: previa.fecha_vencimiento })) {
       return NextResponse.json({ ok: true, tieneAcceso: true, inscripcion: previa })
+    }
+    // alumna nueva y a la terapeuta se le venció su plan de Luma: no entran alumnas nuevas (las que ya están siguen)
+    if (!previa) {
+      const { data: subT } = await s.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id').eq('user_id', curso.user_id).maybeSingle()
+      if (subT && calcularAcceso(subT) === 'sin_acceso' && !pareceDesactualizado(subT)) {
+        return NextResponse.json({ ok: false, mensaje: 'Las inscripciones a este curso están pausadas por el momento.' }, { status: 400 })
+      }
     }
     const { data, error } = await s.from('enrollments').upsert({
       course_id: curso.id,

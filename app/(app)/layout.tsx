@@ -6,13 +6,16 @@ import { createClient } from '@/lib/supabase'
 import Sidebar from "@/components/Sidebar"
 import { AppProvider } from "@/lib/context"
 import ToastProvider from "@/components/ToastProvider"
-import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
+import { calcularAcceso, pareceDesactualizado, estadoPlan, type TipoEstado } from '@/lib/acceso'
+import BloqueoPlan from '@/components/BloqueoPlan'
+import { verificarPlanEnVivo } from '@/lib/verificarPlan'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname() || ''
   const [verificando, setVerificando] = useState(true)
   const [sinAcceso, setSinAcceso] = useState(false)
+  const [tipoPlan, setTipoPlan] = useState<TipoEstado | null>(null)
 
   useEffect(() => { verificarRol() }, [])
 
@@ -23,7 +26,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (!user) { router.push('/auth/login'); return }
 
       const { data: sub } = await supabase
-        .from('subscriptions').select('user_id, status, trial_ends_at, current_period_ends_at, plan').eq('user_id', user.id).maybeSingle()
+        .from('subscriptions').select('user_id, status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id').eq('user_id', user.id).maybeSingle()
 
       if (!sub) {
         // no tiene suscripción de terapeuta — fijate si es alumna, y mandala a su propio espacio
@@ -39,17 +42,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         let nivel = calcularAcceso(sub)
         if (nivel === 'sin_acceso' && pareceDesactualizado(sub)) {
           // quizás pagó y el aviso de Mercado Pago no llegó: lo verificamos en vivo antes de bloquear
-          try {
-            const res = await fetch('/api/mp/verificar-suscripcion', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: user.id }),
-            })
-            const dataVerif = await res.json()
-            if (dataVerif.vigente) nivel = dataVerif.plan === 'premium' ? 'premium' : 'basico'
-          } catch (e) { console.error('Error verificando en vivo:', e) }
+          const dataVerif = await verificarPlanEnVivo()
+          if (dataVerif.vigente) nivel = dataVerif.plan === 'premium' ? 'premium' : 'basico'
         }
         setSinAcceso(nivel === 'sin_acceso')
+        setTipoPlan(estadoPlan(sub).tipo)
       } catch (e) {
         console.error('Error calculando el acceso:', e) // ante la duda, no bloqueamos
       }
@@ -83,23 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <ToastProvider />
-      {mostrarBloqueo && (
-        <div style={{position:'fixed',inset:0,background:'rgba(20,15,35,0.45)',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(14px)',WebkitBackdropFilter:'blur(14px)'}}>
-          <div style={{background:'var(--bg-card)',borderRadius:'24px',padding:'36px 28px',maxWidth:'400px',width:'100%',textAlign:'center',border:'0.5px solid var(--border-light)',boxShadow:'0 40px 80px rgba(0,0,0,0.5)'}}>
-            <div style={{fontSize:'44px',marginBottom:'16px'}}>✦</div>
-            <div style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:800,color:'var(--text-primary)',marginBottom:'10px',letterSpacing:'-0.5px'}}>Tu período de prueba terminó</div>
-            <p style={{fontSize:'14px',color:'var(--text-secondary)',lineHeight:1.7,marginBottom:'28px'}}>Para seguir usando Luma, elegí un plan. Podés cancelar cuando querés.</p>
-            <button onClick={() => window.location.href='/suscripcion'}
-              style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'12px',fontSize:'14px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'10px',boxShadow:'0 4px 20px rgba(139,92,246,0.3)'}}>
-              ✦ Ver planes desde $9.900/mes
-            </button>
-            <button onClick={async () => { const supabase = createClient(); await supabase.auth.signOut(); window.location.href='/auth/login' }}
-              style={{width:'100%',padding:'12px',background:'transparent',color:'var(--text-muted)',border:'0.5px solid var(--border)',borderRadius:'12px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      )}
+      {mostrarBloqueo && <BloqueoPlan tipo={tipoPlan} />}
     </AppProvider>
   )
 }

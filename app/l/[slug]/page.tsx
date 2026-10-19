@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams } from 'next/navigation'
+import { urlSegura, urlWhatsapp, origenDeVisita } from '@/lib/linksUtil'
 import { Camera, Music2, PlayCircle, Mic, MessageCircle, Mail, FileDown, ShoppingBag, Link as LinkIcon } from 'lucide-react'
 
-type Link = { tipo: string; titulo: string; url: string; imagen_url?: string }
+type Link = { tipo: string; titulo: string; url: string; imagen_url?: string; mensaje?: string }
 type Promo = { activa: boolean; titulo: string; descripcion: string; texto_boton: string; url: string }
 type Perfil = {
   nombre: string; profesion: string; bio: string
@@ -46,6 +47,23 @@ export default function LinksPublicPage() {
       .maybeSingle()
     if (data) setPerfil({ ...data, links: data.links || [], promo: data.promo || null })
     setLoading(false)
+    // estadística: una visita por sesión del navegador (sin datos de quien visita)
+    if (data) {
+      try {
+        const clave = 'luma-visita-' + slug
+        if (!sessionStorage.getItem(clave)) {
+          sessionStorage.setItem(clave, '1')
+          supabase.rpc('registrar_evento_links', { p_slug: slug, p_tipo: 'visita', p_origen: origenDeVisita() }).then(() => {}, () => {})
+        }
+      } catch {}
+    }
+  }
+
+  // estadística: clic en un link (no frena la apertura del link si falla)
+  function contarClic(tipo: string, titulo: string) {
+    try {
+      createClient().rpc('registrar_evento_links', { p_slug: slug, p_tipo: 'clic', p_link_tipo: tipo, p_titulo: titulo || tipo }).then(() => {}, () => {})
+    } catch {}
   }
 
   if (loading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0D0B14',color:'#C9A84C',fontFamily:'serif'}}>cargando...</div>
@@ -182,7 +200,7 @@ export default function LinksPublicPage() {
             const esDescargable = link.tipo === 'descargable'
             if (esDescargable) {
               return (
-                <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="lp-link-descarga">
+                <a key={i} href={urlSegura(link.url, link.tipo)} target="_blank" rel="noopener noreferrer" className="lp-link-descarga" onClick={() => contarClic(link.tipo, link.titulo)}>
                   <div className="lp-link-descarga-num">✦ {numero} ✦</div>
                   <div className="lp-link-descarga-img">
                     {link.imagen_url
@@ -197,7 +215,7 @@ export default function LinksPublicPage() {
               )
             }
             return (
-              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="lp-link-card">
+              <a key={i} href={link.tipo === 'whatsapp' ? urlWhatsapp(link.url, link.mensaje) : urlSegura(link.url, link.tipo)} target="_blank" rel="noopener noreferrer" className="lp-link-card" onClick={() => contarClic(link.tipo, link.titulo)}>
                 <div className="lp-link-num">✦ {numero} ✦</div>
                 <div className="lp-link-glow"/>
                 <div className="lp-link-icon"><Icon size={20} color={t.primary}/></div>
@@ -230,11 +248,11 @@ export default function LinksPublicPage() {
                       {promo.descripcion && <div className="lp-frente-desc">{promo.descripcion}</div>}
                       
 
-                      <a href={promo.url}
+                      <a href={urlSegura(promo.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="lp-frente-btn"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); contarClic('promo', 'Promo: ' + (promo.titulo || '')) }}
                       >
                         {promo.texto_boton || 'Ver más'}
                       </a>

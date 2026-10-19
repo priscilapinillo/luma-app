@@ -311,7 +311,7 @@ export async function crearOReutilizar(enrollmentId: string, userId: string, ori
   if (!moneda) return { estado: 'no_disponible', mensaje: 'El cobro automático no está disponible para la moneda de este curso.' }
 
   // si a la terapeuta se le venció su plan de Luma, no entran alumnas nuevas (las que ya están siguen)
-  const { data: subT } = await s.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan').eq('user_id', curso.user_id).maybeSingle()
+  const { data: subT } = await s.from('subscriptions').select('status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id').eq('user_id', curso.user_id).maybeSingle()
   if (subT && calcularAcceso(subT) === 'sin_acceso' && !pareceDesactualizado(subT)) {
     return { estado: 'no_disponible', mensaje: 'Las inscripciones a este curso están pausadas por el momento.' }
   }

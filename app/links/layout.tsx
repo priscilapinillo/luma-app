@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { usePathname, useRouter } from 'next/navigation'
+import { tieneAccesoLumaActivo } from '@/lib/accesoLinks'
 
 const RUTAS_PUBLICAS = ['/links/login', '/links/registro']
 
@@ -26,6 +27,8 @@ export default function LinksLayout({ children }: { children: React.ReactNode })
         .maybeSingle()
 
       if (!perfil) { router.push('/links/login'); return }
+      // con Luma vigente (prueba o plan al día) su lugar es el panel de Luma
+      if (await tieneAccesoLumaActivo(user.id)) { router.replace('/dashboard'); return }
       setListo(true)
     }
     verificar()

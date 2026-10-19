@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { verificarPlanEnVivo } from '@/lib/verificarPlan'
 
 // Adonde vuelve la terapeuta después de pagar su plan en Mercado Pago.
 // Le pregunta a Mercado Pago varias veces; apenas confirma, la lleva a su panel.
@@ -18,18 +19,14 @@ export default function ConfirmandoPagoPage() {
     if (!user) { setEstado('sin_sesion'); return }
     for (let i = 0; i < 8; i++) {
       try {
-        const res = await fetch('/api/mp/verificar-suscripcion', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id }),
-        })
-        const r = await res.json().catch(() => ({}))
+        const r = await verificarPlanEnVivo()
         if (r.vigente) {
           setEstado('listo')
           setTimeout(() => router.push('/dashboard?pago=ok'), 1800)
           return
         }
       } catch {}
-      await new Promise(ok => setTimeout(ok, 4000))
+      await new Promise(ok => setTimeout(ok, 5500))
     }
     setEstado('demora')
   }

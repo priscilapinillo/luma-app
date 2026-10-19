@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -8,6 +8,7 @@ import { emailEsAlumna } from '../verificar-rol'
 import MetaPixel from '@/components/MetaPixel'
 import { eventoMeta } from '@/lib/metaPixel'
 import { leerOrigen } from '@/lib/origen'
+import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
 
 export default function AuthPage() {
   const [flipped, setFlipped] = useState(false)
@@ -31,6 +32,11 @@ export default function AuthPage() {
   const [recuperadoEnviado, setRecuperadoEnviado] = useState(false)
   const router = useRouter()
 
+  // si viene de "Registrarse → Luma" (o del botón "Empezar gratis"), abre directo la tarjeta de crear cuenta
+  useEffect(() => {
+    try { if (new URLSearchParams(window.location.search).has('registro')) setFlipped(true) } catch {}
+  }, [])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -46,8 +52,16 @@ export default function AuthPage() {
     // 1) terapeuta (con plan, aunque esté vencido) → su panel.
     //    Va primero: así, si alguna vez también tuvo Luma Links, igual puede entrar a pagar su plan.
     const { data: sub } = await supabase
-      .from('subscriptions').select('user_id').eq('user_id', userId).maybeSingle()
-    if (sub) { router.push('/dashboard'); return }
+      .from('subscriptions').select('user_id, status, plan, trial_ends_at, current_period_ends_at').eq('user_id', userId).maybeSingle()
+    if (sub) {
+      // plan o prueba vencidos (y no es un pago que Mercado Pago todavía no avisó) + tiene Luma Links → a su Luma Links
+      if (calcularAcceso(sub) === 'sin_acceso' && !pareceDesactualizado(sub)) {
+        const { data: links } = await supabase
+          .from('luma_links_profiles').select('id').eq('auth_user_id', userId).maybeSingle()
+        if (links) { router.push('/links/dashboard'); return }
+      }
+      router.push('/dashboard'); return
+    }
 
     // 2) cuenta de Luma Links → se entra por Luma Links
     const { data: linksProfile } = await supabase
@@ -168,7 +182,7 @@ export default function AuthPage() {
         .auth-left{
           background-image:
             linear-gradient(160deg,rgba(30,27,46,0.82),rgba(13,11,20,0.9)),
-            url('/landing/hero-bgg.png');
+            url('/landing/hero-bgg.webp');
           background-size:cover;
           background-position:center;
           position:relative;overflow:hidden;
@@ -370,8 +384,8 @@ export default function AuthPage() {
             </h2>
 
             <div className="auth-phone-wrap">
-              <img src="/landing/hero-dashboard.png" alt="Dashboard de Luma" className="auth-phone-img"/>
-              <img src="/landing/hero-notif.png" alt="" className="auth-notif-img"/>
+              <img src="/landing/hero-dashboard.webp" alt="Dashboard de Luma" className="auth-phone-img"/>
+              <img src="/landing/hero-notif.webp" alt="" className="auth-notif-img"/>
             </div>
           </div>
 
@@ -485,6 +499,12 @@ export default function AuthPage() {
                   <div className="form-switch" style={{marginTop:'8px'}}>
                   <Link href="/links/login" className="form-switch-link" style={{textDecoration:'underline', color:'#C9A84C'}}>
                       Tengo cuenta Luma Links
+                    </Link>
+                  </div>
+                  <div className="form-switch" style={{marginTop:'8px'}}>
+                    ¿Sos alumna?{' '}
+                    <Link href="/aula" className="form-switch-link" style={{textDecoration:'underline'}}>
+                      Entrá a tus cursos acá
                     </Link>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import MenuEntradas from '@/components/MenuEntradas'
 import Link from 'next/link'
 import Script from 'next/script'
 import InstagramFlotante from '@/components/InstagramFlotante'
@@ -367,7 +368,7 @@ export default function LandingPage() {
 .lp-hero::before{
           content:'';
           position:absolute;inset:0;
-          background-image:url('/landing/hero-bgg.png');
+          background-image:url('/landing/hero-bgg.webp');
           background-size:cover;
           background-position:center;
           background-repeat:no-repeat;
@@ -494,7 +495,7 @@ export default function LandingPage() {
         /* ── SECCIÓN 5 — EL FUTURO ── */
         .futuro-section{
           position:relative;
-          background-image:url('/landing/fondo-seccion-lunes.png');
+          background-image:url('/landing/fondo-seccion-lunes.webp');
           background-size:cover;
           background-position:center;
           background-repeat:no-repeat;
@@ -626,7 +627,7 @@ export default function LandingPage() {
         .plan-card.basico{
           background:
             linear-gradient(rgba(170, 46, 46, 0.22),rgba(236, 215, 255, 0.7)),
-            url('/landing/fondo-seccion-lunes.png');
+            url('/landing/fondo-seccion-lunes.webp');
           background-size:cover;
           background-position:center;
           border:1.5px solid rgba(30,27,46,0.1);
@@ -634,7 +635,7 @@ export default function LandingPage() {
         .plan-card.premium{
           background:
             linear-gradient(160deg,rgba(205, 76, 231, 0.6),rgba(240, 204, 108, 0.68)),
-            url('/landing/hero-bg.svg');
+            url('/landing/hero-bg.webp');
           background-size:cover;
           background-position:center;
           color:white;
@@ -701,7 +702,7 @@ export default function LandingPage() {
         .plan-card.gratis{
           background:
             linear-gradient(160deg,rgba(255,255,255,0.8),rgba(245,224,180,0.55)),
-            url('/landing/fondo-seccion-lunes.png');
+            url('/landing/fondo-seccion-lunes.webp');
           background-size:cover;
           background-position:center;
           border:1.5px solid rgba(201,168,76,0.35);
@@ -729,7 +730,7 @@ export default function LandingPage() {
           min-height:100vh;
           background-image:
             linear-gradient(rgba(161, 9, 199, 0.4),rgba(67, 2, 105, 0.88)),
-            url('/landing/hero-bg.svg');
+            url('/landing/hero-bg.webp');
           background-size:cover;
           background-position:center;
           background-repeat:no-repeat;
@@ -815,7 +816,7 @@ export default function LandingPage() {
         .cards-section{
           position:relative;
           overflow-x:clip;
-          background-image:url('/landing/fondo-seccion-2.png');
+          background-image:url('/landing/fondo-seccion-2.webp');
           background-size:cover;
           background-position:center;
           background-repeat:no-repeat;
@@ -869,7 +870,7 @@ export default function LandingPage() {
           .cards-section::before{
             content:'';display:block;position:sticky;top:0;
             height:100vh;height:100lvh;margin-bottom:-100vh;margin-bottom:-100lvh;
-            background:url('/landing/fondo-seccion-2.png') center/cover no-repeat;
+            background:url('/landing/fondo-seccion-2.webp') center/cover no-repeat;
             z-index:-1;pointer-events:none;
           }
         }
@@ -878,11 +879,7 @@ export default function LandingPage() {
       {/* NAV */}
       <nav className="lp-nav">
         <Link href="/" className="lp-nav-logo">Luma<span>.</span></Link>
-        <div className="lp-nav-actions">
-          <Link href="/auth/login" className="lp-nav-login">Iniciar sesión</Link>
-          <Link href="/links/login" className="lp-nav-login-links">Luma Links</Link>
-          <Link href="/auth/register" className="lp-nav-cta">Registrarse</Link>
-        </div>
+        <MenuEntradas />
       </nav>
 
       {/* HERO */}
@@ -904,9 +901,9 @@ export default function LandingPage() {
               </div>
             ))}
             <div ref={heroPhoneRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
-              <img src="/landing/hero-home.png" alt="Luma" className="lp-phone-img home"/>
-              <img ref={dashboardRef} src="/landing/hero-dashboard.png" alt="Luma dashboard" className="lp-phone-img dashboard"/>
-              <img ref={notifRef} src="/landing/hero-notif.png" alt="" className="lp-notif-img"/>
+              <img src="/landing/hero-home.webp" alt="Luma" className="lp-phone-img home"/>
+              <img ref={dashboardRef} src="/landing/hero-dashboard.webp" alt="Luma dashboard" className="lp-phone-img dashboard"/>
+              <img ref={notifRef} src="/landing/hero-notif.webp" alt="" className="lp-notif-img"/>
             </div>
           </div>
         </div>
@@ -921,14 +918,14 @@ export default function LandingPage() {
           <p className="cards-intro-sub">Scrolleá y confirmá</p>
         </div>
         {[
-    { src: '/landing/carta-1.png', rot: -4 },
-    { src: '/landing/carta-2.png', rot: 3 },
-    { src: '/landing/carta-3.png', rot: -3 },
-    { src: '/landing/carta-4.png', rot: 5 },
-    { src: '/landing/carta-5.png', rot: -5 },
+    { src: '/landing/carta-1.webp', rot: -4 },
+    { src: '/landing/carta-2.webp', rot: 3 },
+    { src: '/landing/carta-3.webp', rot: -3 },
+    { src: '/landing/carta-4.webp', rot: 5 },
+    { src: '/landing/carta-5.webp', rot: -5 },
   ].map((carta, i) => (
     <div key={i} ref={el => { cardRefs.current[i] = el }} className="c-card">
-      <img src={carta.src} alt="" className="c-card-img" style={{ transform: `rotate(${carta.rot}deg)` }}/>
+      <img src={carta.src} alt="" loading="lazy" decoding="async" className="c-card-img" style={{ transform: `rotate(${carta.rot}deg)` }}/>
     </div>
   ))}
 </section>
@@ -945,17 +942,17 @@ export default function LandingPage() {
 {/* SECCIÓN 4 — FUNCIONES */}
 <div className="funciones-wrap">
   {[
-    { nombre: 'Agenda', accent: '#6D28D9', bg: '#F4F0FF', img: '/landing/funcion-1-agenda.png', frase: 'Tus turnos, organizados solos. Sin un solo mensaje de WhatsApp.' },
-    { nombre: 'Historial', accent: '#7C3AED', bg: '#EDE4FF', img: '/landing/funcion-2-historial.png', frase: 'Todo lo que trabajaste con cada consultante, en un lugar. Antes de cada sesión sabés exactamente dónde quedaron.' },
-    { nombre: 'Página pública', accent: '#8B5CF6', bg: '#E6D8FF', img: '/landing/funcion-3-pagina.png', frase: 'Tu espacio profesional. Tus consultantes reservan solas, sin escribirte.' },
-    { nombre: 'Finanzas', accent: '#9750F0', bg: '#DFCCFF', img: '/landing/funcion-4-finanzas.png', frase: 'Sabés exactamente cuánto ganaste, quién pagó y qué está pendiente.' },
-    { nombre: 'Cursos', accent: '#A855F7', bg: '#D8C0FF', img: '/landing/funcion-5-cursos.png', frase: 'Creá y vendé tus cursos desde el mismo lugar donde gestionás tu consultorio.' },
-    { nombre: 'Links', accent: '#C084FC', bg: '#D0B4FF', img: '/landing/funcion-6-links.png', frase: 'Todos tus links, cursos y servicios, en un solo lugar.' },
+    { nombre: 'Agenda', accent: '#6D28D9', bg: '#F4F0FF', img: '/landing/funcion-1-agenda.webp', frase: 'Tus turnos, organizados solos. Sin un solo mensaje de WhatsApp.' },
+    { nombre: 'Historial', accent: '#7C3AED', bg: '#EDE4FF', img: '/landing/funcion-2-historial.webp', frase: 'Todo lo que trabajaste con cada consultante, en un lugar. Antes de cada sesión sabés exactamente dónde quedaron.' },
+    { nombre: 'Página pública', accent: '#8B5CF6', bg: '#E6D8FF', img: '/landing/funcion-3-pagina.webp', frase: 'Tu espacio profesional. Tus consultantes reservan solas, sin escribirte.' },
+    { nombre: 'Finanzas', accent: '#9750F0', bg: '#DFCCFF', img: '/landing/funcion-4-finanzas.webp', frase: 'Sabés exactamente cuánto ganaste, quién pagó y qué está pendiente.' },
+    { nombre: 'Cursos', accent: '#A855F7', bg: '#D8C0FF', img: '/landing/funcion-5-cursos.webp', frase: 'Creá y vendé tus cursos desde el mismo lugar donde gestionás tu consultorio.' },
+    { nombre: 'Links', accent: '#C084FC', bg: '#D0B4FF', img: '/landing/funcion-6-links.webp', frase: 'Todos tus links, cursos y servicios, en un solo lugar.' },
   ].map((f, i) => (
     <div key={i} className="funcion-slide" style={{ '--fc-accent': f.accent, '--fc-bg': f.bg } as React.CSSProperties}>
       <div className="funcion-nombre">{f.nombre}</div>
       <div className="funcion-mockup-wrap">
-        <img src={f.img} alt={f.nombre} className="funcion-mockup"/>
+        <img src={f.img} alt={f.nombre} loading="lazy" decoding="async" className="funcion-mockup"/>
       </div>
       <p className="funcion-frase">{f.frase}</p>
     </div>

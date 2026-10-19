@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
   // ── 1) SEGURIDAD: lo que alguien de afuera NO tiene que poder leer
   const lecturasProhibidas = ['patients', 'sessions', 'subscriptions', 'enrollments', 'course_payments', 'mp_credenciales',
     'push_subscriptions', 'persons', 'lesson_progress', 'exam_options', 'exam_results', 'suscripcion_eventos', 'controles_diarios',
-    'session_notes', 'payments', 'files', 'tasks', 'quick_notes', 'public_bookings']
+    'session_notes', 'payments', 'files', 'tasks', 'quick_notes', 'public_bookings',
+    'luma_pagos', 'luma_avisos', 'loops_contactos', 'luma_planes_mp', 'links_eventos']
   for (const tabla of lecturasProhibidas) {
     try {
       const { data, error } = await anon.from(tabla).select('*').limit(1)
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest) {
     { tabla: 'course_payments', fila: { terapeuta_id: idPrueba, monto: 0, metodo: 'control', tipo: 'control' } },
     { tabla: 'enrollments', fila: { id: idPrueba, course_id: idPrueba, person_id: idPrueba, terapeuta_id: idPrueba, estado: 'activa' } },
     { tabla: 'subscriptions', fila: { user_id: idPrueba, status: 'active' } },
+    { tabla: 'luma_pagos', fila: { id: idPrueba, user_id: idPrueba, monto: 0, metodo: 'control' } },
+    { tabla: 'links_eventos', fila: { perfil_id: idPrueba, tipo: 'visita' } },
   ]
   for (const it of intentos) {
     try {
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
         else if (it.tabla === 'public_bookings') await s.from(it.tabla).delete().eq('therapist_id', idPrueba)
         else if (it.tabla === 'course_payments') await s.from(it.tabla).delete().eq('terapeuta_id', idPrueba)
         else if (it.tabla === 'subscriptions') await s.from(it.tabla).delete().eq('user_id', idPrueba)
+        else if (it.tabla === 'links_eventos') await s.from(it.tabla).delete().eq('perfil_id', idPrueba)
       }
     } catch {}
   }
@@ -74,9 +78,10 @@ export async function POST(req: NextRequest) {
 
   // ── 2) DATOS
   try {
-    // planes que figuran activos pero vencieron hace más de 3 días (el aviso de Mercado Pago no llegó)
-    const { data } = await s.from('subscriptions').select('user_id, current_period_ends_at').eq('status', 'active').lt('current_period_ends_at', hace(72)).limit(50)
-    if (data && data.length) hallazgos.push({ tipo: 'revisar', que: `${data.length} plan(es) de Luma figuran activos pero vencieron hace más de 3 días`, detalle: data })
+    // planes con cobro automático que vencieron hace más de 4 días y siguen activos (Mercado Pago no cobra o no avisa)
+    const { data } = await s.from('subscriptions').select('user_id, current_period_ends_at').eq('status', 'active')
+      .not('mp_subscription_id', 'is', null).lt('current_period_ends_at', hace(96)).gt('current_period_ends_at', hace(24 * 30)).limit(50)
+    if (data && data.length) hallazgos.push({ tipo: 'revisar', que: `${data.length} plan(es) con cobro automático vencieron hace más de 4 días sin cobro aprobado (tarjeta rechazada o aviso perdido)`, detalle: data })
   } catch {}
   try {
     // terapeutas con Mercado Pago activado sin token guardado (sus clientas no pueden pagar)
@@ -121,7 +126,7 @@ export async function POST(req: NextRequest) {
   } catch {}
   try {
     // planes vencidos con página activa (sus visitantes ven «no disponible»): para avisarles
-    const { data: subs } = await s.from('subscriptions').select('user_id, status, trial_ends_at, current_period_ends_at, plan')
+    const { data: subs } = await s.from('subscriptions').select('user_id, status, trial_ends_at, current_period_ends_at, plan, mp_subscription_id')
     const vencidas = new Set((subs || []).filter((x: any) => calcularAcceso(x) === 'sin_acceso').map((x: any) => x.user_id))
     const { data: activas } = await s.from('therapist_profiles').select('user_id, slug').eq('pagina_activa', true)
     const pausadas = (activas || []).filter((p: any) => vencidas.has(p.user_id))
@@ -153,6 +158,16 @@ export async function POST(req: NextRequest) {
       ])
       const incompletas = recientes.filter(r => !conTipo.has(r.id))
       if (incompletas.length) hallazgos.push({ tipo: 'revisar', que: `${incompletas.length} cuenta(s) nueva(s) a medio crear (no son terapeuta, ni Links, ni alumna): revisá el registro`, detalle: incompletas.map(r => r.email) })
+      // alumnas nuevas con cuenta pero sin ningún curso (la compra se cortó a la mitad)
+      const idsAlumnas = (personas || []).map((x: any) => x.auth_user_id)
+      if (idsAlumnas.length) {
+        const { data: fichas } = await s.from('persons').select('id, auth_user_id, email').in('auth_user_id', idsAlumnas)
+        const idsFichas = (fichas || []).map((x: any) => x.id)
+        const { data: insc } = idsFichas.length ? await s.from('enrollments').select('person_id').in('person_id', idsFichas) : { data: [] as any[] }
+        const conCurso = new Set((insc || []).map((x: any) => x.person_id))
+        const sinCurso = (fichas || []).filter((x: any) => !conCurso.has(x.id))
+        if (sinCurso.length) hallazgos.push({ tipo: 'revisar', que: `${sinCurso.length} alumna(s) nueva(s) con cuenta pero sin ningún curso (la compra se cortó)`, detalle: sinCurso.map((x: any) => x.email) })
+      }
     }
   } catch {}
 
