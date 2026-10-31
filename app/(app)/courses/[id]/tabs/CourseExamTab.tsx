@@ -170,7 +170,7 @@ export default function CourseExamTab({ cursoId }: { cursoId: string }) {
       <div style={{fontSize:'14px',fontWeight:600,color:'var(--text-primary)',marginBottom:'6px'}}>Este curso todavía no tiene examen</div>
       <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'20px'}}>Se desbloquea para la alumna cuando completa el 100% de las lecciones.</p>
       <button onClick={crearExamen} disabled={creandoExamen}
-        style={{padding:'10px 20px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+        style={{padding:'10px 20px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
         {creandoExamen ? 'Creando...' : '+ Crear examen'}
       </button>
     </div>
@@ -225,7 +225,7 @@ export default function CourseExamTab({ cursoId }: { cursoId: string }) {
                 Cancelar
               </button>
               <button onClick={guardarConfig} disabled={guardandoConfig}
-                style={{padding:'8px 14px',borderRadius:'8px',border:'none',background:'#8B5CF6',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+                style={{padding:'8px 14px',borderRadius:'8px',border:'none',background:'var(--accent)',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
                 {guardandoConfig ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
@@ -236,7 +236,7 @@ export default function CourseExamTab({ cursoId }: { cursoId: string }) {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
         <div style={{fontSize:'13px',color:'var(--text-muted)'}}>{preguntas.length} pregunta{preguntas.length !== 1 ? 's' : ''}</div>
         <button onClick={abrirNuevaPregunta}
-          style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 14px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 14px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           <Plus size={12}/>Agregar pregunta
         </button>
       </div>
@@ -320,7 +320,7 @@ export default function CourseExamTab({ cursoId }: { cursoId: string }) {
             </div>
 
             <button onClick={guardarPregunta} disabled={guardandoPregunta}
-              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginTop:'8px'}}>
+              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginTop:'8px'}}>
               {guardandoPregunta ? 'Guardando...' : editandoPregunta ? 'Guardar cambios' : 'Agregar pregunta'}
             </button>
           </div>

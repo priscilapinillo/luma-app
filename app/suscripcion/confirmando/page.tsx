@@ -17,6 +17,21 @@ export default function ConfirmandoPagoPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setEstado('sin_sesion'); return }
+    // pago único (un mes, anual o diferencia): vuelve con ?intento=…&payment_id=…
+    let intento = '', paymentId = ''
+    try { const q = new URLSearchParams(window.location.search); intento = q.get('intento') || ''; paymentId = q.get('payment_id') || q.get('collection_id') || '' } catch {}
+    if (intento) {
+      for (let i = 0; i < 8; i++) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const res = await fetch('/api/plan/confirmar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` }, body: JSON.stringify({ intento, paymentId }) })
+          const r = await res.json().catch(() => ({}))
+          if (r.listo) { setEstado('listo'); setTimeout(() => router.push('/dashboard?pago=ok'), 1800); return }
+        } catch {}
+        await new Promise(ok => setTimeout(ok, 5000))
+      }
+      setEstado('demora'); return
+    }
     for (let i = 0; i < 8; i++) {
       try {
         const r = await verificarPlanEnVivo()

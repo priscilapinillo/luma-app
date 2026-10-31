@@ -1,35 +1,35 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { toast } from '@/components/ToastProvider'
 import { createClient } from '@/lib/supabase'
+import { temaPublico } from '@/lib/plantillas'
 import { useParams, useRouter } from 'next/navigation'
 import { Check, Shield } from 'lucide-react'
 import { tieneAccesoCurso } from '@/lib/acceso'
 
 type Terapeuta = {
-  user_id: string; nombre_profesional: string; template?: string
+  user_id: string; nombre_profesional: string; template?: string; template_modo?: string | null
   whatsapp?: string; mp_activo?: boolean; acepta_transferencia?: boolean
   alias_pago?: string; cbu?: string; titular_cuenta?: string; banco?: string
   instrucciones_pago?: string
+  usd_link?: string | null; usd_cuenta?: string | null; usd_usdt?: string | null; usd_usdt_red?: string | null
 }
 
 type Curso = {
   id: string; titulo: string; slug: string; imagen_url: string
   precio: number; modalidad: string; user_id: string
   cobro_automatico?: boolean
+  precio_usd?: number | null
+  tipo?: string
+  bonusCant?: number
 }
+type CuponVista = { codigo: string; porcentaje: number; precioFinal: number; precioFinalUsd: number; meses: string | null }
 
 type EstadoSuscripcion = { suscripcion_estado: string | null; acceso: boolean; fecha_vencimiento: string | null; proximo_cobro: string | null; link: string | null }
 const fechaCorta = (f: string | null) => f ? new Date(f).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' }) : ''
 
-const TEMPLATES = {
-  luna: { bg: '#0D0B14', bg2: '#12101C', primary: '#C9A84C', primaryLight: '#E8D5A3', primaryDim: 'rgba(201,168,76,0.3)', accent: '#6B3FA0', accentDim: 'rgba(107,63,160,0.2)', text: '#D4C5A9', textDim: '#7A6B8A', cream: '#F0E8D5', border: 'rgba(201,168,76,0.2)', fontBody: "'Jost', sans-serif", googleFonts: 'Jost:wght@300;400;500;600', dark: true, cardBg: 'rgba(26,22,40,0.6)', btnBg: 'linear-gradient(135deg,#6B3FA0,#8B5CF6)', btnColor: '#E8D5A3' },
-  aura: { bg: '#F8F4FF', bg2: '#F0EBFF', primary: '#7C3AED', primaryLight: '#A78BFA', primaryDim: 'rgba(124,58,237,0.2)', accent: '#EC4899', accentDim: 'rgba(236,72,153,0.15)', text: '#4B5563', textDim: '#9CA3AF', cream: '#1F2937', border: 'rgba(124,58,237,0.15)', fontBody: "'DM Sans', sans-serif", googleFonts: 'DM+Sans:wght@300;400;500;600', dark: false, cardBg: 'rgba(255,255,255,0.85)', btnBg: 'linear-gradient(135deg,#7C3AED,#EC4899)', btnColor: 'white' },
-  tierra: { bg: '#FAF7F0', bg2: '#F5F0E8', primary: '#92400E', primaryLight: '#D97706', primaryDim: 'rgba(146,64,14,0.2)', accent: '#065F46', accentDim: 'rgba(6,95,70,0.15)', text: '#44403C', textDim: '#A8A29E', cream: '#1C1917', border: 'rgba(146,64,14,0.15)', fontBody: "'Nunito', sans-serif", googleFonts: 'Nunito:wght@300;400;500;600', dark: false, cardBg: 'rgba(255,255,255,0.8)', btnBg: 'linear-gradient(135deg,#92400E,#D97706)', btnColor: 'white' },
-  rosa: { bg: '#FFF0F6', bg2: '#FFE4F0', primary: '#BE185D', primaryLight: '#F472B6', primaryDim: 'rgba(190,24,93,0.2)', accent: '#9D174D', accentDim: 'rgba(157,23,77,0.15)', text: '#4A1942', textDim: '#9D7A95', cream: '#2D0A25', border: 'rgba(190,24,93,0.15)', fontBody: "'DM Sans', sans-serif", googleFonts: 'DM+Sans:wght@300;400;500;600', dark: false, cardBg: 'rgba(255,255,255,0.9)', btnBg: 'linear-gradient(135deg,#BE185D,#EC4899)', btnColor: 'white' },
-  violeta: { bg: '#1E0A3C', bg2: '#2D1058', primary: '#C084FC', primaryLight: '#E9D5FF', primaryDim: 'rgba(192,132,252,0.3)', accent: '#A855F7', accentDim: 'rgba(168,85,247,0.2)', text: '#DDD6FE', textDim: '#8B5CF6', cream: '#FAF5FF', border: 'rgba(192,132,252,0.25)', fontBody: "'Jost', sans-serif", googleFonts: 'Jost:wght@300;400;500;600', dark: true, cardBg: 'rgba(61,21,112,0.5)', btnBg: 'linear-gradient(135deg,#7C3AED,#C084FC)', btnColor: 'white' },
-  verde: { bg: '#F0FDF4', bg2: '#DCFCE7', primary: '#065F46', primaryLight: '#10B981', primaryDim: 'rgba(6,95,70,0.2)', accent: '#047857', accentDim: 'rgba(4,120,87,0.15)', text: '#1C4532', textDim: '#6B7280', cream: '#022C22', border: 'rgba(6,95,70,0.15)', fontBody: "'Nunito', sans-serif", googleFonts: 'Nunito:wght@300;400;500;600', dark: false, cardBg: 'rgba(255,255,255,0.85)', btnBg: 'linear-gradient(135deg,#065F46,#10B981)', btnColor: 'white' },
-}
+// plantillas: lib/plantillas.ts
 
 export default function CheckoutCursoPage() {
   const params = useParams()
@@ -45,7 +45,7 @@ export default function CheckoutCursoPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [celular, setCelular] = useState('')
-  const [metodoPago, setMetodoPago] = useState<'mp' | 'transferencia' | null>(null)
+  const [metodoPago, setMetodoPago] = useState<'mp' | 'transferencia' | 'usd' | null>(null)
 
   const [enviandoTransferencia, setEnviandoTransferencia] = useState(false)
   const [preparandoMP, setPreparandoMP] = useState(false)
@@ -54,6 +54,7 @@ export default function CheckoutCursoPage() {
   const [mailRecuperoEnviado, setMailRecuperoEnviado] = useState(false)
   const [sesionAlumna, setSesionAlumna] = useState<{ userId: string; personaId: string; email: string; nombre: string } | null>(null)
   const [yaTieneAcceso, setYaTieneAcceso] = useState(false)
+  const [accesoTerminado, setAccesoTerminado] = useState(false) // la terapeuta le quitó el acceso
   const [avisoPago, setAvisoPago] = useState('')
   // suscripción automática
   const [inscripcion, setInscripcion] = useState<{ id: string; suscripcion_estado: string | null } | null>(null)
@@ -61,6 +62,12 @@ export default function CheckoutCursoPage() {
   const [consultando, setConsultando] = useState(false)
   const [volvioDeMP, setVolvioDeMP] = useState(false)
   const [volvioSinSesion, setVolvioSinSesion] = useState(false)
+  // cupón (lo revisa y lo calcula el servidor; acá solo se muestra)
+  const [cuponTexto, setCuponTexto] = useState('')
+  const [cupon, setCupon] = useState<CuponVista | null>(null)
+  const [cuponError, setCuponError] = useState('')
+  const [validandoCupon, setValidandoCupon] = useState(false)
+  const [ventasAbiertas, setVentasAbiertas] = useState(true)
 
   // ¿viene de Mercado Pago después de suscribirse? Mercado Pago a veces le agrega cosas
   // al link de vuelta, así que se reconoce de dos formas
@@ -87,6 +94,32 @@ export default function CheckoutCursoPage() {
         .maybeSingle()
       if (!cursoData) { setLoading(false); return }
       setCurso(cursoData)
+      // precio en dólares aparte: si la base todavía no tiene la columna, la compra sigue igual que siempre
+      try {
+        const { data: usd, error: errUsd } = await supabase.from('courses').select('precio_usd').eq('id', cursoData.id).maybeSingle()
+        if (!errUsd && usd && Number((usd as any).precio_usd) > 0) setCurso(prev => prev ? { ...prev, precio_usd: Number((usd as any).precio_usd) } : prev)
+      } catch {}
+      // tipo (curso o descargable) y cuántos bonus trae (aparte: si la base no tiene las columnas, sigue igual)
+      try {
+        const { data: extra, error: errExtra } = await supabase.from('courses').select('tipo, bonus').eq('id', cursoData.id).maybeSingle()
+        let bonusCant = !errExtra && Array.isArray((extra as any)?.bonus) ? (extra as any).bonus.filter((b: any) => b?.nombre).length : 0
+        if (!errExtra && (extra as any)?.tipo === 'descargable') {
+          const { count } = await supabase.from('descargable_archivos').select('id', { count: 'exact', head: true }).eq('course_id', cursoData.id).eq('es_bonus', true)
+          bonusCant += count || 0
+        }
+        if (!errExtra) setCurso(prev => prev ? { ...prev, tipo: (extra as any)?.tipo || 'curso', bonusCant } : prev)
+      } catch {}
+      // ¿puede vender? (si la terapeuta bajó a Básico, está en pausa). El servidor lo revisa igual al inscribir.
+      try {
+        const r = await fetch(`/api/pagina-disponible?slug=${encodeURIComponent(slug)}`, { cache: 'no-store' })
+        if (r.ok) { const j = await r.json(); if (j?.ventas === false || j?.disponible === false) setVentasAbiertas(false) }
+      } catch {}
+      // ?cupon=CODIGO (link de la terapeuta): se aplica solo
+      try {
+        const c = new URLSearchParams(window.location.search).get('cupon')
+        const cod = (c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20)
+        if (cod && Number(cursoData.precio) > 0) { setCuponTexto(cod); revisarCupon(cod, cursoData.id) }
+      } catch {}
 
       // si ya entró como alumna, no le pedimos los datos de nuevo
       const { data: { user } } = await supabase.auth.getUser()
@@ -107,6 +140,7 @@ export default function CheckoutCursoPage() {
               .from('enrollments').select('id, estado, modalidad, fecha_vencimiento, suscripcion_estado')
               .eq('course_id', cursoData.id).eq('person_id', persona.id).maybeSingle()
             if (previa) setInscripcion({ id: previa.id, suscripcion_estado: previa.suscripcion_estado || null })
+            if (previa && previa.estado === 'baja') setAccesoTerminado(true)
             if (previa && tieneAccesoCurso({ estado: previa.estado, modalidad: previa.modalidad, fecha_vencimiento: previa.fecha_vencimiento })) {
               setYaTieneAcceso(true)
             }
@@ -157,15 +191,23 @@ export default function CheckoutCursoPage() {
     finally { setLoading(false) }
   }
 
-  const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
+  const t = temaPublico(terapeuta?.template, terapeuta?.template_modo)
   const tieneMP = !!terapeuta?.mp_activo
   const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
-  const sinMetodoPago = !tieneMP && !tieneTransferencia
+  // en dólares: el curso tiene precio en USD y la terapeuta configuró alguna forma de cobrar en dólares
+  const tieneUSD = Number(curso?.precio_usd) > 0 && !!(terapeuta?.usd_link || terapeuta?.usd_cuenta || terapeuta?.usd_usdt)
+  const sinMetodoPago = !tieneMP && !tieneTransferencia && !tieneUSD
   const esGratis = curso != null && curso.precio != null && Number(curso.precio) === 0
   const formularioListo = !!sesionAlumna || !!(nombre.trim() && email.trim() && password.trim().length >= 6)
   const nombreAlumna = sesionAlumna?.nombre || nombre
   // curso mensual con cobro automático: Mercado Pago cobra solo cada mes
   const usaSuscripcion = curso?.modalidad === 'suscripcion' && !!curso?.cobro_automatico && tieneMP && !esGratis
+  const esDescargable = curso?.tipo === 'descargable'
+  const precioFinal = cupon ? cupon.precioFinal : Number(curso?.precio || 0)
+  const precioFinalUsd = cupon && cupon.precioFinalUsd ? cupon.precioFinalUsd : Number(curso?.precio_usd || 0)
+  const textoMensual = cupon && cupon.meses === 'primero' && curso?.modalidad === 'suscripcion'
+    ? `El primer mes $${precioFinal.toLocaleString('es-AR')}, después $${Number(curso?.precio).toLocaleString('es-AR')} por mes`
+    : `Se cobra $${precioFinal.toLocaleString('es-AR')} por mes`
 
   async function autenticarAlumna(): Promise<string | null> {
     if (sesionAlumna) return sesionAlumna.userId
@@ -221,15 +263,19 @@ export default function CheckoutCursoPage() {
   // la inscripción se crea en el servidor, siempre como "pendiente de pago" (el navegador no elige el estado)
   // si el servidor explica por qué no se pudo (por ejemplo, inscripciones pausadas), se muestra eso
   const mensajeInscripcion = useRef('')
-  async function crearOActualizarInscripcion(_personaId: string, _estado: string) {
+  async function crearOActualizarInscripcion(_personaId: string, _estado: string, metodo: 'usd' | 'mercadopago' | 'transferencia' | 'whatsapp' = 'mercadopago') {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch('/api/cursos/inscribir', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courseId: curso!.id, accessToken: session?.access_token }),
+      body: JSON.stringify({ courseId: curso!.id, accessToken: session?.access_token, metodo, ...(cupon ? { cupon: cupon.codigo } : {}) }),
     })
     const r = await res.json().catch(() => ({ ok: false }))
     mensajeInscripcion.current = r.ok ? '' : (r.mensaje || '')
+    // el cupón no se pudo usar (vencido, agotado, ya usado…): se avisa y se puede seguir sin cupón
+    if (r.cuponError) { setCupon(null); setCuponError(r.cuponError); if (r.ok) toast(r.cuponError, 'error') }
+    if (r.pausado) setVentasAbiertas(false)
+    if (r.accesoQuitado) setAccesoTerminado(true)
     if (!r.ok || !r.inscripcion) { console.error('Error creando inscripción:', r); return null }
     if (r.tieneAcceso) {
       setInscripcion({ id: r.inscripcion.id, suscripcion_estado: r.inscripcion.suscripcion_estado || null })
@@ -247,9 +293,25 @@ export default function CheckoutCursoPage() {
       if (!userId) return
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
-      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago', 'transferencia')
       if (insc === 'tiene_acceso') return
       if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al confirmar. Intentá de nuevo.'); return }
+      setEnviado(true)
+    } finally { setEnviandoTransferencia(false) }
+  }
+
+  // DÓLARES: pagó por fuera y avisa; queda pendiente hasta que la terapeuta confirma en Alumnas
+  async function handleUSD() {
+    setErrorMsg('')
+    setEnviandoTransferencia(true)
+    try {
+      const userId = await autenticarAlumna()
+      if (!userId) return
+      const personaId = await asegurarPersona(userId)
+      if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
+      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago', 'usd')
+      if (insc === 'tiene_acceso') return
+      if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al registrar tu inscripción. Intentá de nuevo.'); return }
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
   }
@@ -262,7 +324,7 @@ export default function CheckoutCursoPage() {
       if (!userId) return
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
-      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago', 'whatsapp')
       if (insc === 'tiene_acceso') return
       if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al registrar tu inscripción. Intentá de nuevo.'); return }
       setEnviado(true)
@@ -278,7 +340,12 @@ export default function CheckoutCursoPage() {
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
       const supabase = createClient()
+      // si la terapeuta le quitó el acceso, no se vuelve a inscribir sola
+      const { data: previaGratis } = await supabase.from('enrollments').select('estado')
+        .eq('course_id', curso!.id).eq('person_id', personaId).maybeSingle()
+      if (previaGratis?.estado === 'baja') { setAccesoTerminado(true); return }
       const { data: resultado, error } = await supabase.rpc('inscribirme_gratis', { p_course_id: curso!.id })
+      if (error && String(error.message || '').includes('ventas_pausadas')) { setVentasAbiertas(false); return }
       if (error || resultado !== 'ok') {
         console.error('Inscripción gratis:', error || resultado)
         setErrorMsg(
@@ -299,6 +366,23 @@ export default function CheckoutCursoPage() {
       setEnviado(true)
     } finally { setEnviandoTransferencia(false) }
   }
+
+  async function revisarCupon(codigo?: string, cursoId?: string) {
+    const cod = (codigo ?? cuponTexto).trim()
+    const id = cursoId || curso?.id
+    if (!cod || !id || validandoCupon) return
+    setValidandoCupon(true); setCuponError('')
+    try {
+      const { data: { session } } = await createClient().auth.getSession()
+      const res = await fetch('/api/cupones/validar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'curso', id, codigo: cod, accessToken: session?.access_token }) })
+      const r = await res.json().catch(() => ({ ok: false, mensaje: 'No pudimos revisar el cupón. Probá de nuevo.' }))
+      if (!r.ok) { setCupon(null); setCuponError(r.mensaje || 'Este cupón ya no está disponible.'); return }
+      setCupon({ codigo: r.codigo, porcentaje: r.porcentaje, precioFinal: r.precioFinal, precioFinalUsd: r.precioFinalUsd, meses: r.meses })
+      setCuponTexto(r.codigo)
+    } finally { setValidandoCupon(false) }
+  }
+  function quitarCupon() { setCupon(null); setCuponTexto(''); setCuponError('') }
 
   async function recuperarContrasena() {
     if (!email.trim()) { setErrorMsg('Escribí tu email arriba y volvé a tocar "Olvidé mi contraseña".'); return }
@@ -326,7 +410,7 @@ export default function CheckoutCursoPage() {
       if (!userId) return
       const personaId = await asegurarPersona(userId)
       if (!personaId) { setErrorMsg('Hubo un error al registrar tus datos. Intentá de nuevo.'); return }
-      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago')
+      const insc = await crearOActualizarInscripcion(personaId, 'pendiente_pago', 'mercadopago')
       if (insc === 'tiene_acceso') return
       if (!insc) { setErrorMsg(mensajeInscripcion.current || 'Hubo un error al crear la inscripción. Intentá de nuevo.'); return }
 
@@ -530,14 +614,22 @@ export default function CheckoutCursoPage() {
               </button>
             </>)}
           </div>
+        ) : !enviado && accesoTerminado ? (
+          <div className="exito-wrap">
+            <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Tu acceso a este curso terminó</h2>
+            <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
+              Si querés volver a <strong>{curso.titulo}</strong>, escribile a la terapeuta.
+            </p>
+            <a className="exito-btn" href="/mi-cuenta/cursos">Ir a Mis cursos</a>
+          </div>
         ) : !enviado && yaTieneAcceso ? (
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={32} color="white"/></div>
-            <h2 style={{fontSize:'24px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Ya tenés este curso ✦</h2>
+            <h2 style={{fontSize:'24px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>{esDescargable ? 'Ya tenés este descargable ✦' : 'Ya tenés este curso ✦'}</h2>
             <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
               Tu acceso a <strong>{curso.titulo}</strong> está activo. No hace falta que pagues de nuevo.
             </p>
-            <a className="exito-btn" href={`/mi-cuenta/cursos/${curso.id}`}>Entrar al curso</a>
+            <a className="exito-btn" href={esDescargable ? '/mi-cuenta/cursos' : `/mi-cuenta/cursos/${curso.id}`}>{esDescargable ? 'Ir a descargarlo' : 'Entrar al curso'}</a>
             {usaSuscripcion && inscripcion && (
               ['activa', 'esperando_cobro'].includes(inscripcion.suscripcion_estado || '') ? (
                 <p style={{fontSize:'13px',color:'var(--text-dim)',marginTop:'18px'}}>🔁 Tenés la renovación automática activada.</p>
@@ -554,15 +646,41 @@ export default function CheckoutCursoPage() {
               ) : null
             )}
           </div>
+        ) : !enviado && !ventasAbiertas ? (
+          <div className="exito-wrap">
+            <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>No disponible por ahora</h2>
+            <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>{curso.titulo} no está a la venta en este momento. Si ya lo compraste, lo encontrás en tu cuenta.</p>
+            <a className="exito-btn" href="/mi-cuenta/cursos">Ir a mi cuenta</a>
+          </div>
         ) : !enviado ? (
           <>
             <div className="resumen-curso">
               {curso.imagen_url && <img src={curso.imagen_url} className="resumen-img"/>}
-              <div>
-                <div className="resumen-titulo">{curso.titulo}</div>
-                <div className="resumen-precio">{esGratis ? 'Gratis' : `$${curso.precio.toLocaleString()}`}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="resumen-titulo">{curso.titulo}{esDescargable && <span style={{fontSize:'11px',fontWeight:600,opacity:.75}}> · descargable</span>}</div>
+                <div className="resumen-precio">
+                  {cupon && !esGratis && <span style={{fontSize:'13px',opacity:.6,textDecoration:'line-through',marginRight:'6px'}}>${curso.precio.toLocaleString()}</span>}
+                  {esGratis ? 'Gratis' : `$${precioFinal.toLocaleString('es-AR')}`}{tieneUSD && !esGratis && <span style={{fontSize:'13px',fontWeight:600,opacity:.85}}> · o USD {precioFinalUsd.toLocaleString('es-AR')}</span>}
+                </div>
+                {cupon && <div style={{fontSize:'12px',color:'#34D399',marginTop:'2px'}}>Cupón {cupon.codigo} · −{cupon.porcentaje}%{cupon.meses === 'primero' && curso.modalidad === 'suscripcion' ? ' el primer mes' : ''}</div>}
+                {!!curso.bonusCant && <div style={{fontSize:'12px',color:'var(--primary-light)',marginTop:'2px'}}>+ {curso.bonusCant} bonus de regalo</div>}
               </div>
             </div>
+
+            {!esGratis && (
+              <div className="field">
+                <label>¿Tenés un cupón?</label>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <input value={cuponTexto} placeholder="Ej: LUNA20" disabled={!!cupon} style={{textTransform:'uppercase',letterSpacing:'1px'}}
+                    onChange={e => { setCuponTexto(e.target.value); setCuponError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); revisarCupon() } }}/>
+                  {cupon
+                    ? <button type="button" onClick={quitarCupon} style={{padding:'0 16px',borderRadius:'10px',border:'1px solid var(--border)',background:'var(--card-bg)',color:'var(--cream)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Quitar</button>
+                    : <button type="button" onClick={() => revisarCupon()} disabled={!cuponTexto.trim() || validandoCupon} style={{padding:'0 16px',borderRadius:'10px',border:'1px solid var(--border)',background:'var(--card-bg)',color:'var(--cream)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>{validandoCupon ? '…' : 'Aplicar'}</button>}
+                </div>
+                {cuponError && <div className="field-hint" style={{color:'#F87171'}}>{cuponError}</div>}
+              </div>
+            )}
 
             {avisoPago && <div className="error-msg" style={{color:'var(--cream)',background:'var(--primary-dim)',borderColor:'var(--border)'}}>{avisoPago}</div>}
 
@@ -593,7 +711,7 @@ export default function CheckoutCursoPage() {
             <div className="field">
               <label>Contraseña</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres"/>
-              <div className="field-hint">Con esto vas a poder entrar después a ver tu curso. Si ya compraste algo en Luma antes, usá la misma.</div>
+              <div className="field-hint">Con esto vas a poder entrar después a ver lo que compraste. Si ya compraste algo en Luma antes, usá la misma.</div>
               <button type="button" onClick={recuperarContrasena}
                 style={{alignSelf:'flex-start',background:'none',border:'none',padding:0,fontSize:'12px',color:'var(--primary)',textDecoration:'underline',cursor:'pointer',fontFamily:'inherit'}}>
                 Olvidé mi contraseña
@@ -611,7 +729,7 @@ export default function CheckoutCursoPage() {
             {formularioListo && (<>
               {esGratis ? (
                 <button className="confirmar-btn" onClick={handleGratis} disabled={enviandoTransferencia}>
-                  {enviandoTransferencia ? 'Un momento...' : '✦ Inscribirme gratis'}
+                  {enviandoTransferencia ? 'Un momento...' : esDescargable ? '✦ Descargar gratis' : '✦ Inscribirme gratis'}
                 </button>
               ) : sinMetodoPago ? (
                 <button className="confirmar-btn" onClick={handleWhatsappSinPago} disabled={enviandoTransferencia}>
@@ -625,7 +743,7 @@ export default function CheckoutCursoPage() {
                     <div className="metodo-radio">{metodoPago==='mp' && <div className="metodo-radio-inner"/>}</div>
                     <div>
                       <div className="metodo-label">{usaSuscripcion ? '🔁 Suscripción con Mercado Pago' : '💳 Mercado Pago'}</div>
-                      <div className="metodo-sub">{usaSuscripcion ? `Se cobra $${Number(curso.precio).toLocaleString()} por mes, solo. Cancelás cuando quieras desde tu cuenta.` : 'Tarjeta, débito o saldo en cuenta'}</div>
+                      <div className="metodo-sub">{usaSuscripcion ? `${textoMensual}, solo. Cancelás cuando quieras desde tu cuenta.` : 'Tarjeta, débito o saldo en cuenta'}</div>
                     </div>
                   </div>
                 )}
@@ -639,8 +757,35 @@ export default function CheckoutCursoPage() {
                   </div>
                 )}
 
+                {tieneUSD && (
+                  <div className={`metodo-opt${metodoPago==='usd'?' sel':''}`} onClick={() => setMetodoPago('usd')}>
+                    <div className="metodo-radio">{metodoPago==='usd' && <div className="metodo-radio-inner"/>}</div>
+                    <div>
+                      <div className="metodo-label">Pagar en dólares · USD {precioFinalUsd}</div>
+                      <div className="metodo-sub">{[terapeuta.usd_link && 'link de pago', terapeuta.usd_cuenta && 'cuenta en dólares', terapeuta.usd_usdt && 'USDT'].filter(Boolean).join(', ')}. {terapeuta.nombre_profesional} confirma el pago y te da acceso.</div>
+                    </div>
+                  </div>
+                )}
+                {metodoPago === 'usd' && (<>
+                  <div className="transferencia-datos">
+                    {terapeuta.usd_link && (
+                      <a className="confirmar-btn" style={{display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',marginBottom:'10px'}}
+                        href={/^https?:\/\//i.test(terapeuta.usd_link) ? terapeuta.usd_link : `https://${terapeuta.usd_link}`} target="_blank" rel="noopener noreferrer">
+                        Pagar USD {precioFinalUsd} ↗
+                      </a>
+                    )}
+                    {terapeuta.usd_cuenta && <div className="transferencia-row" style={{display:'block'}}><span>Datos de cuenta</span><div style={{whiteSpace:'pre-line',marginTop:'4px'}}><strong>{terapeuta.usd_cuenta}</strong></div></div>}
+                    {terapeuta.usd_usdt && <div className="transferencia-row" style={{display:'block'}}><span>USDT{terapeuta.usd_usdt_red ? ` · red ${terapeuta.usd_usdt_red}` : ''}</span><div style={{wordBreak:'break-all',marginTop:'4px'}}><strong>{terapeuta.usd_usdt}</strong></div>{terapeuta.usd_usdt_red && <div className="field-hint">Enviá solo por la red {terapeuta.usd_usdt_red}: si usás otra, el pago se pierde.</div>}</div>}
+                  </div>
+                  <div className="field-hint" style={{margin:'0 0 12px',lineHeight:1.5}}>1. Pagá USD {precioFinalUsd}. 2. Tocá «Ya pagué». Cuando {terapeuta.nombre_profesional} lo confirme, tenés acceso.</div>
+                  <button className="confirmar-btn" onClick={handleUSD} disabled={enviandoTransferencia}>
+                    {enviandoTransferencia ? 'Un momento...' : '✦ Ya pagué'}
+                  </button>
+                </>)}
+
                 {metodoPago === 'transferencia' && (
                   <div className="transferencia-datos">
+                    <div className="transferencia-row"><span>Monto</span><strong>${precioFinal.toLocaleString('es-AR')}</strong></div>
                     {terapeuta.alias_pago && <div className="transferencia-row"><span>Alias</span><strong>{terapeuta.alias_pago}</strong></div>}
                     {terapeuta.cbu && <div className="transferencia-row"><span>CBU</span><strong>{terapeuta.cbu}</strong></div>}
                     {terapeuta.titular_cuenta && <div className="transferencia-row"><span>Titular</span><strong>{terapeuta.titular_cuenta}</strong></div>}
@@ -670,11 +815,15 @@ export default function CheckoutCursoPage() {
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={32} color="white"/></div>
             <h2 style={{fontSize:'24px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>
-            {!esGratis && (metodoPago === 'transferencia' || sinMetodoPago) ? '¡Ya casi!' : '¡Listo!'}
+            {!esGratis && (metodoPago === 'transferencia' || metodoPago === 'usd' || sinMetodoPago) ? '¡Ya casi!' : '¡Listo!'}
             </h2>
             <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
-            {esGratis
+            {esDescargable && (esGratis || (!sinMetodoPago && metodoPago === 'mp'))
+                ? <>Ya podés descargar <strong>{curso.titulo}</strong> desde tu cuenta, cuando quieras.</>
+                : esGratis
                 ? <>Ya tenés acceso a <strong>{curso.titulo}</strong>. Entrá a tu cuenta para empezar.</>
+                : metodoPago === 'usd'
+                ? <>Registramos tu inscripción a <strong>{curso.titulo}</strong>. En cuanto {terapeuta.nombre_profesional} confirme tu pago en dólares, tenés acceso.</>
                 : metodoPago === 'transferencia'
                 ? <>Registramos tu inscripción a <strong>{curso.titulo}</strong>. En cuanto {terapeuta.nombre_profesional} confirme tu transferencia, tenés acceso.</>
                 : sinMetodoPago
@@ -700,7 +849,7 @@ export default function CheckoutCursoPage() {
                 💬 Coordinar pago por WhatsApp
               </a>
             )}
-            <a className="exito-btn" href="/mi-cuenta/cursos">Ir a mi cuenta</a>
+            <a className="exito-btn" href="/mi-cuenta/cursos">{esDescargable && (esGratis || metodoPago === 'mp') ? 'Descargar ahora' : 'Ir a mi cuenta'}</a>
           </div>
         )}
       </div>

@@ -5,18 +5,26 @@ import AvisoPortada from '@/components/AvisoPortada'
 import { createClient } from '@/lib/supabase'
 import { Plus, X, Video, Trash2 } from 'lucide-react'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { toast } from '@/components/ToastProvider'
+import { AYUDA_CURSO } from '@/lib/ayudaCursos'
+import ArchivosDescargable, { type Archivo } from '@/components/ArchivosDescargable'
+import BonusEditor, { limpiarBonus, type Bonus } from '@/components/BonusEditor'
 
 type Curso = {
   id: string; titulo: string; slug: string
   descripcion_corta: string; descripcion_larga: string
   imagen_url: string; video_presentacion_url: string
   precio: number; precio_original: number | null
+  precio_usd?: number | null
   modalidad: string; nivel: string; idioma: string
   duracion_estimada_horas: number | null
   politica_reembolso: string; dias_garantia: number | null
   para_quien: string[]; que_aprenderas: string[]; requisitos: string[]
   estado: string
   cobro_automatico?: boolean
+  user_id: string
+  tipo?: string
+  bonus?: Bonus[]
 }
 
 type Testimonio = {
@@ -24,12 +32,15 @@ type Testimonio = {
     avatar_url: string | null; video_url: string | null; orden: number
   }
 
-  export default function CourseInfoTab({ curso, onUpdate }: { curso: Curso; onUpdate: (c: Curso) => void }) {
+  export default function CourseInfoTab({ curso, onUpdate, pausado = false }: { curso: Curso; onUpdate: (c: Curso) => void; pausado?: boolean }) {
+    const esDescargable = curso.tipo === 'descargable'
     const [form, setForm] = useState({ ...curso,
-    para_quien: curso.para_quien || [''],
-    que_aprenderas: curso.que_aprenderas || [''],
-    requisitos: curso.requisitos || [''],
+    para_quien: curso.para_quien?.length ? curso.para_quien : [''],
+    que_aprenderas: curso.que_aprenderas?.length ? curso.que_aprenderas : [''],
+    requisitos: curso.requisitos?.length ? curso.requisitos : [''],
+    bonus: Array.isArray(curso.bonus) ? curso.bonus : [],
   })
+  const [archivos, setArchivos] = useState<Archivo[] | null>(null)
   const [guardando, setGuardando] = useState(false)
   // ── autoguardado
   const formRef = useRef(form)
@@ -66,13 +77,13 @@ type Testimonio = {
     try {
       const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
-      const nombre = `${Date.now()}.jpg`
+      const nombre = `${curso.user_id}/${Date.now()}.jpg` // cada terapeuta en su propia carpeta
       const { error: errSubida } = await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
       if (errSubida) throw errSubida
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
     } catch (err: any) {
-      alert(err?.message || 'No se pudo procesar la imagen.')
+      toast(err?.message || 'No se pudo procesar la imagen.', 'error')
     } finally { setSubiendoImagen(false) }
   }
 
@@ -81,7 +92,7 @@ type Testimonio = {
     try {
       const supabase = createClient()
       const ext = file.name.split('.').pop()
-      const path = `testimonios/${curso.id}/${Date.now()}.${ext}`
+      const path = `${curso.user_id}/testimonios/${curso.id}/${Date.now()}.${ext}`
       await supabase.storage.from('course-images').upload(path, file, { upsert: true })
       const { data } = supabase.storage.from('course-images').getPublicUrl(path)
       setNuevoTesti(prev => ({ ...prev, [campo]: data.publicUrl }))
@@ -135,9 +146,18 @@ type Testimonio = {
     if (silencioso && !estado && foto === guardadoRef.current) return
 
     // precio vacío: no lo tocamos (se guarda el resto) y avisamos
+    // un descargable sin archivos no se publica (nadie compraría algo vacío)
+    if (estado === 'publicado' && esDescargable && archivos !== null && archivos.length === 0) {
+      toast('Subí al menos un archivo antes de publicar.', 'error')
+      return
+    }
+    if (estado === 'publicado' && pausado) {
+      toast('Tu plan es Básico: publicar es parte de Luma Premium.', 'error')
+      return
+    }
     const precioVacio = (f.precio as any) === '' || f.precio == null
     if (precioVacio && (!silencioso || estado)) {
-      alert('Escribí el precio del curso (0 si es gratuito) antes de guardar.')
+      toast('Escribí el precio del curso (0 si es gratuito) antes de guardar.', 'error')
       return
     }
     const precioNuevo = precioVacio ? null : Number(f.precio)
@@ -178,12 +198,17 @@ type Testimonio = {
         ...(estado ? { estado } : {}),
       }
       if (precioNuevo !== null) datos.precio = precioNuevo
+      // bonus de regalo: solo si la base ya tiene la columna
+      if ('bonus' in curso) datos.bonus = limpiarBonus(f.bonus)
+      // precio en dólares: solo si la base ya tiene la columna (si no, el curso se guarda igual que siempre)
+      if ('precio_usd' in curso) datos.precio_usd = Number(f.precio_usd) > 0 ? Number(f.precio_usd) : null
       const { data, error } = await supabase.from('courses').update(datos).eq('id', curso.id).select().single()
       if (error || !data) {
         console.error('Error guardando curso:', error)
         const sinRed = typeof navigator !== 'undefined' && navigator.onLine === false
-        setMsg(sinRed ? 'Sin conexión · se guarda cuando vuelva' : 'No se pudo guardar')
-        if (!silencioso) alert('No se pudo guardar: ' + (error?.message || 'intentá de nuevo.'))
+        const sinPremium = String(error?.message || '').includes('premium_requerido')
+        setMsg(sinRed ? 'Sin conexión · se guarda cuando vuelva' : sinPremium ? 'Publicar es parte de Premium' : 'No se pudo guardar')
+        if (!silencioso || estado) toast(sinPremium ? 'Publicar es parte de Luma Premium.' : 'No se pudo guardar: ' + (error?.message || 'intentá de nuevo.'), 'error')
         return
       }
       guardadoRef.current = precioVacio ? JSON.stringify({ ...f, precio: '' }) : foto
@@ -205,10 +230,11 @@ type Testimonio = {
       }
       ok = true
       setMsg('✓ Guardado')
+      if (estado === 'publicado') toast(esDescargable ? 'Tu descargable ya está a la venta' : 'Tu curso ya está a la venta', 'success')
     } catch (err) {
       console.error(err)
       setMsg('No se pudo guardar')
-      if (!silencioso) alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')
+      if (!silencioso) toast('No se pudo guardar. Revisá tu conexión e intentá de nuevo.', 'error')
     } finally {
       guardandoRef.current = false
       setGuardando(false)
@@ -259,7 +285,7 @@ type Testimonio = {
         body: JSON.stringify({ courseId: curso.id, accion, accessToken: session?.access_token }),
       })
       const r = await res.json().catch(() => ({ ok: false }))
-      if (!r.ok) { alert(r.mensaje || 'No se pudo completar. Probá de nuevo.'); return }
+      if (!r.ok) { toast(r.mensaje || 'No se pudo completar. Probá de nuevo.', 'error'); return }
       const fallidas = Number(r.fallidas) || 0
       alert(accion === 'aplicar_precio'
         ? `Listo: ${r.cambiadas || 0} alumna(s) pasan a pagar el precio nuevo desde su próxima cuota. Les dejamos un aviso en su cuenta.${fallidas ? `\n\n${fallidas} no se pudieron cambiar: siguen con el precio anterior.` : ''}`
@@ -307,7 +333,8 @@ type Testimonio = {
         .field label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
         .field input,.field textarea,.field select{padding:10px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
         .field textarea{resize:none;min-height:80px}
-        .field-hint{font-size:10px;color:var(--text-muted);margin-top:2px}
+        .field-hint{font-size:11px;color:var(--text-muted);margin-top:2px;line-height:1.45}
+        .section-hint{font-size:11px;color:var(--text-muted);margin:-6px 0 10px;line-height:1.45}
         .section-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;margin-top:24px;padding-bottom:8px;border-bottom:0.5px solid var(--border-light)}
         .bullet-item{display:flex;gap:8px;align-items:center;margin-bottom:6px}
         .bullet-item input{flex:1;padding:8px 10px;border-radius:8px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
@@ -329,17 +356,19 @@ type Testimonio = {
       <div className="field">
         <label>Título *</label>
         <input value={form.titulo || ''} onChange={e => setForm({...form, titulo: e.target.value})}/>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.titulo : AYUDA_CURSO.titulo}</span>
       </div>
       <div className="field">
         <label>Descripción corta</label>
         <textarea value={form.descripcion_corta || ''} maxLength={150}
           onChange={e => setForm({...form, descripcion_corta: e.target.value})}/>
-        <span className="field-hint">{form.descripcion_corta?.length || 0}/150</span>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.descripcionCorta : AYUDA_CURSO.descripcionCorta} · {form.descripcion_corta?.length || 0}/150</span>
       </div>
       <div className="field">
         <label>Descripción completa</label>
         <textarea value={form.descripcion_larga || ''} style={{minHeight:'120px'}}
           onChange={e => setForm({...form, descripcion_larga: e.target.value})}/>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.descripcionLarga : AYUDA_CURSO.descripcionLarga}</span>
       </div>
       <div className="field">
         <label>Imagen de portada</label>
@@ -360,46 +389,64 @@ type Testimonio = {
         <label>Video de presentación (YouTube)</label>
         <input value={form.video_presentacion_url || ''} placeholder="https://youtube.com/watch?v=..."
           onChange={e => setForm({...form, video_presentacion_url: e.target.value})}/>
+        <span className="field-hint">{AYUDA_CURSO.video}</span>
       </div>
 
-      <div className="section-title">Precio y modalidad</div>
+      {esDescargable && (<>
+        <div className="section-title">Archivos</div>
+        <div className="section-hint">Lo que la compradora descarga. Marcá como «bonus» los archivos de regalo: aparecen solos en la franja de bonus de tu página.</div>
+        <ArchivosDescargable cursoId={curso.id} pausado={pausado} onCambio={setArchivos}/>
+      </>)}
+
+      <div className="section-title">{esDescargable ? 'Precio' : 'Precio y modalidad'}</div>
       <div className="precio-row">
         <div className="field">
         <label>Precio base (sin puntos ni comas, ej: 15000) *</label>
         <input type="number" min="0" value={form.precio ?? ''}
             onChange={e => setForm({...form, precio: (e.target.value === '' ? '' : Number(e.target.value)) as any})}/>
+            {(form.precio as any) !== '' && Number(form.precio) > 0 && <span className="field-hint">{esDescargable ? 'Pago único: quien lo compra lo descarga cuando quiera.' : AYUDA_CURSO.precio(form.modalidad)}</span>}
             {(form.precio as any) === '' && (
               <span className="field-hint" style={{color:'#B45309'}}>Escribí el precio (0 si es gratuito).</span>
             )}
             {(form.precio as any) !== '' && form.precio != null && Number(form.precio) === 0 && (
               <span className="field-hint" style={{color:'#059669'}}>
-                Con precio $0 el curso es gratuito: las alumnas se inscriben sin pagar ni esperar aprobación, con acceso para siempre.
+                {esDescargable ? 'Con precio $0 se va a poder descargar gratis (sirve como regalo para juntar contactos).' : 'Con precio $0 el curso es gratuito: las alumnas se inscriben sin pagar ni esperar aprobación, con acceso para siempre.'}
               </span>
             )}
         </div>
         <div className="field">
-        <label>Precio con oferta (el tachado que se muestra arriba)</label>
+        <label>Precio anterior, tachado (opcional)</label>
           <input type="number" min="0" value={form.precio_original || ''}
             onChange={e => setForm({...form, precio_original: e.target.value ? Number(e.target.value) : null})}/>
+          <span className="field-hint">{AYUDA_CURSO.precioTachado}</span>
         </div>
       </div>
-      <div className="field">
+      {'precio_usd' in curso && Number(form.precio) > 0 && (
+        <div className="field">
+          <label>Precio en dólares (opcional)</label>
+          <input type="number" min="0" step="0.01" value={form.precio_usd ?? ''} placeholder="Ej: 40"
+            onChange={e => setForm({...form, precio_usd: e.target.value ? Number(e.target.value) : null})}/>
+          <span className="field-hint">{AYUDA_CURSO.precioUsd}</span>
+        </div>
+      )}
+      {!esDescargable && <div className="field">
         <label>Modalidad</label>
         <select value={form.modalidad} onChange={e => setForm({...form, modalidad: e.target.value})}>
           <option value="unico">Pago único — acceso para siempre</option>
           <option value="suscripcion">Suscripción mensual</option>
         </select>
+        {!((form.precio as any) !== '' && form.precio != null && Number(form.precio) === 0) && <span className="field-hint">{AYUDA_CURSO.modalidad(form.modalidad)}</span>}
         {(form.precio as any) !== '' && form.precio != null && Number(form.precio) === 0 && (
           <span className="field-hint">Al ser gratuito, las alumnas tienen acceso para siempre, sin importar la modalidad.</span>
         )}
-      </div>
+      </div>}
 
-      {form.modalidad === 'suscripcion' && Number(form.precio) > 0 && (
+      {!esDescargable && form.modalidad === 'suscripcion' && Number(form.precio) > 0 && (
         <div style={{border:'0.5px solid var(--border)',borderRadius:'12px',padding:'14px',marginBottom:'16px',background:'var(--bg-input)'}}>
           <label style={{display:'flex',alignItems:'flex-start',gap:'10px',cursor:'pointer'}}>
             <input type="checkbox" checked={!!form.cobro_automatico} disabled={revisandoMP}
               onChange={e => cambiarCobroAutomatico(e.target.checked)}
-              style={{width:'18px',height:'18px',marginTop:'2px',flexShrink:0,accentColor:'#8B5CF6'}}/>
+              style={{width:'18px',height:'18px',marginTop:'2px',flexShrink:0,accentColor:'var(--accent)'}}/>
             <span>
               <span style={{display:'block',fontSize:'13px',fontWeight:700,color:'var(--text-primary)'}}>🔁 Cobro automático con Mercado Pago</span>
               <span style={{display:'block',fontSize:'11.5px',color:'var(--text-muted)',lineHeight:1.55,marginTop:'4px'}}>
@@ -425,6 +472,7 @@ type Testimonio = {
         </div>
       )}
 
+      {!esDescargable && <>
       <div className="section-title">Detalles</div>
       <div className="precio-row">
         <div className="field">
@@ -439,10 +487,13 @@ type Testimonio = {
           <label>Duración estimada (horas)</label>
           <input type="number" min="0" step="0.5" value={form.duracion_estimada_horas || ''}
             onChange={e => setForm({...form, duracion_estimada_horas: e.target.value ? Number(e.target.value) : null})}/>
+          <span className="field-hint">{AYUDA_CURSO.duracion}</span>
         </div>
       </div>
+      </>}
 
       <div className="section-title">Para quién es</div>
+      <div className="section-hint">{AYUDA_CURSO.listas}</div>
       {form.para_quien.map((item, i) => (
         <div key={i} className="bullet-item">
           <input value={item} placeholder="Ej: Para vos si querés aprender tarot desde cero"
@@ -452,16 +503,17 @@ type Testimonio = {
       ))}
       <button className="btn-add" onClick={() => agregarItem('para_quien')}><Plus size={11}/>Agregar</button>
 
-      <div className="section-title">Qué vas a aprender</div>
+      <div className="section-title">{esDescargable ? 'Qué vas a encontrar' : 'Qué vas a aprender'}</div>
       {form.que_aprenderas.map((item, i) => (
         <div key={i} className="bullet-item">
-          <input value={item} placeholder="Ej: Leer las 78 cartas del tarot"
+          <input value={item} placeholder={esDescargable ? 'Ej: 12 rituales simples para cada luna nueva' : 'Ej: Leer las 78 cartas del tarot'}
             onChange={e => editarItem('que_aprenderas', i, e.target.value)}/>
           {form.que_aprenderas.length > 1 && <button className="btn-remove" onClick={() => eliminarItem('que_aprenderas', i)}><X size={10}/></button>}
         </div>
       ))}
       <button className="btn-add" onClick={() => agregarItem('que_aprenderas')}><Plus size={11}/>Agregar</button>
 
+      {!esDescargable && <>
       <div className="section-title">Requisitos previos</div>
       {form.requisitos.map((item, i) => (
         <div key={i} className="bullet-item">
@@ -471,8 +523,10 @@ type Testimonio = {
         </div>
       ))}
       <button className="btn-add" onClick={() => agregarItem('requisitos')}><Plus size={11}/>Agregar</button>
+      </>}
 
       <div className="section-title">Garantía</div>
+      <div className="section-hint">{AYUDA_CURSO.garantia}</div>
       <div className="precio-row">
         <div className="field">
           <label>Días de garantía</label>
@@ -485,6 +539,14 @@ type Testimonio = {
             onChange={e => setForm({...form, politica_reembolso: e.target.value})}/>
         </div>
       </div>
+
+      {'bonus' in curso && (<>
+        <div className="section-title">Bonus de regalo</div>
+        <div className="section-hint">{esDescargable
+          ? 'Regalos que suman valor: aparecen en tu página con su valor tachado. Los archivos marcados como bonus se muestran solos; acá sumás los que no son archivo (un grupo, un encuentro en vivo).'
+          : 'Regalos que suman valor: aparecen en tu página con su valor tachado y «de regalo». El contenido del bonus va en un módulo «BONUS» del curso.'}</div>
+        <BonusEditor value={form.bonus} onChange={b => setForm(prev => ({ ...prev, bonus: b }))}/>
+      </>)}
 
       <div className="section-title">Testimonios</div>
 
@@ -551,7 +613,7 @@ type Testimonio = {
                 Tenés {pregunta.suscriptas} alumna{pregunta.suscriptas !== 1 ? 's' : ''} con cobro automático. ¿Qué precio pagan ellas? Las alumnas nuevas pagan el precio nuevo igual.
               </p>
               <button disabled={resolviendo} onClick={() => resolverPregunta(null)}
-                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid #8B5CF6',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid var(--accent)',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
                 Mantienen su precio de ${pregunta.precioAntes.toLocaleString('es-AR')}
                 <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px'}}>Recomendado: es lo que menos reclamos genera</span>
               </button>
@@ -566,7 +628,7 @@ type Testimonio = {
                 Tenés {pregunta.suscriptas} alumna{pregunta.suscriptas !== 1 ? 's' : ''} con cobro automático mensual. ¿Qué hacemos con ellas?
               </p>
               <button disabled={resolviendo} onClick={() => resolverPregunta(null)}
-                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid #8B5CF6',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
+                style={{width:'100%',padding:'12px',borderRadius:'12px',border:'2px solid var(--accent)',background:'var(--accent-light)',color:'var(--accent)',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:'8px',textAlign:'left'}}>
                 Siguen pagando por mes
                 <span style={{display:'block',fontSize:'11px',fontWeight:500,marginTop:'2px'}}>Sus suscripciones siguen como están. Las nuevas pagan una sola vez.</span>
               </button>
@@ -582,7 +644,10 @@ type Testimonio = {
 
       <div className="bottom-bar">
         {msg && <span style={{fontSize:'12px',color: msg.startsWith('✓') ? '#10B981' : msg === 'Guardando…' ? 'var(--text-muted)' : '#B45309',fontWeight:600,background:'var(--bg-card)',padding:'4px 10px',borderRadius:'20px'}}>{msg}</span>}
-        {curso.estado !== 'publicado' && (
+        {pausado && curso.estado !== 'publicado' && (
+          <span style={{fontSize:'12px',color:'#92400E',background:'#FFFBEB',border:'0.5px solid #FDE68A',padding:'6px 10px',borderRadius:'10px'}}>En pausa: publicar es parte de Premium</span>
+        )}
+        {!pausado && curso.estado !== 'publicado' && (
           <button onClick={() => guardar('publicado')} disabled={guardando}
             style={{padding:'10px 18px',background:'#DCFCE7',color:'#166534',border:'0.5px solid #86EFAC',borderRadius:'10px',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
             Publicar
@@ -595,7 +660,7 @@ type Testimonio = {
           </button>
         )}
         <button onClick={() => guardar()} disabled={guardando}
-          style={{padding:'10px 18px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 18px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           {guardando ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>

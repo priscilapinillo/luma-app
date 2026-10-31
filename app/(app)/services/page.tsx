@@ -1,8 +1,10 @@
 'use client'
 
+import CuponesPanel from '@/components/CuponesPanel'
 import { useEffect, useState } from 'react'
 import { Plus, X, Edit2, Trash2, TrendingUp, BarChart2, DollarSign, Award, Clock, Package } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { toast } from '@/components/ToastProvider'
 
 type Servicio = {
   id: string; nombre: string; descripcion: string
@@ -43,6 +45,8 @@ export default function ServiciosPage() {
   const [desdePagina, setDesdePagina] = useState(false)
   useEffect(() => {
     try { setDesdePagina(new URLSearchParams(window.location.search).get('desde') === 'pagina') } catch {}
+    // desde Cursos → "Cupones": baja directo a la sección
+    try { if (new URLSearchParams(window.location.search).get('ver') === 'cupones') setTimeout(() => document.getElementById('cupones')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600) } catch {}
   }, [])
   const [modalOpen, setModalOpen] = useState(false)
   const [editando, setEditando] = useState<Servicio | null>(null)
@@ -50,12 +54,15 @@ export default function ServiciosPage() {
   const [confirmBorrar, setConfirmBorrar] = useState<Servicio | null>(null)
   const [isDark, setIsDark] = useState(false)
   const [configAgenda, setConfigAgenda] = useState({ pausa_entre_turnos: null as number | null, max_entregas_activas: null as number | null })
+  // máximo de sesiones EN VIVO por día (null = sin límite). maxDiaOk = false si la base todavía no tiene la columna
+  const [maxSesionesDia, setMaxSesionesDia] = useState<number | null>(null)
+  const [maxDiaOk, setMaxDiaOk] = useState(false)
   const [guardandoConfig, setGuardandoConfig] = useState(false)
   const [msgConfig, setMsgConfig] = useState('')
 
   const [form, setForm] = useState({
     nombre: '', descripcion: '', duracion_estimada: 60,
-    precio_base: 0, color: '#8B5CF6', activo: true,
+    precio_base: 0, color: 'var(--accent)', activo: true,
     tipo_servicio: 'vivo' as 'vivo' | 'entrega',
     plazo_horas: 24,
     precio_usd: null as number | null,
@@ -97,6 +104,11 @@ export default function ServiciosPage() {
         pausa_entre_turnos: prof.pausa_entre_turnos || null,
         max_entregas_activas: prof.max_entregas_activas || null,
       })
+      // aparte: si la columna todavía no existe, el resto carga igual y este control no aparece
+      try {
+        const { data: lim, error: errLim } = await supabase.from('therapist_profiles').select('max_sesiones_dia').eq('user_id', user.id).maybeSingle()
+        if (!errLim) { setMaxSesionesDia((lim as any)?.max_sesiones_dia || null); setMaxDiaOk(true) }
+      } catch {}
       if (servs) setServicios(servs)
       if (servs && sess) {
         const stats: EstadServicio[] = servs.map(s => {
@@ -116,7 +128,7 @@ export default function ServiciosPage() {
   }
 
   function abrirNuevo() {
-    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: '#8B5CF6', activo: true, tipo_servicio: 'vivo', plazo_horas: 24, precio_usd: null })
+    setForm({ nombre: '', descripcion: '', duracion_estimada: 60, precio_base: 0, color: 'var(--accent)', activo: true, tipo_servicio: 'vivo', plazo_horas: 24, precio_usd: null })
     setEditando(null)
     setModalOpen(true)
   }
@@ -125,7 +137,7 @@ export default function ServiciosPage() {
     setForm({
       nombre: s.nombre, descripcion: s.descripcion || '',
       duracion_estimada: s.duracion_estimada || 60,
-      precio_base: s.precio_base || 0, color: s.color || '#8B5CF6',
+      precio_base: s.precio_base || 0, color: s.color || 'var(--accent)',
       activo: s.activo,
       tipo_servicio: s.tipo_servicio || 'vivo',
       plazo_horas: s.plazo_horas || 24,
@@ -142,14 +154,23 @@ export default function ServiciosPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      await supabase.from('therapist_profiles').update({
+      const { error: errConfig } = await supabase.from('therapist_profiles').update({
         pausa_entre_turnos: configAgenda.pausa_entre_turnos,
         max_entregas_activas: configAgenda.max_entregas_activas,
       }).eq('user_id', user.id)
+      if (errConfig) { console.error(errConfig); toast('No se pudo guardar la configuración. Revisá tu conexión e intentá de nuevo.', 'error'); return }
+      // aparte: si fallara, lo de arriba ya quedó guardado
+      if (maxDiaOk) {
+        const valor = maxSesionesDia && maxSesionesDia >= 1 ? Math.min(Math.floor(maxSesionesDia), 50) : null
+        const { error: errMax } = await supabase.from('therapist_profiles').update({ max_sesiones_dia: valor }).eq('user_id', user.id)
+        if (errMax) { console.error(errMax); toast('Se guardó la pausa y las entregas, pero no el máximo de sesiones por día. Probá de nuevo.', 'error'); return }
+      }
       setMsgConfig('Guardado')
+      toast('Configuración de agenda guardada')
       setTimeout(() => setMsgConfig(''), 2000)
     } catch(err) {
       console.error(err)
+      toast('No se pudo guardar la configuración. Revisá tu conexión e intentá de nuevo.', 'error')
     } finally {
       setGuardandoConfig(false)
     }
@@ -157,12 +178,12 @@ export default function ServiciosPage() {
 
 
   async function guardar() {
-    if (!form.nombre) { alert('El nombre es obligatorio'); return }
+    if (!form.nombre) { toast('El nombre es obligatorio', 'error'); return }
     setGuardando(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setGuardando(false); return }
+      if (!user) { setGuardando(false); toast('Tu sesión expiró. Volvé a iniciar sesión.', 'error'); return }
       const datos = {
         nombre: form.nombre, descripcion: form.descripcion,
         duracion_estimada: form.tipo_servicio === 'vivo' ? form.duracion_estimada : null,
@@ -173,15 +194,19 @@ export default function ServiciosPage() {
       }
       if (editando) {
         const { data } = await supabase.from('services').update(datos).eq('id', editando.id).select().single()
-        if (data) setServicios(prev => prev.map(s => s.id === data.id ? data : s))
+        if (!data) { toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error'); return } // el formulario queda abierto, no se pierde lo escrito
+        setServicios(prev => prev.map(s => s.id === data.id ? data : s))
       } else {
         const { data } = await supabase.from('services').insert({ user_id: user.id, ...datos }).select().single()
-        if (data) setServicios(prev => [...prev, data])
+        if (!data) { toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error'); return }
+        setServicios(prev => [...prev, data])
       }
       setModalOpen(false)
+      toast(editando ? 'Servicio actualizado' : 'Servicio creado')
       cargarDatos()
     } catch (err) {
       console.error('Error guardando:', err)
+      toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error')
     } finally {
       setGuardando(false)
     }
@@ -252,27 +277,27 @@ export default function ServiciosPage() {
         .s-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
         .s-title{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .s-sub{font-size:12px;color:var(--text-muted);margin-top:3px}
-        .s-new-btn{display:flex;align-items:center;gap:6px;padding:10px 16px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s;white-space:nowrap}
-        .s-new-btn:hover{box-shadow:0 6px 18px rgba(139,92,246,0.4);transform:translateY(-1px)}
+        .s-new-btn{display:flex;align-items:center;gap:6px;padding:10px 16px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(var(--accent-rgb),0.3);transition:all 0.15s;white-space:nowrap}
+        .s-new-btn:hover{box-shadow:0 6px 18px rgba(var(--accent-rgb),0.4);transform:translateY(-1px)}
         .s-section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px}
         .s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:28px}
-        .sc{border-radius:20px;overflow:hidden;border:0.5px solid rgba(139,92,246,0.15);box-shadow:0 2px 12px var(--shadow);transition:all 0.15s;position:relative}
+        .sc{border-radius:20px;overflow:hidden;border:0.5px solid rgba(var(--accent-rgb),0.15);box-shadow:0 2px 12px var(--shadow);transition:all 0.15s;position:relative}
         .sc:hover{box-shadow:0 8px 24px var(--shadow);transform:translateY(-2px)}
         .sc.inactivo{opacity:0.55}
         .sc-inner{padding:20px}
         .sc-top-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
-        .sc-badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:var(--text-primary);border:0.5px solid rgba(139,92,246,0.2);backdrop-filter:blur(4px)}
+        .sc-badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:var(--text-primary);border:0.5px solid rgba(var(--accent-rgb),0.2);backdrop-filter:blur(4px)}
         .sc-badge.entrega{background:rgba(251,191,36,0.15);color:#B45309;border-color:rgba(251,191,36,0.3)}
         html.dark .sc-badge.entrega{color:#FCD34D}
         .sc-actions-top{display:flex;gap:5px}
-        .sc-btn{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);border:0.5px solid rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);transition:all 0.15s;backdrop-filter:blur(4px)}
+        .sc-btn{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.2);border:0.5px solid rgba(var(--accent-rgb),0.15);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary);transition:all 0.15s;backdrop-filter:blur(4px)}
         .sc-btn:hover{background:var(--bg-card);color:var(--accent);border-color:var(--accent)}
         .sc-btn.danger:hover{background:var(--bg-card);color:#EF4444;border-color:#EF4444}
         .sc-name{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;margin-bottom:6px;line-height:1.2;font-family:'Manrope',sans-serif}
         .sc-desc{font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:14px;min-height:18px}
         .sc-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-        .sc-tag{font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:var(--text-secondary);border:0.5px solid rgba(139,92,246,0.2);font-weight:500;backdrop-filter:blur(4px)}
-        .sc-footer{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:0.5px solid rgba(139,92,246,0.1)}
+        .sc-tag{font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:var(--text-secondary);border:0.5px solid rgba(var(--accent-rgb),0.2);font-weight:500;backdrop-filter:blur(4px)}
+        .sc-footer{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:0.5px solid rgba(var(--accent-rgb),0.1)}
         .sc-precio{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .sc-precio-label{font-size:10px;color:var(--text-muted);margin-top:1px}
         .sc-toggle{padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:0.5px solid;font-family:inherit;transition:all 0.15s}
@@ -293,7 +318,7 @@ export default function ServiciosPage() {
         html.dark .stat-card.green{background:#052015;border-color:#065F46}
         html.dark .stat-card.yellow{background:#1A1200;border-color:#3D2E00}
         .stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-        .stat-icon.purple{background:rgba(139,92,246,0.15);color:#7C3AED}
+        .stat-icon.purple{background:rgba(var(--accent-rgb),0.15);color:var(--accent-strong)}
         .stat-icon.green{background:rgba(16,185,129,0.15);color:#059669}
         .stat-icon.yellow{background:rgba(245,158,11,0.15);color:#D97706}
         .stat-num{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;line-height:1;font-family:'Manrope',sans-serif}
@@ -302,15 +327,15 @@ export default function ServiciosPage() {
         .ranking-list{display:flex;flex-direction:column;gap:10px}
         .ranking-item{display:flex;align-items:center;gap:12px}
         .ranking-pos{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
-        .ranking-pos.top{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white}
+        .ranking-pos.top{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white}
         .ranking-pos.rest{background:var(--accent-light);color:var(--text-secondary)}
         .ranking-name{font-size:13px;font-weight:600;color:var(--text-primary);min-width:140px}
         .ranking-bar-wrap{flex:1;height:8px;background:var(--accent-light);border-radius:20px;overflow:hidden}
         .ranking-bar{height:100%;border-radius:20px;transition:width 0.6s ease}
         .ranking-count{font-size:12px;font-weight:600;color:var(--text-primary);min-width:50px;text-align:right}
         .ranking-ingresos{font-size:11px;color:var(--text-muted);min-width:70px;text-align:right}
-        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-        .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:460px;max-height:80vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+        .mo-box{background:var(--bg-card);border-radius:20px;padding:24px;width:460px;max-height:80vh;overflow-y:auto;box-shadow:0 32px 80px rgba(var(--shadow-rgb),0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
         .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
@@ -323,8 +348,8 @@ export default function ServiciosPage() {
         .color-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
         .color-dot{width:28px;height:28px;border-radius:50%;cursor:pointer;transition:all 0.15s;border:2.5px solid transparent}
         .color-dot.sel{border-color:var(--text-primary);transform:scale(1.15)}
-        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s;margin-top:4px}
-        .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
+        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(var(--accent-rgb),0.35);transition:all 0.15s;margin-top:4px}
+        .save-btn:hover{box-shadow:0 6px 20px rgba(var(--accent-rgb),0.45);transform:translateY(-1px)}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
         .activo-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-input);border-radius:10px;border:0.5px solid var(--border-light);margin-bottom:14px}
         .activo-label{font-size:13px;font-weight:500;color:var(--text-primary)}
@@ -348,7 +373,7 @@ export default function ServiciosPage() {
       `}</style>
 
       {desdePagina && (
-        <a href="/settings?bloque=horarios" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(139,92,246,0.45)'}}>
+        <a href="/settings?bloque=horarios" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(var(--accent-rgb),0.45)'}}>
           ← Volver a Página de reservas
         </a>
       )}
@@ -366,54 +391,69 @@ export default function ServiciosPage() {
 
 
 
-      {/* CONFIGURACIÓN AVANZADA */}
-<div style={{background:'var(--bg-card)',borderRadius:'16px',padding:'20px 20px 16px',border:'0.5px solid var(--border-light)',marginBottom:'20px'}}>
-  <div style={{fontSize:'12px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'16px'}}>Configuración de agenda</div>
-  
-  <div style={{marginBottom:'16px'}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-      <div>
-        <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)'}}>Pausa entre turnos</div>
-        <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.5'}}>Tiempo libre después de cada sesión para prepararte.</div>
-      </div>
-      <div style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',minWidth:'40px',textAlign:'right'}}>
-      {configAgenda.pausa_entre_turnos ? `${configAgenda.pausa_entre_turnos} min` : 'Sin pausa'}
-      </div>
+      {/* CONFIGURACIÓN DE AGENDA */}
+<div className="cfg-agenda">
+  <style>{`
+    .cfg-agenda{background:var(--bg-card);border-radius:16px;padding:20px 20px 16px;border:0.5px solid var(--border-light);margin-bottom:20px}
+    .cfg-tit{font-size:15px;font-weight:800;color:var(--text-primary)}
+    .cfg-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px}
+    .cfg-item{padding:16px 0;border-top:0.5px solid var(--border-light)}
+    .cfg-item:first-of-type{margin-top:14px}
+    .cfg-fila{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+    .cfg-nombre{font-size:13.5px;font-weight:700;color:var(--text-primary)}
+    .cfg-valor{font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap}
+    .cfg-desc{font-size:12px;color:var(--text-muted);line-height:1.5;margin:6px 0 10px}
+    .cfg-rango{width:100%;accent-color:var(--accent)}
+    .cfg-extremos{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-muted);margin-top:2px}
+  `}</style>
+  <div className="cfg-tit">Configuración de agenda</div>
+  <div className="cfg-sub">Personalizá cómo se organizan tus turnos y servicios de entrega pendientes.</div>
+
+  <div className="cfg-item">
+    <div className="cfg-fila">
+      <div className="cfg-nombre">Pausa entre turnos</div>
+      <div className="cfg-valor">{configAgenda.pausa_entre_turnos ? `${configAgenda.pausa_entre_turnos} min` : 'Sin pausa'}</div>
     </div>
-    <input type="range" min="0" max="30" step="5"
+    <div className="cfg-desc">Agregá un tiempo libre entre sesiones en vivo para descansar, prepararte o evitar que los turnos queden demasiado juntos.</div>
+    <input type="range" min="0" max="30" step="5" className="cfg-rango" aria-label="Pausa entre turnos"
       value={configAgenda.pausa_entre_turnos || 0}
-      onChange={e => setConfigAgenda({...configAgenda, pausa_entre_turnos: Number(e.target.value) || null})}
-      style={{width:'100%',accentColor:'var(--accent)'}}/>
-    <div style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>
-      <span>Sin pausa</span><span>30 min</span>
-    </div>
+      onChange={e => setConfigAgenda({...configAgenda, pausa_entre_turnos: Number(e.target.value) || null})}/>
+    <div className="cfg-extremos"><span>Sin pausa</span><span>30 min</span></div>
   </div>
 
-  <div>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
-      <div>
-        <div style={{fontSize:'13px',fontWeight:600,color:'var(--text-primary)'}}>Máximo de entregas pendientes</div>
-        <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.5'}}>Aplica solo a los servicios que no tienen fecha y hora fija de entrega. Cuando llegás a este número, tu página deja de aceptar nuevos pedidos hasta que proceses alguno.</div>
+  {maxDiaOk && (
+    <div className="cfg-item">
+      <div className="cfg-fila">
+        <div className="cfg-nombre">Sesiones en vivo por día</div>
+        <div className="cfg-valor">{maxSesionesDia ? `${maxSesionesDia} por día` : 'Sin límite'}</div>
       </div>
-      <div style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',minWidth:'40px',textAlign:'right'}}>
-      {configAgenda.max_entregas_activas ? configAgenda.max_entregas_activas : 'Sin límite'}
-      </div>
+      <div className="cfg-desc">Definí cuántas sesiones en vivo aceptás por día para organizar tu disponibilidad y evitar sobrecargarte de turnos.</div>
+      <input type="range" min="0" max="24" step="1" className="cfg-rango" aria-label="Sesiones en vivo por día"
+        value={maxSesionesDia || 0}
+        onChange={e => setMaxSesionesDia(Number(e.target.value) || null)}/>
+      <div className="cfg-extremos"><span>Sin límite</span><span>24 por día</span></div>
     </div>
-    <input type="range" min="0" max="30" step="1"
+  )}
+
+  <div className="cfg-item">
+    <div className="cfg-fila">
+      <div className="cfg-nombre">Entregas pendientes</div>
+      <div className="cfg-valor">{configAgenda.max_entregas_activas ? `${configAgenda.max_entregas_activas} pendientes` : 'Sin límite'}</div>
+    </div>
+    <div className="cfg-desc">Establecé cuántos servicios de entrega podés tener pendientes al mismo tiempo, para aceptar nuevas solicitudes sin acumular más trabajo del que podés gestionar.</div>
+    <input type="range" min="0" max="30" step="1" className="cfg-rango" aria-label="Entregas pendientes"
       value={configAgenda.max_entregas_activas || 0}
-      onChange={e => setConfigAgenda({...configAgenda, max_entregas_activas: Number(e.target.value) || null})}
-      style={{width:'100%',accentColor:'var(--accent)'}}/>
-    <div style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>
-      <span>Sin límite</span><span>30</span>
-    </div>
+      onChange={e => setConfigAgenda({...configAgenda, max_entregas_activas: Number(e.target.value) || null})}/>
+    <div className="cfg-extremos"><span>Sin límite</span><span>30 pendientes</span></div>
   </div>
 
   <button onClick={guardarConfigAgenda} disabled={guardandoConfig}
-    style={{marginTop:'14px',padding:'8px 16px',background:'var(--accent)',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+    style={{marginTop:'6px',width:'100%',padding:'12px 16px',background:'var(--accent)',color:'white',border:'none',borderRadius:'12px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
     {guardandoConfig ? 'Guardando...' : 'Guardar configuración'}
-    </button>
-    {msgConfig && <span style={{fontSize:'12px',color:'#10B981',marginLeft:'8px'}}>✓ {msgConfig}</span>}
+  </button>
 </div>  
+
+        <CuponesPanel/>
 
         {activos.length > 0 && (<>
           <div className="s-section-label">Activos</div>
@@ -501,7 +541,7 @@ export default function ServiciosPage() {
 
         {estadisticas.length > 0 && (
           <div className="stats-section">
-            <div className="stats-title"><BarChart2 size={16} color="#8B5CF6"/>Estadísticas de servicios</div>
+            <div className="stats-title"><BarChart2 size={16} color="var(--accent)"/>Estadísticas de servicios</div>
             <div className="stats-sub">Basado en todas las sesiones registradas hasta hoy</div>
             <div className="stats-summary" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'15px',marginBottom:'20px'}}>
               <div className="stat-card purple">
@@ -524,7 +564,7 @@ export default function ServiciosPage() {
                   <div className={`ranking-pos ${i === 0 ? 'top' : 'rest'}`}>{i+1}</div>
                   <div className="ranking-name">{e.nombre}</div>
                   <div className="ranking-bar-wrap">
-                    <div className="ranking-bar" style={{width:`${(e.total_sesiones/maxSesiones)*100}%`,background:e.color||'#8B5CF6',opacity:0.7}}/>
+                    <div className="ranking-bar" style={{width:`${(e.total_sesiones/maxSesiones)*100}%`,background:e.color||'var(--accent)',opacity:0.7}}/>
                   </div>
                   <div className="ranking-count">{e.total_sesiones} ses.</div>
                   <div className="ranking-ingresos">${e.ingresos_total.toLocaleString()}</div>

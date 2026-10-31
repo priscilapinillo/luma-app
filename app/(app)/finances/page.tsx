@@ -10,11 +10,13 @@ type Sesion = {
   servicio_nombre: string; precio: number
   estado_pago: string; sena: number; duracion: number
   patient_id: string
+  moneda?: string | null; precio_usd?: number | null
 }
 
 type PagoCurso = {
   id: string; monto: number; fecha: string
   metodo: string; tipo: string; course_id: string | null
+  monto_usd?: number | null
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -61,6 +63,8 @@ function pct(actual: number, anterior: number) {
 export default function FinanzasPage() {
   const hoy = new Date()
   const [sesiones, setSesiones] = useState<Sesion[]>([])
+  // turnos cobrados en dólares: van aparte y NUNCA se suman a los pesos
+  const [sesionesUSD, setSesionesUSD] = useState<Sesion[]>([])
   const [pacientes, setPacientes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState<'semana' | 'mes' | 'anio'>('mes')
@@ -87,7 +91,7 @@ export default function FinanzasPage() {
       const [{ data: sess }, { data: pacs }, { data: pagosC }, { data: misCursos }] = await Promise.all([
         supabase.from('sessions').select('*, public_bookings(estado)').eq('user_id', user.id).order('fecha', { ascending: true }),
         supabase.from('patients').select('id,nombre,apellido').eq('user_id', user.id),
-        supabase.from('course_payments').select('id,monto,fecha,metodo,tipo,course_id').eq('terapeuta_id', user.id),
+        supabase.from('course_payments').select('*').eq('terapeuta_id', user.id),
         supabase.from('courses').select('id,titulo').eq('user_id', user.id),
       ])
 
@@ -102,7 +106,9 @@ export default function FinanzasPage() {
       if (sess) {
         // los pagos con Mercado Pago que la clienta no terminó no son plata pendiente: se muestran aparte y no suman
         const esMPSinCompletar = (s: any) => s.metodo_pago === 'mercadopago' && s.estado_pago === 'pendiente' && (s.public_bookings?.length || 0) > 0
-        const validas = sess.filter((s: any) => s.estado_sesion !== 'cancelada')
+        const todas = sess.filter((s: any) => s.estado_sesion !== 'cancelada')
+        setSesionesUSD(todas.filter((s: any) => s.moneda === 'USD'))
+        const validas = todas.filter((s: any) => s.moneda !== 'USD')
         setSesiones(validas.filter((s: any) => !esMPSinCompletar(s)))
         setMpSinCompletar(validas.filter(esMPSinCompletar))
       }
@@ -164,6 +170,18 @@ export default function FinanzasPage() {
     return { pagosActual: filtrar(actual.inicio, actual.fin), pagosAnterior: filtrar(anterior.inicio, anterior.fin) }
   }, [pagosCursos, periodo, offset])
   const cursosCobrado = pagosActual.reduce((a, p) => a + (Number(p.monto) || 0), 0)
+  // dólares del período (turnos confirmados + pagos de cursos en USD), siempre aparte de los pesos
+  const usdDelPeriodo = useMemo(() => {
+    const { inicio, fin } = rangoPeriodo(periodo, offset)
+    const enRango = (f: Date) => f >= inicio && f <= fin
+    const ses = sesionesUSD.filter(s => enRango(parseFecha(s.fecha)))
+    const cobradoSes = ses.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (Number(s.precio_usd) || 0), 0)
+    const pendienteSes = ses.filter(s => s.estado_pago !== 'pagado').reduce((a, s) => a + (Number(s.precio_usd) || 0), 0)
+    const cursos = pagosCursos.filter(p => Number(p.monto_usd) > 0 && enRango(new Date(p.fecha))).reduce((a, p) => a + (Number(p.monto_usd) || 0), 0)
+    return { cobrado: cobradoSes + cursos, pendiente: pendienteSes, sesiones: ses.length, cursos }
+  }, [sesionesUSD, pagosCursos, periodo, offset])
+  const hayUSD = sesionesUSD.length > 0 || pagosCursos.some(p => Number(p.monto_usd) > 0)
+  const formatUSD = (n: number) => 'USD ' + (Math.round(n * 100) / 100).toLocaleString('es-AR')
   const cursosCobradoAnterior = pagosAnterior.reduce((a, p) => a + (Number(p.monto) || 0), 0)
 
   const cobradoSesiones = sesionesActual.filter(s => s.estado_pago === 'pagado').reduce((a, s) => a + (s.precio || 0), 0)
@@ -362,13 +380,13 @@ export default function FinanzasPage() {
         .f-sub{font-size:12px;color:var(--text-muted);margin-top:3px}
         .f-periodo{display:flex;gap:4px;background:var(--bg-card);padding:4px;border-radius:12px;border:0.5px solid var(--border-light);box-shadow:0 2px 8px var(--shadow)}
         .f-per-btn{padding:7px 16px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s}
-        .f-per-btn.active{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;box-shadow:0 2px 8px rgba(139,92,246,0.25)}
+        .f-per-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;box-shadow:0 2px 8px rgba(var(--accent-rgb),0.25)}
 
         .z-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
 
         .resumen-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
         .r-card{background:var(--bg-card);border-radius:18px;padding:16px 18px;border:0.5px solid var(--border-light);box-shadow:0 2px 12px var(--shadow)}
-        .r-card.accent{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border:none;box-shadow:0 6px 20px rgba(139,92,246,0.3)}
+        .r-card.accent{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none;box-shadow:0 6px 20px rgba(var(--accent-rgb),0.3)}
         .r-card-label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
         .r-card.accent .r-card-label{color:rgba(255,255,255,0.7)}
         .r-card-value{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;line-height:1;font-family:'Manrope',sans-serif}
@@ -389,8 +407,8 @@ export default function FinanzasPage() {
         .evol-section{background:var(--bg-card);border-radius:20px;padding:20px 22px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
         .evol-bars{display:flex;align-items:flex-end;gap:4px;height:100px;margin-top:16px}
         .evol-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-        .evol-bar{width:100%;border-radius:6px 6px 0 0;background:linear-gradient(180deg,#8B5CF6,#A78BFA);transition:height 0.5s ease;min-height:3px;cursor:pointer;position:relative}
-        .evol-bar:hover{background:linear-gradient(180deg,#7C3AED,#8B5CF6)}
+        .evol-bar{width:100%;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--accent),var(--accent-2));transition:height 0.5s ease;min-height:3px;cursor:pointer;position:relative}
+        .evol-bar:hover{background:linear-gradient(180deg,var(--accent-strong),var(--accent))}
         .evol-bar.empty{background:var(--accent-light)}
         .evol-label{font-size:9px;color:var(--text-muted);text-align:center;white-space:nowrap}
         .evol-tooltip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--text-primary);color:var(--bg);font-size:10px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity 0.15s}
@@ -400,11 +418,11 @@ export default function FinanzasPage() {
         .serv-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
         .serv-item{display:flex;align-items:center;gap:12px}
         .serv-pos{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
-        .serv-pos.top{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white}
+        .serv-pos.top{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white}
         .serv-pos.rest{background:var(--accent-light);color:var(--text-secondary)}
         .serv-name{font-size:13px;font-weight:600;color:var(--text-primary);min-width:160px}
         .serv-bar-wrap{flex:1;height:8px;background:var(--accent-light);border-radius:20px;overflow:hidden}
-        .serv-bar{height:100%;background:linear-gradient(90deg,#8B5CF6,#A78BFA);border-radius:20px;transition:width 0.6s ease}
+        .serv-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:20px;transition:width 0.6s ease}
         .serv-count{font-size:12px;font-weight:600;color:var(--text-primary);min-width:60px;text-align:right}
         .serv-money{font-size:11px;color:#059669;font-weight:600;min-width:80px;text-align:right}
 
@@ -413,7 +431,7 @@ export default function FinanzasPage() {
         .rk-item:last-child{padding-bottom:0}
         .rk-item:not(:last-child)::before{content:'';position:absolute;left:15px;top:34px;bottom:2px;width:1.5px;background:var(--border-light)}
         .rk-num{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary);background:var(--bg-card);flex-shrink:0;position:relative;z-index:1;font-family:'Manrope',sans-serif}
-        .rk-num.top{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border:none;color:white;box-shadow:0 3px 10px rgba(139,92,246,0.3)}
+        .rk-num.top{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none;color:white;box-shadow:0 3px 10px rgba(var(--accent-rgb),0.3)}
         .rk-body{min-width:0;flex:1;padding-top:5px}
         .rk-nombre{font-size:14px;font-weight:700;color:var(--text-primary);line-height:1.3;overflow-wrap:anywhere}
         .rk-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px}
@@ -425,7 +443,7 @@ export default function FinanzasPage() {
         .cli-section{background:var(--bg-card);border-radius:20px;padding:20px 22px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
         .cli-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:14px}
         .cli-card{background:var(--bg-input);border-radius:14px;padding:14px;border:0.5px solid var(--border-light);text-align:left}
-        .cli-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),#DDD6FE);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px}
+        .cli-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),var(--border));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px}
         .cli-name{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .cli-stats{display:flex;justify-content:flex-start;align-items:flex-start;gap:18px;flex-wrap:wrap;text-align:left}
         .cli-stat-val{font-size:14px;font-weight:700;color:var(--text-primary)}
@@ -442,7 +460,7 @@ export default function FinanzasPage() {
         .agenda-dia-monto{font-size:14px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
         .agenda-dia.hoy .agenda-dia-monto{color:var(--accent)}
         .agenda-dia-scount{font-size:10px;color:var(--text-muted);margin-top:2px}
-        .agenda-dia-bar{height:3px;border-radius:3px;background:linear-gradient(90deg,#8B5CF6,#A78BFA);margin-top:8px}
+        .agenda-dia-bar{height:3px;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));margin-top:8px}
 
         .meta-section{background:var(--bg-card);border-radius:20px;padding:20px 22px;box-shadow:0 4px 20px var(--shadow);border:0.5px solid var(--border-light);margin-bottom:24px}
         .meta-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -453,7 +471,7 @@ export default function FinanzasPage() {
         .meta-edit-btn{padding:7px 14px;border-radius:10px;background:var(--accent-light);color:var(--accent);border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
         .meta-edit-btn:hover{background:var(--accent-hover)}
         .meta-bar-wrap{height:12px;background:var(--accent-light);border-radius:20px;overflow:hidden;margin-bottom:14px}
-        .meta-bar{height:100%;background:linear-gradient(90deg,#8B5CF6,#A78BFA);border-radius:20px;transition:width 0.8s ease}
+        .meta-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:20px;transition:width 0.8s ease}
         .meta-bar.goal{background:linear-gradient(90deg,#10B981,#34D399)}
         .meta-info{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
         .meta-info-item{background:var(--bg-input);border-radius:10px;padding:10px 12px;border:0.5px solid var(--border-light)}
@@ -462,7 +480,7 @@ export default function FinanzasPage() {
         .meta-input-wrap{display:flex;gap:8px;margin-bottom:16px}
         .meta-input{flex:1;padding:9px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
         .meta-input:focus{border-color:var(--accent)}
-        .meta-save-btn{padding:9px 18px;border-radius:10px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+        .meta-save-btn{padding:9px 18px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
         .meta-empty{text-align:center;padding:20px;color:var(--text-muted);font-size:12px}
 
         .f-nav{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
@@ -487,7 +505,7 @@ export default function FinanzasPage() {
           .det-row .det-monto{grid-row:1;grid-column:2}
           .det-row .det-estado{grid-column:2}
         }
-        html.dark .r2-icon-purple{background:#2D2550 !important}
+        html.dark .r2-icon-purple{background:var(--accent-light) !important}
         html.dark .r2-icon-green{background:#052015 !important}
         html.dark .r2-icon-yellow{background:#1A1200 !important}
         html.dark .serv-money{color:#6EE7B7}
@@ -541,11 +559,20 @@ export default function FinanzasPage() {
             <div className="r-card-value" style={{color:'#2563EB'}}>{formatPesos(senas)}</div>
             <div className="r-card-sub">Resta cobrar {formatPesos(senasRestantes)}</div>
           </div>
+          {hayUSD && (
+            <div className="r-card">
+              <div className="r-card-label">En dólares (aparte)</div>
+              <div className="r-card-value" style={{color:'#059669'}}>{formatUSD(usdDelPeriodo.cobrado)}</div>
+              <div className="r-card-sub">
+                {usdDelPeriodo.pendiente > 0 ? `Por confirmar ${formatUSD(usdDelPeriodo.pendiente)} · ` : ''}{usdDelPeriodo.sesiones} sesión{usdDelPeriodo.sesiones === 1 ? '' : 'es'}{usdDelPeriodo.cursos > 0 ? ` · cursos ${formatUSD(usdDelPeriodo.cursos)}` : ''}. No se suma a los pesos.
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="resumen-grid-2">
   <div className="r2-card">
-    <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><TrendingUp size={14} color="#7C3AED"/></div>
+    <div className="r2-icon r2-icon-purple" style={{background:'var(--accent-light)'}}><TrendingUp size={14} color="var(--accent-strong)"/></div>
     <div className="r2-val">{formatPesosCorto(facturadoTotal)}</div>
     <div className="r2-lbl">Total facturado</div>
   </div>
@@ -560,7 +587,7 @@ export default function FinanzasPage() {
     <div className="r2-lbl">Horas trabajadas</div>
   </div>
   <div className="r2-card">
-    <div className="r2-icon r2-icon-purple" style={{background:'#EDE8FF'}}><Award size={14} color="#7C3AED"/></div>
+    <div className="r2-icon r2-icon-purple" style={{background:'var(--accent-light)'}}><Award size={14} color="var(--accent-strong)"/></div>
     <div className="r2-val">{formatPesosCorto(ingresoPorHora)}</div>
     <div className="r2-lbl">Ingreso por hora</div>
   </div>
@@ -687,7 +714,7 @@ export default function FinanzasPage() {
                     <div key={s.id} className="det-row">
                       <div className="det-fecha">{parseFecha(s.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}{s.hora ? ` · ${s.hora.slice(0,5)}` : ''}</div>
                       <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pacientes[s.patient_id] || 'Desconocido'}</div>
-                      <div className="det-serv" style={{color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.servicio_nombre || 'Sin servicio'}</div>
+                      <div className="det-serv" style={{color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.servicio_nombre || 'Sin servicio'}{(s as any).cupon_codigo ? ` · cupón ${(s as any).cupon_codigo}` : ''}</div>
                       <div className="det-monto">{formatPesos(s.precio || 0)}</div>
                       <div className="det-estado" style={{color: est.color}}>{est.txt}</div>
                     </div>

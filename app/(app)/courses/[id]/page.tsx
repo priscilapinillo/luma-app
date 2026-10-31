@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useContext } from 'react'
+import { PlanCursos } from '@/lib/planCursos'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, BookOpen, Users, Info, GraduationCap, Video } from 'lucide-react'
+import { ArrowLeft, BookOpen, Users, Info, GraduationCap, Video, Eye } from 'lucide-react'
 import CourseInfoTab from './tabs/CourseInfoTab'
 import CourseContentTab from './tabs/CourseContentTab'
 import CourseStudentsTab from './tabs/CourseStudentsTab'
@@ -30,6 +31,9 @@ type Curso = {
   que_aprenderas: string[]
   requisitos: string[]
   estado: string
+  user_id: string
+  tipo?: string
+  bonus?: any[]
 }
 
 export default function CourseEditPage() {
@@ -40,6 +44,7 @@ export default function CourseEditPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'info' | 'contenido' | 'alumnas' | 'examen' | 'encuentros'>('info')
   const [alumnasPendientes, setAlumnasPendientes] = useState(0)
+  const { pausa } = useContext(PlanCursos)
 
   useEffect(() => { cargarCurso() }, [id])
 
@@ -104,6 +109,7 @@ export default function CourseEditPage() {
         .tab-btn{display:flex;align-items:center;gap:6px;padding:14px 16px;font-size:12.5px;font-weight:600;color:var(--text-muted);border:none;background:transparent;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap}
         .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
         .tab-btn:hover{color:var(--text-primary)}
+        .ver-alumna-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:0.5px solid var(--accent);background:var(--accent-light);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap}
         .curso-header{display:flex;align-items:center;gap:'12px';padding:16px 20px;background:var(--bg-card);border-bottom:0.5px solid var(--border-light)}
       `}</style>
 
@@ -125,6 +131,12 @@ export default function CourseEditPage() {
             </span>
           </div>
         </div>
+        {curso.tipo !== 'descargable' && (
+          <button className="ver-alumna-btn" onClick={() => router.push(`/mi-cuenta/cursos/${id}?vista=previa`)}
+            title="Mirá el aula como la ve una alumna. No se guarda nada.">
+            <Eye size={14}/> <span>Ver como alumna</span>
+          </button>
+        )}
       </div>
 
       {/* TABS */}
@@ -133,29 +145,38 @@ export default function CourseEditPage() {
           <button className={`tab-btn${tab==='info'?' active':''}`} onClick={() => setTab('info')}>
             <Info size={13}/>Información
           </button>
+          {curso.tipo !== 'descargable' && (
           <button className={`tab-btn${tab==='contenido'?' active':''}`} onClick={() => setTab('contenido')}>
             <BookOpen size={13}/>Contenido
           </button>
+          )}
           <button className={`tab-btn${tab==='alumnas'?' active':''}`} onClick={() => setTab('alumnas')} style={{position:'relative'}}>
-            <Users size={13}/>Alumnas
+            <Users size={13}/>{curso.tipo === 'descargable' ? 'Compradoras' : 'Alumnas'}
             {alumnasPendientes > 0 && (
               <span style={{background:'#EF4444',color:'white',fontSize:'9px',fontWeight:700,borderRadius:'10px',minWidth:'16px',height:'16px',display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>
                 {alumnasPendientes}
               </span>
             )}
           </button>
+          {curso.tipo !== 'descargable' && (<>
           <button className={`tab-btn${tab==='examen'?' active':''}`} onClick={() => setTab('examen')}>
             <GraduationCap size={13}/>Examen
           </button>
           <button className={`tab-btn${tab==='encuentros'?' active':''}`} onClick={() => setTab('encuentros')}>
             <Video size={13}/>Encuentros
           </button>
+          </>)}
         </div>
         <div className="tab-bar-fade"/>
       </div>
 
       {/* CONTENIDO */}
-      {tab === 'info' && <CourseInfoTab curso={curso} onUpdate={setCurso}/>}
+      {pausa && (
+        <div style={{margin:'14px 20px 0',padding:'12px 14px',borderRadius:'12px',background:'#FFFBEB',border:'0.5px solid #FDE68A',color:'#92400E',fontSize:'12.5px',lineHeight:1.55}}>
+          <b>En pausa.</b> Tu plan es Básico: no se puede vender ni publicar. Quienes ya compraron siguen entrando. Podés atender a tus {curso.tipo === 'descargable' ? 'compradoras' : 'alumnas'} como siempre. <a href="/suscripcion" style={{color:'#92400E',fontWeight:700}}>Volver a Premium</a>
+        </div>
+      )}
+      {tab === 'info' && <CourseInfoTab curso={curso} onUpdate={setCurso} pausado={pausa}/>}
       {tab === 'contenido' && <CourseContentTab cursoId={id}/>}
       {tab === 'alumnas' && <CourseStudentsTab cursoId={id}/>}
       {tab === 'examen' && <CourseExamTab cursoId={id}/>}

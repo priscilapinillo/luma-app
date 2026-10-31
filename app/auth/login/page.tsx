@@ -9,6 +9,8 @@ import MetaPixel from '@/components/MetaPixel'
 import { eventoMeta } from '@/lib/metaPixel'
 import { leerOrigen } from '@/lib/origen'
 import { calcularAcceso, pareceDesactualizado } from '@/lib/acceso'
+import TelefonoLuma, { ESTILOS_TELEFONO } from '@/components/landing/TelefonoLuma'
+import { ESTILOS_ACCESO } from '@/components/landing/estilosAcceso'
 
 export default function AuthPage() {
   const [flipped, setFlipped] = useState(false)
@@ -165,399 +167,137 @@ export default function AuthPage() {
     registrandoRef.current = false
   }
 
+  // abrir "recuperar" con el email que ya escribió
+  function abrirRecuperar() {
+    setEmailRecuperar(email)
+    setRecuperadoEnviado(false)
+    setRecuperando(true)
+    setError('')
+  }
+  function cerrarRecuperar() {
+    setRecuperando(false)
+    setRecuperadoEnviado(false)
+    setEmailRecuperar('')
+  }
+  const fuerza = regPassword.length === 0 ? 0 : regPassword.length < 6 ? 1 : (regPassword.length >= 10 || (/\d/.test(regPassword) && /[a-zA-Z]/.test(regPassword))) ? 3 : 2
+  const textoFuerza = ['', 'Muy corta (mínimo 6)', 'Va bien', 'Fuerte'][fuerza]
+
   return (
-    <>
-      <style>{`
-        
-        *{box-sizing:border-box;margin:0;padding:0}
-        html,body{height:100%;font-family:'Geist',sans-serif}
+    <div className="au">
+      <MetaPixel/>
+      <style>{ESTILOS_TELEFONO + ESTILOS_ACCESO}</style>
 
-        .auth-wrap{
-          min-height:100vh;width:100%;
-          display:grid;
-          grid-template-columns:1fr 1fr;
-        }
-
-        /* LADO IZQUIERDO — decorativo */
-        .auth-left{
-          background-image:
-            linear-gradient(160deg,rgba(30,27,46,0.82),rgba(13,11,20,0.9)),
-            url('/landing/hero-bgg.webp');
-          background-size:cover;
-          background-position:center;
-          position:relative;overflow:hidden;
-          display:flex;flex-direction:column;
-          justify-content:space-between;
-          padding:48px;
-        }
-        .auth-left-top{position:relative;z-index:1}
-        .auth-left-logo{
-          font-family:'Cormorant Garamond',serif;
-          font-size:26px;font-weight:600;color:#F9F6F0;
-          letter-spacing:0.5px;text-decoration:none;display:inline-block;
-        }
-        .auth-left-logo span{color:#C9A84C}
-        .auth-left-center{
-          position:relative;z-index:1;
-          flex:1;display:flex;flex-direction:column;
-          justify-content:center;padding:32px 0;
-        }
-        .auth-left-title{
-          font-family:'Cormorant Garamond',serif;
-          font-size:clamp(26px,2.8vw,34px);
-          line-height:1.4;
-          color:#F9F6F0;
-          margin-bottom:36px;
-          max-width:420px;
-        }
-        .auth-left-title .accent{
-          font-style:italic;color:#C9A84C;
-        }
-        .auth-left-title .highlight{
-          font-style:normal;color:#F9F6F0;
-          background:rgba(139,92,246,0.3);
-          padding:1px 8px;border-radius:4px;
-        }
-        .auth-left-bottom{
-          position:relative;z-index:1;
-          font-size:13px;color:#8B7FA8;
-        }
-
-        /* MOCKUP CON NOTIFICACIÓN */
-        .auth-phone-wrap{
-          position:relative;z-index:1;
-          width:min(300px,80%);
-          margin-top:8px;
-        }
-        .auth-phone-img{
-          width:100%;display:block;
-          border-radius:20px;
-          box-shadow:0 30px 70px rgba(0,0,0,0.5);
-        }
-        .auth-notif-img{
-          position:absolute;top:-6%;left:50%;
-          width:82%;max-width:280px;
-          animation:authNotifCaer 4s ease-in-out infinite;
-          filter:drop-shadow(0 12px 24px rgba(0,0,0,0.4));
-        }
-        @keyframes authNotifCaer{
-          0%{ transform:translate(-50%,-120%); opacity:0; }
-          15%{ transform:translate(-50%,0%); opacity:1; }
-          75%{ transform:translate(-50%,0%); opacity:1; }
-          92%{ transform:translate(-50%,-20%); opacity:0; }
-          100%{ transform:translate(-50%,-120%); opacity:0; }
-        }
-
-        /* LADO DERECHO — formulario */
-        .auth-right{
-          background:#FAFAFA;
-          display:flex;flex-direction:column;
-          align-items:center;justify-content:center;
-          padding:40px 40px 300px 40px;
-      
-          position:relative;
-        }
-        .auth-right-inner{width:100%;max-width:480px;}
-
-        /* FLIP CONTAINER */
-        .flip-wrap{
-          width:100%;
-          perspective:1200px;
-          
-        }
-        .flip-inner{
-          position:relative;
-          transform-style:preserve-3d;
-          transition:transform 0.7s cubic-bezier(0.4,0,0.2,1);
-        }
-        .flip-inner.flipped{transform:rotateY(180deg)}
-        .flip-face{
-          width:100%;
-          backface-visibility:hidden;
-        }
-        .flip-face.back{
-          position:absolute;top:0;left:0;
-          transform:rotateY(180deg);
-        }
-
-        /* FORM COMÚN */
-        .form-logo{font-size:20px;font-weight:900;color:#0A0A0A;letter-spacing:-0.5px;margin-bottom:4px}
-        .form-logo span{color:#8B5CF6}
-        .form-title{font-size:28px;font-weight:900;color:#0A0A0A;letter-spacing:-1px;margin-bottom:6px;margin-top:28px}
-        .form-sub{font-size:14px;color:#737373;margin-bottom:28px;line-height:1.5}
-        .form-field{margin-bottom:14px}
-        .form-label{font-size:12px;font-weight:600;color:#404040;display:block;margin-bottom:6px}
-        .form-input{
-          width:100%;padding:12px 14px;
-          border-radius:10px;border:1.5px solid #E5E5E5;
-          font-size:14px;color:#0A0A0A;
-          outline:none;transition:all 0.2s;
-          font-family:'Geist',sans-serif;
-          background:white;
-        }
-        .form-input::placeholder{color:#A3A3A3}
-        .form-input:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.1)}
-        .form-input-wrap{position:relative}
-        .form-input-wrap .form-input{padding-right:42px}
-        .form-eye{
-          position:absolute;right:12px;top:50%;transform:translateY(-50%);
-          background:none;border:none;cursor:pointer;
-          color:#A3A3A3;font-size:14px;padding:0;
-          transition:color 0.2s;
-        }
-        .form-eye:hover{color:#525252}
-        .form-error{
-          font-size:12px;color:#DC2626;margin-bottom:12px;
-          padding:10px 12px;background:#FEF2F2;
-          border-radius:8px;border:1px solid #FECACA;
-        }
-        .form-btn{
-          width:100%;padding:13px;
-          background:#0A0A0A;color:white;
-          border:none;border-radius:10px;
-          font-size:14px;font-weight:700;cursor:pointer;
-          font-family:'Geist',sans-serif;letter-spacing:-0.2px;
-          transition:all 0.2s;
-          box-shadow:0 4px 14px rgba(0,0,0,0.15);
-          margin-top:4px;
-        }
-        .form-btn:hover{background:#262626;transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,0.2)}
-        .form-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
-        .form-divider{
-          display:flex;align-items:center;gap:10px;
-          margin:20px 0;color:#E5E5E5;font-size:12px;color:#A3A3A3;
-        }
-        .form-divider::before,.form-divider::after{content:'';flex:1;height:1px;background:#E5E5E5}
-        .form-switch{
-          text-align:center;margin-top:20px;
-          font-size:13px;color:#737373;
-        }
-        .form-switch-link{
-          color:#8B5CF6;font-weight:600;cursor:pointer;
-          text-decoration:none;transition:color 0.2s;
-          background:none;border:none;font-family:'Geist',sans-serif;
-          font-size:13px;padding:0;
-        }
-        .form-switch-link:hover{color:#7C3AED}
-        .form-trial{
-          display:flex;align-items:center;gap:8px;
-          padding:10px 12px;
-          background:#F4F0FF;border:1px solid #DDD6FE;
-          border-radius:8px;margin-bottom:20px;
-          font-size:13px;color:#6D28D9;
-        }
-        .form-trial-dot{width:6px;height:6px;border-radius:50%;background:#8B5CF6;flex-shrink:0;animation:pulse 2s infinite}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-
-        /* ÉXITO */
-        .exito{text-align:center;padding:20px 0}
-        .exito-icon{font-size:40px;margin-bottom:16px;display:block}
-        .exito-title{font-size:22px;font-weight:800;color:#0A0A0A;letter-spacing:-0.5px;margin-bottom:8px}
-        .exito-sub{font-size:14px;color:#737373;line-height:1.6;margin-bottom:20px}
-        .exito-email{color:#8B5CF6;font-weight:600}
-        .exito-hint{font-size:13px;color:#A3A3A3;padding:10px 14px;background:#F5F5F5;border-radius:8px;margin-bottom:20px;line-height:1.5}
-        .exito-back{
-          font-size:13px;color:#8B5CF6;font-weight:600;cursor:pointer;
-          background:none;border:none;font-family:'Geist',sans-serif;padding:0;
-        }
-
-        @media(max-width:768px){
-          .auth-wrap{grid-template-columns:1fr}
-          .auth-left{display:none}
-          .auth-right{padding:40px 24px;min-height:100vh}
-        }
-      `}</style>
-
-      <div className="auth-wrap">
-        <MetaPixel/>
-
-        {/* IZQUIERDA */}
-        <div className="auth-left">
-          <div className="auth-left-top">
-            <Link href="/" className="auth-left-logo">Luma<span>.</span></Link>
+      <aside className="au-lado" aria-hidden="true">
+        <span className="au-estrella au-titila" style={{ top: 120, right: 80, fontSize: 16 }}>✦</span>
+        <span className="au-estrella au-titila" style={{ bottom: 160, left: 50, fontSize: 12, color: '#D6A6A5', animationDelay: '.8s' }}>✦</span>
+        <Link href="/" className="au-logo" tabIndex={-1}>Luma<span>.</span></Link>
+        <h2 className="au-frase">Tu consultante ideal está buscando <em>dónde reservar</em> ahora mismo.</h2>
+        <p className="au-frase2"><span className="au-subraya">¿Tiene dónde hacerlo?</span></p>
+        <div className="au-vis">
+          <div className="au-tel au-flotar"><div><TelefonoLuma pantalla="reserva" escala={0.8} /></div></div>
+          <div className="au-notif au-caer">
+            <span className="au-notif-ic">L</span>
+            <span className="au-notif-txt"><span>LUMA · ahora</span><strong>Nueva reserva</strong><span>Sofía · jueves 18:00</span></span>
           </div>
+        </div>
+        <span className="au-lado-pie">Sin tarjeta · 7 días gratis · Cancelás cuando quieras</span>
+      </aside>
 
-          <div className="auth-left-center">
-            <h2 className="auth-left-title">
-              Tu consultante ideal está buscando <span className="accent">dónde reservar</span> ahora mismo.<br/><br/>
-              <span className="highlight">¿Tiene dónde hacerlo?</span>
-            </h2>
+      <main className="au-main">
+        <div className="au-caja">
+          <Link href="/" className="au-logo-celu">Luma<span>.</span></Link>
 
-            <div className="auth-phone-wrap">
-              <img src="/landing/hero-dashboard.webp" alt="Dashboard de Luma" className="auth-phone-img"/>
-              <img src="/landing/hero-notif.webp" alt="" className="auth-notif-img"/>
+          {!recuperando && (
+            <div className="au-tabs" role="tablist" aria-label="Entrar o registrarse">
+              <button type="button" role="tab" aria-selected={!flipped} className={!flipped ? 'on' : ''} onClick={() => { setFlipped(false); setRegError('') }}>Entrar</button>
+              <button type="button" role="tab" aria-selected={flipped} className={flipped ? 'on' : ''} onClick={() => { setFlipped(true); setError('') }}>Empezá gratis</button>
             </div>
-          </div>
+          )}
 
-          <div className="auth-left-bottom">
-            Sin tarjeta · 7 días gratis · Cancelás cuando querés
-          </div>
-        </div>
-
-        {/* DERECHA */}
-        <div className="auth-right">
-          <div className="auth-right-inner">
-
-            <div className="form-logo">Luma<span>.</span></div>
-
-            <div className="flip-wrap">
-              <div className={`flip-inner${flipped ? ' flipped' : ''}`}>
-
-                {/* FRENTE — LOGIN */}
-                <div className="flip-face front">
-                  <div className="form-title">Iniciá sesión</div>
-                  <p className="form-sub">Bienvenida de vuelta. Tu trabajo te espera.</p>
-                  <form onSubmit={handleLogin}>
-                    <div className="form-field">
-                      <label className="form-label">Email</label>
-                      <input className="form-input" type="email" value={email}
-                        onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com"/>
-                    </div>
-                    <div className="form-field">
-                      <label className="form-label">Contraseña</label>
-                      <div className="form-input-wrap">
-                        <input className="form-input"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password} onChange={e => setPassword(e.target.value)}
-                          required placeholder="••••••••••"/>
-                        <button type="button" className="form-eye"
-                          onClick={() => setShowPassword(!showPassword)}>
-                          {showPassword ? '○' : '●'}
-                        </button>
-                      </div>
-                    </div>
-                    {error && <div className="form-error">{error}</div>}
-                    {esCuentaLinks && (
-                      <div style={{fontSize:'12px',color:'#92400E',marginBottom:'12px',padding:'10px 12px',background:'#FFFBEB',borderRadius:'8px',border:'1px solid #FDE68A'}}>
-                        Esta es una cuenta de <strong>Luma Links</strong>, no de terapeuta. Entrá desde{' '}
-                        <Link href="/links/login" style={{color:'#92400E',fontWeight:700,textDecoration:'underline'}}>acá</Link>.
-                      </div>
-                    )}
-                    {cuentaIncompleta && (
-                      <div style={{fontSize:'13px',color:'#4C1D95',marginBottom:'12px',padding:'14px',background:'#F4F0FF',borderRadius:'10px',border:'1px solid #DDD6FE',lineHeight:1.5}}>
-                        Tu cuenta quedó <strong>a medio crear</strong> (fue un error nuestro, perdón). ¿Qué querés hacer?
-                        <button type="button" onClick={completarCuenta} disabled={completando}
-                          style={{display:'block',width:'100%',marginTop:'10px',padding:'11px',borderRadius:'8px',border:'none',background:'linear-gradient(135deg,#7C3AED,#8B5CF6)',color:'white',fontWeight:700,fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
-                          {completando ? 'Activando…' : 'Soy terapeuta: empezar mis 7 días gratis'}
-                        </button>
-                        <Link href="/mi-cuenta/cursos" style={{display:'block',textAlign:'center',marginTop:'8px',color:'#7C3AED',fontWeight:600,textDecoration:'underline'}}>
-                          Soy alumna: ir a mis cursos
-                        </Link>
-                      </div>
-                    )}
-{!recuperando ? (
-  <div style={{textAlign:'right',marginBottom:'12px'}}>
-    <button type="button" className="form-switch-link"
-      onClick={() => setRecuperando(true)}>
-      ¿Olvidaste tu contraseña?
-    </button>
-  </div>
-) : (
-  <div style={{background:'#F4F0FF',border:'1px solid #DDD6FE',borderRadius:'10px',padding:'16px',marginBottom:'16px'}}>
-    {recuperadoEnviado ? (
-      <>
-        <div style={{fontSize:'14px',fontWeight:700,color:'#6D28D9',marginBottom:'6px'}}>📬 Revisá tu email</div>
-        <div style={{fontSize:'13px',color:'#737373',marginBottom:'10px'}}>Te enviamos un link para restablecer tu contraseña.</div>
-        <button type="button" className="form-switch-link" onClick={() => { setRecuperando(false); setRecuperadoEnviado(false); setEmailRecuperar('') }}>
-          ← Volver al login
-        </button>
-      </>
-    ) : (
-      <div onSubmit={handleRecuperar}>
-        <div style={{fontSize:'13px',fontWeight:600,color:'#6D28D9',marginBottom:'10px'}}>Recuperar contraseña</div>
-        <input className="form-input" type="email" placeholder="tu@email.com"
-          value={emailRecuperar} onChange={e => setEmailRecuperar(e.target.value)}
-          required style={{marginBottom:'10px'}}/>
-        <div style={{display:'flex',gap:'8px'}}>
-          <button type="button" className="form-switch-link"
-            onClick={() => setRecuperando(false)}>
-            Cancelar
-          </button>
-          <button type="button" className="form-btn"
-            onClick={() => handleRecuperar()}
-            disabled={enviandoRecuperar}
-            style={{flex:1,marginTop:0,padding:'10px'}}>
-            {enviandoRecuperar ? 'Enviando...' : 'Enviar link →'}
-          </button>
-        </div>
-      </div>
-    )}
-  </div>
-)}
-<button type="submit" className="form-btn" disabled={loading}>
-                      {loading ? 'Ingresando...' : 'Ingresar →'}
-                    </button>
-                  </form>
-                  <div className="form-divider">o</div>
-                  <div className="form-switch">
-                    ¿No tenés cuenta?{' '}
-                    <button className="form-switch-link"
-                      onClick={() => { setFlipped(true); setError('') }}>
-                      Registrate gratis
-                    </button>
-                  </div>
-                  <div className="form-switch" style={{marginTop:'8px'}}>
-                  <Link href="/links/login" className="form-switch-link" style={{textDecoration:'underline', color:'#C9A84C'}}>
-                      Tengo cuenta Luma Links
-                    </Link>
-                  </div>
-                  <div className="form-switch" style={{marginTop:'8px'}}>
-                    ¿Sos alumna?{' '}
-                    <Link href="/aula" className="form-switch-link" style={{textDecoration:'underline'}}>
-                      Entrá a tus cursos acá
-                    </Link>
-                  </div>
-                </div>
-
-                {/* DORSO — REGISTER */}
-                <div className="flip-face back">
-                <>
-                <div className="form-title">Empezá gratis</div>
-                      <div className="form-trial">
-                        <div className="form-trial-dot"/>
-                        <span><strong>7 días gratis</strong> · Después ARS $9.900/mes · Cancelás cuando querés</span>
-                      </div>
-                      <form onSubmit={handleRegister}>
-                        <div className="form-field">
-                          <label className="form-label">Tu nombre</label>
-                          <input className="form-input" type="text" value={nombre}
-                            onChange={e => setNombre(e.target.value)} required placeholder="Ej: Priscila"/>
-                        </div>
-                        <div className="form-field">
-                          <label className="form-label">Email</label>
-                          <input className="form-input" type="email" value={regEmail}
-                            onChange={e => setRegEmail(e.target.value)} required placeholder="tu@email.com"/>
-                        </div>
-                        <div className="form-field">
-                          <label className="form-label">Contraseña</label>
-                          <input className="form-input" type="password" value={regPassword}
-                            onChange={e => setRegPassword(e.target.value)}
-                            required minLength={6} placeholder="Mínimo 6 caracteres"/>
-                        </div>
-                        {regError && <div className="form-error">{regError}</div>}
-                        <button type="submit" className="form-btn" disabled={regLoading}>
-                          {regLoading ? 'Creando cuenta...' : 'Crear cuenta gratis →'}
-                        </button>
-                      </form>
-                      <div className="form-divider">o</div>
-                      <div className="form-switch">
-                        ¿Ya tenés cuenta?{' '}
-                        <button className="form-switch-link"
-                          onClick={() => { setFlipped(false); setRegError('') }}>
-                          Iniciá sesión
-                        </button>
-                      </div>
-                    
-                      </>
-                      </div>
-
+          {recuperando ? (
+            recuperadoEnviado ? (
+              <div className="au-tarjeta au-entra" role="status">
+                <span className="au-ic-grande au-pop"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></svg></span>
+                <h1 className="au-h1">Revisá tu email</h1>
+                <p className="au-sub">Te mandamos un link{emailRecuperar ? <> a <b>{emailRecuperar}</b></> : ''} para elegir una contraseña nueva. Si no aparece, mirá en spam o promociones.</p>
+                <button type="button" className="au-btn-claro" onClick={() => setRecuperadoEnviado(false)}>Mandarlo de nuevo</button>
+                <button type="button" className="au-link" onClick={cerrarRecuperar}>Volver a entrar</button>
               </div>
-            </div>
-
-          </div>
+            ) : (
+              <form className="au-form au-entra" onSubmit={handleRecuperar}>
+                <button type="button" className="au-volver" onClick={cerrarRecuperar}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Volver a entrar</button>
+                <div><h1 className="au-h1">Recuperar contraseña</h1><p className="au-sub">Escribí el email con el que entrás a Luma y te mandamos un link para elegir una nueva.</p></div>
+                <label className="au-campo">Email
+                  <span className="au-in"><IcMail/><input type="email" required autoComplete="email" value={emailRecuperar} onChange={e => setEmailRecuperar(e.target.value)} placeholder="tu@email.com"/></span>
+                </label>
+                <button type="submit" className="au-btn" disabled={enviandoRecuperar}>{enviandoRecuperar ? <><i className="au-girar"/>Enviando…</> : 'Mandarme el link'}</button>
+              </form>
+            )
+          ) : !flipped ? (
+            <form className="au-form au-entra" onSubmit={handleLogin}>
+              <div><h1 className="au-h1">Iniciá sesión</h1><p className="au-sub">Bienvenida de vuelta. Tu trabajo te espera.</p></div>
+              <label className="au-campo">Email
+                <span className="au-in"><IcMail/><input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com"/></span>
+              </label>
+              <label className="au-campo">Contraseña
+                <span className="au-in"><IcCandado/><input type={showPassword ? 'text' : 'password'} required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••••"/>
+                  <button type="button" className="au-ojo" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <IcOjoNo/> : <IcOjo/>}</button>
+                </span>
+              </label>
+              <button type="button" className="au-link derecha" onClick={abrirRecuperar}>¿Olvidaste tu contraseña?</button>
+              {error && <div className="au-error" role="alert">{error}</div>}
+              {esCuentaLinks && (
+                <div className="au-aviso citrino" role="status">
+                  Esta es una cuenta de <strong>Luma Links</strong>, no de terapeuta. Entrá desde <Link href="/links/login">acá</Link>.
+                </div>
+              )}
+              {cuentaIncompleta && (
+                <div className="au-aviso lavanda" role="status">
+                  <span>Tu cuenta quedó <strong>a medio crear</strong> (fue un error nuestro, perdón). ¿Qué querés hacer?</span>
+                  <button type="button" className="au-btn" onClick={completarCuenta} disabled={completando}>{completando ? <><i className="au-girar"/>Activando…</> : 'Soy terapeuta: empezar mis 7 días gratis'}</button>
+                  <Link href="/mi-cuenta/cursos" className="au-link">Soy alumna: ir a mis cursos</Link>
+                </div>
+              )}
+              <button type="submit" className="au-btn" disabled={loading}>{loading ? <><i className="au-girar"/>Entrando…</> : 'Entrar'}</button>
+              <div className="au-otros">
+                <span>¿Tenés Luma Links? <Link href="/links/login">Entrá acá</Link></span>
+                <span>¿Sos alumna de un curso? <Link href="/aula">Entrá a tu aula</Link></span>
+              </div>
+            </form>
+          ) : (
+            <form className="au-form au-entra" onSubmit={handleRegister}>
+              <div><h1 className="au-h1">Empezá gratis</h1><p className="au-sub"><b>7 días gratis</b> · Después ARS $9.900/mes · Cancelás cuando quieras</p></div>
+              <label className="au-campo">Tu nombre
+                <span className="au-in"><input type="text" required autoComplete="name" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Priscila"/></span>
+              </label>
+              <label className="au-campo">Email
+                <span className="au-in"><input type="email" required autoComplete="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="tu@email.com"/></span>
+              </label>
+              <label className="au-campo">Contraseña
+                <span className="au-in"><input type="password" required minLength={6} autoComplete="new-password" value={regPassword} onChange={e => setRegPassword(e.target.value)} placeholder="Mínimo 6 caracteres"/></span>
+              </label>
+              {fuerza > 0 && (
+                <div className="au-fuerza" aria-live="polite">
+                  {[1, 2, 3].map(n => <span key={n} className={fuerza >= n ? `f${fuerza}` : ''}/>)}
+                  <b className={`f${fuerza}`}>{textoFuerza}</b>
+                </div>
+              )}
+              {regError && <div className="au-error" role="alert">{regError}</div>}
+              <button type="submit" className="au-btn" disabled={regLoading}>{regLoading ? <><i className="au-girar"/>Creando tu cuenta…</> : 'Crear mi cuenta'}</button>
+              <div className="au-pastillas">
+                <span className="verde">Sin tarjeta</span>
+                <span className="lavanda">Probás todo Premium 7 días</span>
+                <span className="citrino">Cancelás cuando quieras</span>
+              </div>
+            </form>
+          )}
         </div>
-
-      </div>
-    </>
+      </main>
+    </div>
   )
 }
+
+function IcMail() { return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></svg> }
+function IcCandado() { return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> }
+function IcOjo() { return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg> }
+function IcOjoNo() { return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg> }

@@ -23,6 +23,18 @@ export function db() {
 }
 
 export async function mpLuma(path: string, opciones: { method?: string; body?: unknown; idem?: string } = {}) {
+  let r = await mpLumaUnaVez(path, opciones)
+    // 429 = Mercado Pago dice "demasiados pedidos juntos": se espera un momento y se reintenta (hasta 2 veces).
+    // Es seguro: con 429 Mercado Pago no hizo nada, y los pedidos que crean algo llevan clave de idempotencia.
+  for (const espera of [1200, 2600]) {
+    if (r.status !== 429) break
+    await new Promise(ok => setTimeout(ok, espera))
+    r = await mpLumaUnaVez(path, opciones)
+  }
+  return r
+}
+
+async function mpLumaUnaVez(path: string, opciones: { method?: string; body?: unknown; idem?: string } = {}) {
   try {
     const res = await fetch('https://api.mercadopago.com' + path, {
       method: opciones.method || 'GET',
@@ -52,7 +64,7 @@ export function sumarMeses(fecha: Date, meses: number) {
 const planValido = (p: unknown) => (p === 'premium' ? 'premium' : 'basico')
 const t = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : 0)
 
-async function cancelarEnMP(preapprovalId: string) {
+export async function cancelarEnMP(preapprovalId: string) {
   const r = await mpLuma(`/preapproval/${encodeURIComponent(preapprovalId)}`, { method: 'PUT', body: { status: 'cancelled' } })
   if (!r.ok) console.error('planLuma: no se pudo cancelar', preapprovalId, r.status, r.data)
   return r.ok
@@ -70,10 +82,10 @@ export async function marcarAviso(userId: string, clave: string): Promise<boolea
 async function avisar(userId: string, titulo: string, cuerpo: string) {
   try { const { enviarAviso } = await import('@/lib/push'); await enviarAviso(userId, titulo, cuerpo) } catch (e) { console.error('planLuma: aviso', e) }
 }
-async function evento(userId: string, nombre: string, props?: Record<string, unknown>) {
+export async function evento(userId: string, nombre: string, props?: Record<string, unknown>) {
   try { const { eventoLoops } = await import('@/lib/loops'); await eventoLoops(userId, nombre, props) } catch (e) { console.error('planLuma: loops', e) }
 }
-async function avisarAdmin(titulo: string, cuerpo: string) {
+export async function avisarAdmin(titulo: string, cuerpo: string) {
   try {
     const s = db()
     for (let pagina = 1; pagina <= 10; pagina++) {
@@ -236,7 +248,7 @@ async function anotarCobros(userId: string, preId: string, plan: string) {
 // Busca en Mercado Pago las suscripciones de los planes de esta terapeuta.
 // Si encuentra más de una viva (tocó pagar dos veces), se queda con la más nueva y cancela las otras.
 // Devuelve la suscripción autorizada más nueva (si hay) y todas las que encontró.
-async function buscarEnPlanes(userId: string) {
+export async function buscarEnPlanes(userId: string) {
   const s = db()
   const { data: planes } = await s.from('luma_planes_mp').select('mp_plan_id, plan, created_at')
     .eq('user_id', userId).order('created_at', { ascending: false }).limit(10)
@@ -337,7 +349,7 @@ export async function cancelarCobroAutomatico(userId: string): Promise<{ ok: boo
 }
 
 // Crea (o reutiliza) el plan de Mercado Pago de esta terapeuta y devuelve el link para pagar.
-export async function crearPlanLuma(userId: string, plan: string): Promise<{ link?: string; error?: string }> {
+export async function crearPlanLuma(userId: string, plan: string): Promise<{ link?: string; error?: string; planId?: string }> {
   if (!PRECIOS[plan]) return { error: 'Plan inválido' }
   const s = db()
   const monto = PRECIOS[plan]
@@ -372,7 +384,7 @@ export async function crearPlanLuma(userId: string, plan: string): Promise<{ lin
     // solo si los días gratis siguen siendo los mismos (si no, el primer cobro caería en otra fecha)
     const diasEntonces = hastaISO ? Math.min(30, Math.max(0, Math.ceil((new Date(hastaISO).getTime() - new Date(reciente.created_at).getTime()) / DIA))) : 0
     if (diasEntonces === diasGratis) {
-      return { link: `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=${reciente.mp_plan_id}` }
+      return { link: `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=${reciente.mp_plan_id}`, planId: String(reciente.mp_plan_id) }
     }
   }
 
@@ -401,5 +413,5 @@ export async function crearPlanLuma(userId: string, plan: string): Promise<{ lin
     console.error('planLuma: no se pudo anotar el plan', error)
     return { error: 'No pudimos preparar el pago. Probá de nuevo en unos minutos.' }
   }
-  return { link }
+  return { link, planId: id }
 }

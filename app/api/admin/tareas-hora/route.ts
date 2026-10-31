@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { estadoPlan } from '@/lib/acceso'
 import { revisarPlanLuma, marcarAviso } from '@/lib/planLuma'
+import { revisarIntentosPendientes } from '@/lib/pagosLuma'
 import { enviarAviso } from '@/lib/push'
 import { eventoLoops, sincronizarLoops } from '@/lib/loops'
 import { fechaLarga, diasCalendario, nombrePlan } from '@/lib/textoPlan'
@@ -56,6 +57,11 @@ export async function POST(req: NextRequest) {
     }
     resultado.planesRevisados = revisadas
   } catch (e) { console.error('tareas-hora: revisión de planes', e) }
+
+  // ── 1b) pagos únicos (un mes, anual, diferencia) que Mercado Pago aprobó pero el aviso no llegó
+  try {
+    if (quedaTiempo(6500)) resultado.pagosUnicosAplicados = await revisarIntentosPendientes(inicio + 7000)
+  } catch (e) { console.error('tareas-hora: pagos únicos', e) }
 
   // ── 2) avisos de vencimiento (solo de 9 a 21 hs de Argentina, para no despertar a nadie)
   try {
@@ -115,6 +121,35 @@ export async function POST(req: NextRequest) {
       if (error) console.error('tareas-hora: limpiar estadísticas', error)
     }
   } catch (e) { console.error('tareas-hora: limpieza', e) }
+
+  // ── 5) descargables y cupones: subidas abandonadas, reservas de cupón vencidas, intentos viejos
+  try {
+    if (quedaTiempo(9300)) {
+      const hace3h = new Date(Date.now() - 3 * 3600000).toISOString()
+      const { data: colgadas } = await s.from('descargable_archivos').select('id, path').eq('estado', 'subiendo').lt('created_at', hace3h).limit(30)
+      if (colgadas?.length) {
+        await s.storage.from('descargables').remove(colgadas.map((c: any) => c.path)).catch(() => null)
+        await s.from('descargable_archivos').delete().in('id', colgadas.map((c: any) => c.id))
+        resultado.subidasAbandonadas = colgadas.length
+      }
+      // las reservas vencidas ya no cuentan para el límite; acá solo se ordenan (si el pago llega igual, se confirma igual)
+      await s.from('cupon_usos').update({ estado: 'liberado', liberado_at: new Date().toISOString() })
+        .eq('estado', 'reservado').lt('expira_at', new Date(Date.now() - 86400000).toISOString())
+      await s.from('cupon_intentos').delete().lt('created_at', new Date(Date.now() - 86400000).toISOString())
+    }
+  } catch (e) { console.error('tareas-hora: descargables y cupones', e) }
+
+  // ── 6) Altar de ideas: lo que lleva más de 30 días en la papelera se borra del todo (solo lo que está en la papelera);
+  //       el registro de vistas previas de links se guarda 2 días (alcanza para el tope por hora)
+  try {
+    if (quedaTiempo(9600)) {
+      const hace30 = new Date(Date.now() - 30 * 86400000).toISOString()
+      const { data: viejas, error } = await s.from('pizarras').delete().not('borrada_en', 'is', null).lt('borrada_en', hace30).select('id')
+      if (error) console.error('tareas-hora: papelera del Altar', error)
+      else if (viejas?.length) resultado.pizarrasBorradas = viejas.length
+      await s.from('altar_links_log').delete().lt('created_at', new Date(Date.now() - 2 * 86400000).toISOString())
+    }
+  } catch (e) { console.error('tareas-hora: Altar', e) }
 
   return NextResponse.json({ ok: true, ...resultado, ms: Date.now() - inicio })
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Plus, ChevronDown, ChevronUp, Edit2, Trash2, X, Check } from 'lucide-react'
 import { detectarContenido, normalizarUrl, esRutaLocal } from '@/lib/contenido'
+import { toast } from '@/components/ToastProvider'
 
 const AYUDA_LINK: Record<string, { label: string; placeholder: string; ayuda: string }> = {
   video: {
@@ -156,12 +157,12 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
       let leccionId: string | null = editandoLeccion?.id || null
       if (editandoLeccion) {
         const { error } = await supabase.from('lessons').update(datos).eq('id', editandoLeccion.id)
-        if (error) { alert('No se pudo guardar la lección: ' + error.message); return }
+        if (error) { toast('No se pudo guardar la lección: ' + error.message, 'error'); return }
       } else {
         const { data: nueva, error } = await supabase.from('lessons')
           .insert({ ...datos, module_id: moduleId, orden: lecciones.length })
           .select('id').single()
-        if (error || !nueva) { alert('No se pudo crear la lección: ' + (error?.message || 'intentá de nuevo')); return }
+        if (error || !nueva) { toast('No se pudo crear la lección: ' + (error?.message || 'intentá de nuevo'), 'error'); return }
         leccionId = nueva.id
       }
       // Guardar adjuntos (con el id exacto de la lección, no "la última creada")
@@ -169,7 +170,7 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
         const { error: errAdj } = await supabase.from('lesson_attachments').insert(
           adjuntosNuevos.map(a => ({ lesson_id: leccionId, nombre: a.nombre, url: normalizarUrl(a.url), tipo: a.tipo }))
         )
-        if (errAdj) alert('La lección se guardó, pero no se pudieron guardar los archivos descargables: ' + errAdj.message)
+        if (errAdj) toast('La lección se guardó, pero no se pudieron guardar los archivos descargables: ' + errAdj.message, 'error')
       }
       await cargarModulos()
       setModalLeccion(null)
@@ -199,7 +200,7 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
         .icon-btn{width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-input);display:flex;align-items:center;justify-content:center;cursor:pointer}
         .lec-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:0.5px solid var(--border-light)}
         .lec-tipo{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:10px}
-        .tipo-video{background:#EDE8FF;color:#4C1D95}
+        .tipo-video{background:var(--accent-light);color:var(--accent-deep)}
         .tipo-pdf{background:#FEF3C7;color:#92400E}
         .tipo-audio{background:#DCFCE7;color:#166534}
         .tipo-texto{background:#F0F9FF;color:#0369A1}
@@ -216,16 +217,25 @@ const [adjuntosExistentes, setAdjuntosExistentes] = useState<{id: string; nombre
           {modulos.length} módulo{modulos.length !== 1 ? 's' : ''} · {modulos.reduce((acc, m) => acc + (m.lecciones?.length || 0), 0)} lecciones
         </div>
         <button onClick={() => { setEditandoModulo(null); setFormModulo({ titulo: '', descripcion: '' }); setModalModulo(true) }}
-          style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 14px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{display:'flex',alignItems:'center',gap:'6px',padding:'8px 14px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           <Plus size={12}/>Nuevo módulo
         </button>
       </div>
+
+      {modulos.length > 0 && (
+        <p style={{fontSize:'11.5px',color:'var(--text-muted)',lineHeight:1.5,margin:'-6px 0 14px'}}>
+          Cada módulo es un capítulo y adentro van sus lecciones. Para ver cómo le queda a tu alumna, tocá <strong>«Ver como alumna»</strong> arriba.
+        </p>
+      )}
 
       {modulos.length === 0 && (
         <div style={{textAlign:'center',padding:'48px 20px',color:'var(--text-muted)'}}>
           <div style={{fontSize:'32px',marginBottom:'12px'}}>📚</div>
           <div style={{fontSize:'14px',fontWeight:600,color:'var(--text-primary)',marginBottom:'6px'}}>Sin contenido todavía</div>
           <p style={{fontSize:'12px'}}>Creá el primer módulo para empezar a agregar lecciones.</p>
+          <p style={{fontSize:'11.5px',lineHeight:1.5,maxWidth:'360px',margin:'10px auto 0'}}>
+            Un <strong>módulo</strong> es como un capítulo (ej: «Arcanos mayores»). Adentro van las <strong>lecciones</strong>: un video, un audio, un PDF o un texto cada una.
+          </p>
         </div>
       )}
 
@@ -305,7 +315,7 @@ setModalLeccion(m.id) }}
                 onChange={e => setFormModulo({...formModulo, descripcion: e.target.value})}/>
             </div>
             <button onClick={guardarModulo} disabled={guardando}
-              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
               {guardando ? 'Guardando...' : editandoModulo ? 'Guardar cambios' : 'Crear módulo'}
             </button>
           </div>
@@ -371,7 +381,7 @@ setModalLeccion(m.id) }}
             </div>
             <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px',padding:'10px 12px',background:'var(--bg-input)',borderRadius:'10px',cursor:'pointer'}}
               onClick={() => setFormLeccion({...formLeccion, es_preview: !formLeccion.es_preview})}>
-              <div style={{width:'18px',height:'18px',borderRadius:'5px',border:`1.5px solid ${formLeccion.es_preview ? '#8B5CF6' : 'var(--border)'}`,background:formLeccion.es_preview ? '#8B5CF6' : 'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <div style={{width:'18px',height:'18px',borderRadius:'5px',border:`1.5px solid ${formLeccion.es_preview ? 'var(--accent)' : 'var(--border)'}`,background:formLeccion.es_preview ? 'var(--accent)' : 'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 {formLeccion.es_preview && <Check size={10} color="white"/>}
               </div>
               <div>
@@ -417,7 +427,7 @@ setModalLeccion(m.id) }}
               ))}
             </div>
             <button onClick={() => guardarLeccion(modalLeccion)} disabled={guardando}
-              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
               {guardando ? 'Guardando...' : editandoLeccion ? 'Guardar cambios' : 'Crear lección'}
             </button>
           </div>

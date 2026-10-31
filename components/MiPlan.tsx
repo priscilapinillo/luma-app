@@ -12,7 +12,7 @@ const PRECIO: Record<string, string> = { basico: '$9.900', premium: '$28.000' }
 export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
   const e = estadoPlan(sub)
   const et = etiquetaPlan(e)
-  const [pagos, setPagos] = useState<{ fecha: string; monto: number; plan: string; metodo: string; estado: string }[]>([])
+  const [pagos, setPagos] = useState<{ fecha: string; monto: number; plan: string; metodo: string; estado: string; concepto?: string | null }[]>([])
   const [confirmando, setConfirmando] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null)
@@ -21,8 +21,10 @@ export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
     (async () => {
       try {
         const supabase = createClient()
-        const { data } = await supabase.from('luma_pagos').select('fecha, monto, plan, metodo, estado').order('fecha', { ascending: false }).limit(6)
-        if (data) setPagos(data as any)
+        // "concepto" existe desde la etapa 3: si la base todavía no lo tiene, se lee como antes
+        let r: any = await supabase.from('luma_pagos').select('fecha, monto, plan, metodo, estado, concepto').order('fecha', { ascending: false }).limit(6)
+        if (r.error) r = await supabase.from('luma_pagos').select('fecha, monto, plan, metodo, estado').order('fecha', { ascending: false }).limit(6)
+        if (r.data) setPagos(r.data as any)
       } catch {}
     })()
   }, [])
@@ -54,12 +56,14 @@ export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
   const tienePlanPago = e.tipo === 'pago' || e.tipo === 'gracia' || e.tipo === 'cancelado_vigente'
   const diasPrueba = e.tipo === 'prueba' ? Math.max(0, e.dias ?? 0) : 0
   const filas: [string, string][] = []
+  const ultimoAprobado = pagos.find(p => p.estado === 'aprobado')
+  const esAnual = !e.automatico && ultimoAprobado?.concepto === 'anual'
   if (tienePlanPago) {
-    filas.push(['Plan', `${nombrePlan(e)} · ${PRECIO[e.plan]} por mes`])
+    filas.push(['Plan', esAnual ? `${nombrePlan(e)} · anual` : `${nombrePlan(e)} · ${PRECIO[e.plan]} por mes`])
     if (e.tipo === 'pago') filas.push([e.automatico ? 'Próximo cobro' : 'Pagado hasta', fechaLarga(e.venceEl)])
     if (e.tipo === 'cancelado_vigente') filas.push(['Tenés todo hasta', fechaLarga(e.venceEl)])
     if (e.tipo === 'gracia') filas.push(['Funciona hasta', fechaLarga(e.graciaHasta)])
-    filas.push(['Forma de pago', e.automatico ? 'Cobro automático con Mercado Pago' : e.tipo === 'cancelado_vigente' ? 'Cobro automático cancelado' : 'Pago manual (transferencia)'])
+    filas.push(['Forma de pago', e.automatico ? 'Cobro automático con Mercado Pago' : e.tipo === 'cancelado_vigente' ? 'Cobro automático cancelado' : 'Pago único (no se renueva solo)'])
   }
   if (e.tipo === 'prueba' && e.automatico) filas.push(['Primer cobro', `${fechaLarga(e.venceEl)} · ${PRECIO[e.plan]} (${nombrePlan(e)})`])
 
@@ -98,12 +102,12 @@ export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
 
       {textoBoton && (
         <button onClick={() => window.location.href = '/suscripcion'}
-          style={{ marginTop: '14px', width: '100%', padding: '11px', background: 'linear-gradient(135deg,#8B5CF6,#A78BFA)', color: 'white', border: 'none', borderRadius: '11px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(139,92,246,0.35)' }}>
+          style={{ marginTop: '14px', width: '100%', padding: '11px', background: 'linear-gradient(135deg,var(--accent),var(--accent-2))', color: 'white', border: 'none', borderRadius: '11px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(var(--accent-rgb),0.35)' }}>
           {textoBoton}
         </button>
       )}
 
-      {e.automatico && e.nivel !== 'sin_acceso' && (
+      {e.automatico && (
         <div style={{ marginTop: '12px' }}>
           {!confirmando ? (
             <button onClick={() => setConfirmando(true)}
@@ -114,6 +118,8 @@ export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
             <div style={{ border: '1px solid rgba(255,255,255,0.25)', borderRadius: '12px', padding: '12px', fontSize: '12.5px', lineHeight: 1.55, color: 'rgba(255,255,255,0.85)' }}>
               {e.tipo === 'prueba'
                 ? `No se te va a cobrar nada. Tu prueba sigue hasta el ${fechaLarga(e.venceEl)}.`
+                : e.tipo === 'gracia' || e.tipo === 'vencido'
+                ? 'Mercado Pago no te va a cobrar más (ni la cuota que quedó pendiente). Tus datos quedan guardados y podés volver cuando quieras.'
                 : `No se te va a cobrar más. Tenés todo hasta el ${fechaLarga(e.venceEl)} y después se pausa tu página de reservas. Tus datos quedan guardados.`}
               <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                 <button onClick={() => setConfirmando(false)} disabled={cancelando}
@@ -139,7 +145,7 @@ export default function MiPlan({ sub }: { sub: SubscriptionRow | null }) {
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tus últimos pagos</div>
           {pagos.map((p, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', padding: '4px 0', color: p.estado === 'aprobado' ? '#FFFFFF' : 'rgba(255,255,255,0.5)' }}>
-              <span>{fechaLarga(new Date(p.fecha))} · {p.plan === 'premium' ? 'Premium' : 'Básico'}</span>
+              <span>{fechaLarga(new Date(p.fecha))} · {p.plan === 'premium' ? 'Premium' : 'Básico'}{p.concepto === 'anual' ? ' anual' : p.concepto === 'diferencia' ? ' (diferencia)' : ''}{p.metodo === 'transferencia' ? ' · transferencia' : ''}</span>
               <span>${Number(p.monto).toLocaleString('es-AR')}{p.estado !== 'aprobado' ? ` (${p.estado})` : ''}</span>
             </div>
           ))}

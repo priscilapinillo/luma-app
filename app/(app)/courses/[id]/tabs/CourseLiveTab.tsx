@@ -167,7 +167,7 @@ export default function CourseLiveTab({ cursoId }: { cursoId: string }) {
             onChange={e => setNuevo({...nuevo, descripcion: e.target.value})}/>
         </div>
         <button onClick={agregarEncuentro} disabled={guardando}
-          style={{padding:'10px 16px',borderRadius:'10px',border:'none',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 16px',borderRadius:'10px',border:'none',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           <Plus size={12} style={{display:'inline',marginRight:'5px'}}/>{guardando ? 'Agregando...' : 'Agregar encuentro'}
         </button>
       </div>

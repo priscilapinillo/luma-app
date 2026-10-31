@@ -1,16 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AvisoPortada from '@/components/AvisoPortada'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, X } from 'lucide-react'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { toast } from '@/components/ToastProvider'
+import { AYUDA_CURSO } from '@/lib/ayudaCursos'
 
 export default function NewCoursePage() {
   const router = useRouter()
   const [guardando, setGuardando] = useState(false)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  // ?tipo=descargable → el mismo formulario, más corto (sin aula, modalidad, nivel ni requisitos)
+  const [esDescargable, setEsDescargable] = useState(false)
+  useEffect(() => { setEsDescargable(new URLSearchParams(window.location.search).get('tipo') === 'descargable') }, [])
   const [form, setForm] = useState({
     titulo: '',
     slug: '',
@@ -20,6 +25,7 @@ export default function NewCoursePage() {
     video_presentacion_url: '',
     precio: 0,
     precio_original: '' as string | number,
+    precio_usd: '' as string | number,
     modalidad: 'unico',
     nivel: 'principiante',
     idioma: 'Español',
@@ -43,44 +49,68 @@ export default function NewCoursePage() {
     try {
       const archivoComprimido = await comprimirImagen(file)
       const supabase = createClient()
-      const nombre = `${Date.now()}.jpg`
+      // cada terapeuta guarda sus portadas en su propia carpeta
+      const { data: { user: yo } } = await supabase.auth.getUser()
+      const nombre = `${yo?.id || 'sin-sesion'}/${Date.now()}.jpg`
       await supabase.storage.from('course-images').upload(nombre, archivoComprimido, { upsert: true })
       const { data } = supabase.storage.from('course-images').getPublicUrl(nombre)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
     } catch (err: any) {
-      alert(err?.message || 'No se pudo procesar la imagen.')
+      toast(err?.message || 'No se pudo procesar la imagen.', 'error')
     } finally { setSubiendoImagen(false) }
   }
 
   async function guardar(estado: 'borrador' | 'publicado') {
-    if (!form.titulo) { alert('El título es obligatorio'); return }
+    if (guardando) return
+    if (!form.titulo.trim()) { toast(esDescargable ? 'Ponele un nombre a tu descargable.' : 'El título es obligatorio', 'error'); return }
+    if (Number(form.precio) < 0 || Number(form.precio_usd) < 0) { toast('El precio no puede ser negativo.', 'error'); return }
+    if (esDescargable) estado = 'borrador' // un descargable se publica después de subir sus archivos
     setGuardando(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data, error } = await supabase.from('courses').insert({
+      const base = form.slug || generarSlug(form.titulo) || 'mi-curso'
+      const fila = (slug: string) => ({
         user_id: user.id,
-        titulo: form.titulo,
-        slug: form.slug || generarSlug(form.titulo),
+        titulo: form.titulo.trim(),
+        slug,
         descripcion_corta: form.descripcion_corta || null,
         descripcion_larga: form.descripcion_larga || null,
         imagen_url: form.imagen_url || null,
         video_presentacion_url: form.video_presentacion_url || null,
         precio: Number(form.precio) || 0,
         precio_original: form.precio_original ? Number(form.precio_original) : null,
-        modalidad: form.modalidad,
+        // solo se manda si lo completó (así un curso sin dólares se guarda igual que siempre)
+        ...(Number(form.precio_usd) > 0 ? { precio_usd: Number(form.precio_usd) } : {}),
+        modalidad: esDescargable ? 'unico' : form.modalidad,
         nivel: form.nivel,
         idioma: form.idioma,
-        duracion_estimada_horas: form.duracion_estimada_horas ? Number(form.duracion_estimada_horas) : null,
+        duracion_estimada_horas: !esDescargable && form.duracion_estimada_horas ? Number(form.duracion_estimada_horas) : null,
         politica_reembolso: form.politica_reembolso || null,
         dias_garantia: form.dias_garantia ? Number(form.dias_garantia) : null,
         para_quien: form.para_quien.filter(x => x.trim()),
         que_aprenderas: form.que_aprenderas.filter(x => x.trim()),
-        requisitos: form.requisitos.filter(x => x.trim()),
+        requisitos: esDescargable ? [] : form.requisitos.filter(x => x.trim()),
         estado,
-      }).select().single()
-      if (error) { console.error(error); alert('Error al guardar'); return }
+        ...(esDescargable ? { tipo: 'descargable' } : {}),
+      })
+      // si el enlace ya lo usa otro curso suyo, se le agrega un número solo ("mi-ebook-2")
+      let data: any = null, error: any = null
+      for (let n = 1; n <= 6; n++) {
+        const r = await supabase.from('courses').insert(fila(n === 1 ? base : `${base}-${n}`)).select().single()
+        data = r.data; error = r.error
+        if (!error || error.code !== '23505') break
+      }
+      if (error) {
+        console.error(error)
+        const msj = String(error.message || '')
+        toast(msj.includes('premium_requerido') ? 'Crear cursos y descargables es parte de Luma Premium.'
+          : typeof navigator !== 'undefined' && navigator.onLine === false ? 'No se pudo guardar. Revisá tu internet.'
+          : 'No se pudo guardar. Probá de nuevo.', 'error')
+        return
+      }
+      toast(esDescargable ? 'Listo. Ahora subí los archivos.' : estado === 'publicado' ? 'Tu curso ya está a la venta' : 'Guardado como borrador', 'success')
       router.push(`/courses/${data.id}`)
     } catch (err) {
       console.error(err)
@@ -106,7 +136,8 @@ export default function NewCoursePage() {
         .field label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
         .field input,.field textarea,.field select{padding:10px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
         .field textarea{resize:none;min-height:80px}
-        .field-hint{font-size:10px;color:var(--text-muted);margin-top:2px}
+        .field-hint{font-size:11px;color:var(--text-muted);margin-top:2px;line-height:1.45}
+        .section-hint{font-size:11px;color:var(--text-muted);margin:-6px 0 10px;line-height:1.45}
         .section-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:12px;margin-top:24px;padding-bottom:8px;border-bottom:0.5px solid var(--border-light)}
         .bullet-item{display:flex;gap:8px;align-items:center;margin-bottom:6px}
         .bullet-item input{flex:1;padding:8px 10px;border-radius:8px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
@@ -122,28 +153,32 @@ export default function NewCoursePage() {
           <ArrowLeft size={16} color="var(--text-muted)"/>
         </button>
         <div>
-          <h1 style={{fontSize:'18px',fontWeight:800,color:'var(--text-primary)',fontFamily:'Manrope,sans-serif'}}>Nuevo curso</h1>
-          <p style={{fontSize:'12px',color:'var(--text-muted)'}}>Podés guardar como borrador y publicar después</p>
+          <h1 style={{fontSize:'18px',fontWeight:800,color:'var(--text-primary)',fontFamily:'Manrope,sans-serif'}}>{esDescargable ? 'Nuevo descargable' : 'Nuevo curso'}</h1>
+          <p style={{fontSize:'12px',color:'var(--text-muted)'}}>{esDescargable
+            ? 'Completá lo básico y en el paso siguiente subís los archivos (ebook, PDF, audio, plantilla).'
+            : <>Podés guardar como borrador y publicar después. {AYUDA_CURSO.estado}</>}</p>
         </div>
       </div>
 
       <div className="section-title">Información básica</div>
       <div className="field">
-        <label>Título del curso *</label>
-        <input value={form.titulo} placeholder="Ej: Tarot para principiantes"
+        <label>{esDescargable ? 'Nombre del descargable *' : 'Título del curso *'}</label>
+        <input value={form.titulo} placeholder={esDescargable ? 'Ej: Rituales de luna nueva' : 'Ej: Tarot para principiantes'}
           onChange={e => setForm({...form, titulo: e.target.value, slug: generarSlug(e.target.value)})}/>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.titulo : AYUDA_CURSO.titulo}</span>
       </div>
       <div className="field">
         <label>Descripción corta</label>
-        <textarea value={form.descripcion_corta} placeholder="Aparece en la card del curso (máx 150 caracteres)" maxLength={150}
+        <textarea value={form.descripcion_corta} placeholder={esDescargable ? "Aparece en la tarjeta (máx 150 caracteres)" : "Aparece en la card del curso (máx 150 caracteres)"} maxLength={150}
           onChange={e => setForm({...form, descripcion_corta: e.target.value})}/>
-        <span className="field-hint">{form.descripcion_corta.length}/150</span>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.descripcionCorta : AYUDA_CURSO.descripcionCorta} · {form.descripcion_corta.length}/150</span>
       </div>
       <div className="field">
         <label>Descripción completa</label>
-        <textarea value={form.descripcion_larga} placeholder="Contá en detalle de qué trata el curso."
+        <textarea value={form.descripcion_larga} placeholder={esDescargable ? "Contá qué es y qué va a encontrar adentro." : "Contá en detalle de qué trata el curso."}
           style={{minHeight:'120px'}}
           onChange={e => setForm({...form, descripcion_larga: e.target.value})}/>
+        <span className="field-hint">{esDescargable ? AYUDA_CURSO.descargable.descripcionLarga : AYUDA_CURSO.descripcionLarga}</span>
       </div>
       <div className="field">
         <label>Imagen de portada</label>
@@ -167,29 +202,40 @@ export default function NewCoursePage() {
         <label>Video de presentación (YouTube)</label>
         <input value={form.video_presentacion_url} placeholder="https://youtube.com/watch?v=..."
           onChange={e => setForm({...form, video_presentacion_url: e.target.value})}/>
+        <span className="field-hint">{AYUDA_CURSO.video}</span>
       </div>
 
-      <div className="section-title">Precio y modalidad</div>
+      <div className="section-title">{esDescargable ? 'Precio' : 'Precio y modalidad'}</div>
       <div className="precio-row">
         <div className="field">
           <label>Precio actual *</label>
           <input type="number" min="0" value={form.precio}
             onChange={e => setForm({...form, precio: Number(e.target.value)})}/>
+          <span className="field-hint">{esDescargable ? (Number(form.precio) === 0 ? 'Con $0 se va a poder descargar gratis.' : 'Pago único: quien lo compra lo descarga cuando quiera.') : AYUDA_CURSO.precio(form.modalidad)}</span>
         </div>
         <div className="field">
-        <label>Precio con oferta (el tachado que se muestra arriba)</label>
+        <label>Precio anterior, tachado (opcional)</label>
           <input type="number" min="0" value={form.precio_original} placeholder="Para mostrar tachado"
             onChange={e => setForm({...form, precio_original: e.target.value})}/>
+          <span className="field-hint">{AYUDA_CURSO.precioTachado}</span>
         </div>
       </div>
       <div className="field">
+        <label>Precio en dólares (opcional)</label>
+        <input type="number" min="0" step="0.01" value={form.precio_usd} placeholder="Ej: 40"
+          onChange={e => setForm({...form, precio_usd: e.target.value})}/>
+        <span className="field-hint">{AYUDA_CURSO.precioUsd}</span>
+      </div>
+      {!esDescargable && <div className="field">
         <label>Modalidad de venta</label>
         <select value={form.modalidad} onChange={e => setForm({...form, modalidad: e.target.value})}>
           <option value="unico">Pago único — acceso para siempre</option>
           <option value="suscripcion">Suscripción mensual</option>
         </select>
-      </div>
+        <span className="field-hint">{AYUDA_CURSO.modalidad(form.modalidad)}</span>
+      </div>}
 
+      {!esDescargable && <>
       <div className="section-title">Detalles</div>
       <div className="precio-row">
         <div className="field">
@@ -204,10 +250,13 @@ export default function NewCoursePage() {
           <label>Duración estimada (horas)</label>
           <input type="number" min="0" step="0.5" value={form.duracion_estimada_horas} placeholder="Ej: 4.5"
             onChange={e => setForm({...form, duracion_estimada_horas: e.target.value})}/>
+          <span className="field-hint">{AYUDA_CURSO.duracion}</span>
         </div>
       </div>
+      </>}
 
       <div className="section-title">Para quién es</div>
+      <div className="section-hint">{AYUDA_CURSO.listas}</div>
       {form.para_quien.map((item, i) => (
         <div key={i} className="bullet-item">
           <input value={item} placeholder="Ej: Para vos si querés aprender tarot desde cero"
@@ -217,16 +266,17 @@ export default function NewCoursePage() {
       ))}
       <button className="btn-add" onClick={() => agregarItem('para_quien')}><Plus size={11}/>Agregar</button>
 
-      <div className="section-title">Qué vas a aprender</div>
+      <div className="section-title">{esDescargable ? 'Qué vas a encontrar' : 'Qué vas a aprender'}</div>
       {form.que_aprenderas.map((item, i) => (
         <div key={i} className="bullet-item">
-          <input value={item} placeholder="Ej: Leer las 78 cartas del tarot"
+          <input value={item} placeholder={esDescargable ? 'Ej: 12 rituales simples para cada luna nueva' : 'Ej: Leer las 78 cartas del tarot'}
             onChange={e => editarItem('que_aprenderas', i, e.target.value)}/>
           {form.que_aprenderas.length > 1 && <button className="btn-remove" onClick={() => eliminarItem('que_aprenderas', i)}><X size={10}/></button>}
         </div>
       ))}
       <button className="btn-add" onClick={() => agregarItem('que_aprenderas')}><Plus size={11}/>Agregar</button>
 
+      {!esDescargable && <>
       <div className="section-title">Requisitos previos</div>
       {form.requisitos.map((item, i) => (
         <div key={i} className="bullet-item">
@@ -236,8 +286,10 @@ export default function NewCoursePage() {
         </div>
       ))}
       <button className="btn-add" onClick={() => agregarItem('requisitos')}><Plus size={11}/>Agregar</button>
+      </>}
 
       <div className="section-title">Garantía</div>
+      <div className="section-hint">{AYUDA_CURSO.garantia}</div>
       <div className="precio-row">
         <div className="field">
           <label>Días de garantía</label>
@@ -256,14 +308,21 @@ export default function NewCoursePage() {
           style={{padding:'10px 18px',background:'transparent',color:'var(--text-muted)',border:'0.5px solid var(--border)',borderRadius:'10px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
           Cancelar
         </button>
+        {esDescargable ? (
+          <button onClick={() => guardar('borrador')} disabled={guardando}
+            style={{padding:'10px 18px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+            {guardando ? 'Guardando...' : 'Continuar: subir archivos'}
+          </button>
+        ) : (<>
         <button onClick={() => guardar('borrador')} disabled={guardando}
           style={{padding:'10px 18px',background:'var(--bg-input)',color:'var(--text-primary)',border:'0.5px solid var(--border)',borderRadius:'10px',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
           Guardar borrador
         </button>
         <button onClick={() => guardar('publicado')} disabled={guardando}
-          style={{padding:'10px 18px',background:'linear-gradient(135deg,#8B5CF6,#7C3AED)',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'10px 18px',background:'linear-gradient(135deg,var(--accent),var(--accent-strong))',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           {guardando ? 'Guardando...' : 'Publicar curso'}
         </button>
+        </>)}
       </div>
     </div>
   )

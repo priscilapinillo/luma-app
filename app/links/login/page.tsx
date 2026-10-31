@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { tieneAccesoLumaActivo } from '@/lib/accesoLinks'
+import TelefonoLuma, { ESTILOS_TELEFONO } from '@/components/landing/TelefonoLuma'
+import { ESTILOS_ACCESO } from '@/components/landing/estilosAcceso'
 
 export default function LinksLoginPage() {
   const router = useRouter()
@@ -12,6 +14,7 @@ export default function LinksLoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [mailRecuperoEnviado, setMailRecuperoEnviado] = useState(false)
+  const [ver, setVer] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -83,96 +86,48 @@ export default function LinksLoginPage() {
   }
 
   return (
-    <div className="lr-page">
-      <style>{`
-        
-        @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
-        *{box-sizing:border-box;margin:0;padding:0}
-        .lr-page{min-height:100vh;position:relative;overflow:hidden;font-family:'Montserrat',sans-serif;color:#F9F6F0;
-          background:linear-gradient(160deg,rgba(30,27,46,0.88),rgba(13,11,20,0.94)),url('/landing/hero-bgg.webp') center/cover no-repeat;
-          padding:28px 20px 60px}
-        .lr-glow{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
-        .lr-glow.g1{width:420px;height:420px;background:rgba(139,92,246,0.35);top:-120px;left:50%;transform:translateX(-50%);animation:lrPulse 6s ease-in-out infinite}
-        .lr-glow.g2{width:320px;height:320px;background:rgba(201,168,76,0.18);bottom:-80px;right:-60px}
-        @keyframes lrPulse{0%,100%{opacity:.75}50%{opacity:1}}
-
-        .lr-top{position:relative;z-index:1;display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:28px}
-        .lr-logo{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#F9F6F0;text-decoration:none}
-        .lr-logo span{color:#C9A84C}
-        .lr-pill{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;border:1px solid rgba(201,168,76,0.4);padding:4px 10px;border-radius:999px}
-
-        .lr-hero{position:relative;z-index:1;text-align:center;max-width:920px;margin:0 auto 40px}
-        .lr-h1{font-family:'Avigea','Cormorant Garamond',serif;font-weight:400;font-size:clamp(34px,6.2vw,68px);line-height:1.08;color:#F9F6F0;text-shadow:0 0 40px rgba(139,92,246,0.45)}
-        .lr-h1 .oro{color:#C9A84C}
-        .lr-sub{margin:18px auto 0;max-width:560px;font-size:15px;line-height:1.6;color:#D9D0EE}
-
-        .lr-grid{position:relative;z-index:1;max-width:420px;margin:0 auto}
-        .lr-card{width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:28px;padding:30px 26px;
-          backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 30px 80px rgba(0,0,0,0.45)}
-        .lr-card-title{font-size:18px;font-weight:700;margin-bottom:4px}
-        .lr-card-sub{font-size:13px;color:#B9AED3;margin-bottom:22px}
-        .lr-field{margin-bottom:14px}
-        .lr-label{display:block;font-size:12px;font-weight:600;color:#D9D0EE;margin-bottom:7px;padding-left:4px}
-        .lr-input{width:100%;height:50px;padding:0 18px;border-radius:16px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.07);
-          color:#F9F6F0;font-size:15px;font-family:inherit;outline:none;transition:all .2s}
-        .lr-input::placeholder{color:#8F84AA}
-        .lr-input:focus{border-color:#A78BFA;background:rgba(255,255,255,0.1);box-shadow:0 0 0 4px rgba(139,92,246,0.22)}
-        .lr-error{font-size:13px;color:#FECACA;background:rgba(220,38,38,0.15);border:1px solid rgba(248,113,113,0.35);padding:10px 14px;border-radius:14px;margin-bottom:14px;line-height:1.5}
-        .lr-ok{font-size:13px;color:#A7F3D0;background:rgba(16,185,129,0.14);border:1px solid rgba(52,211,153,0.35);padding:10px 14px;border-radius:14px;margin-bottom:14px;line-height:1.5}
-        .lr-olvide{text-align:right;margin:-4px 0 14px}
-        .lr-olvide button{background:none;border:none;padding:0;color:#C9A84C;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-        .lr-btn{width:100%;height:52px;border:none;border-radius:999px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;box-shadow:0 12px 30px rgba(139,92,246,0.45);transition:transform .2s,box-shadow .2s}
-        .lr-btn:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(139,92,246,0.55)}
-        .lr-btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
-        .lr-switch{text-align:center;margin-top:18px;font-size:13px;color:#B9AED3}
-        .lr-switch a{color:#C9A84C;font-weight:600;text-decoration:none}
-      `}</style>
-
-      <div className="lr-glow g1"/>
-      <div className="lr-glow g2"/>
-
-      <header className="lr-top">
-        <a href="/" className="lr-logo">Luma<span>.</span></a>
-        <span className="lr-pill">Links</span>
-      </header>
-
-      <section className="lr-hero">
-      <h1 className="lr-h1">Todo lo que hagas con <span className="oro">amor</span> estará bien hecho</h1>
-      <p className="lr-sub">Qué lindo verte de nuevo.</p>
-      </section>
-
-      <div className="lr-grid">
-        <form className="lr-card" onSubmit={handleLogin}>
-          <div className="lr-card-title">Iniciá sesión</div>
-          <div className="lr-card-sub">Con el email de tu Luma Links.</div>
-
-          {error && <div className="lr-error">{error}</div>}
-          {mailRecuperoEnviado && (
-            <div className="lr-ok">Te mandamos un mail a {email.trim()} para elegir una contraseña nueva.</div>
-          )}
-
-          <div className="lr-field">
-            <label className="lr-label">Email</label>
-            <input className="lr-input" type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} required/>
-          </div>
-          <div className="lr-field">
-            <label className="lr-label">Contraseña</label>
-            <input className="lr-input" type="password" placeholder="Tu contraseña" value={password} onChange={e => setPassword(e.target.value)} required/>
-          </div>
-
-          <div className="lr-olvide">
-            <button type="button" onClick={recuperarContrasena}>Olvidé mi contraseña</button>
-          </div>
-
-          <button type="submit" className="lr-btn" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-
-          <div className="lr-switch">¿Todavía no tenés tu página? <a href="/links/registro">Creala gratis</a></div>
-          <div className="lr-switch" style={{marginTop:'8px',fontSize:'12px'}}>¿Sos terapeuta de Luma? <a href="/auth/login">Entrá acá</a> · ¿Sos alumna? <a href="/aula">Entrá acá</a></div>
-        </form>
-      </div>
+    <div className="au links">
+      <style>{ESTILOS_TELEFONO + ESTILOS_ACCESO + `.au-tabs a{color:#6E7388 !important;transition:all .25s}.au-tabs a.on{background:#27344A;color:#F0E6D8 !important;box-shadow:0 8px 18px rgba(39,52,74,.25)}`}</style>
+      <aside className="au-lado" aria-hidden="true">
+        <span className="au-estrella au-titila" style={{ top: 110, right: 90, fontSize: 16, color: '#A65A6E' }}>✦</span>
+        <span className="au-estrella au-titila" style={{ bottom: 170, left: 54, fontSize: 12, color: '#626B91', animationDelay: '.8s' }}>✦</span>
+        <a href="/" className="au-logo" tabIndex={-1}>Luma<span>.</span><small>LINKS</small></a>
+        <h2 className="au-frase">Todo lo que hagas con <em>amor</em> estará bien hecho.</h2>
+        <p className="au-frase2"><span className="au-subraya">Qué lindo verte de nuevo.</span></p>
+        <div className="au-vis"><div className="au-tel au-flotar"><div><TelefonoLuma pantalla="links" escala={0.8} /></div></div></div>
+        <span className="au-lado-pie">Tu página de links, con la estética de tu trabajo</span>
+      </aside>
+      <main className="au-main">
+        <div className="au-caja">
+          <a href="/" className="au-logo-celu">Luma<span>.</span></a>
+          <nav className="au-tabs" aria-label="Entrar o crear">
+            <a href="/links/login" className={"on"} aria-current={"page"} style={{ flex: 1, minHeight: 46, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', fontWeight: 800, fontSize: 14 }}>Entrar</a>
+            <a href="/links/registro" className={""} aria-current={undefined} style={{ flex: 1, minHeight: 46, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', fontWeight: 800, fontSize: 14 }}>Crear gratis</a>
+          </nav>
+          <form className="au-form au-entra" onSubmit={handleLogin}>
+            <div><h1 className="au-h1">Iniciá sesión</h1><p className="au-sub">Con el email de tu Luma Links.</p></div>
+            <label className="au-campo">Email
+              <span className="au-in"><input type="email" autoComplete="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} required/></span>
+            </label>
+            <label className="au-campo">Contraseña
+              <span className="au-in"><input type={ver ? 'text' : 'password'} autoComplete="current-password" placeholder="Tu contraseña" value={password} onChange={e => setPassword(e.target.value)} required/>
+                <button type="button" className="au-ojo" aria-label={ver ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setVer(!ver)}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              </span>
+            </label>
+            <button type="button" className="au-link derecha" onClick={recuperarContrasena}>Olvidé mi contraseña</button>
+            {error && <div className="au-error" role="alert">{error}</div>}
+            {mailRecuperoEnviado && (
+              <div className="au-aviso lavanda" role="status">Te mandamos un mail a <b>{email.trim()}</b> para elegir una contraseña nueva. Si no aparece, mirá en spam.</div>
+            )}
+            <button type="submit" className="au-btn" disabled={loading}>{loading ? <><i className="au-girar"/>Entrando…</> : 'Entrar'}</button>
+            <div className="au-otros">
+              <span>¿Todavía no tenés tu página? <a href="/links/registro">Creala gratis</a></span>
+              <span>¿Sos terapeuta de Luma? <a href="/auth/login">Entrá acá</a></span>
+              <span>¿Sos alumna? <a href="/aula">Entrá a tu aula</a></span>
+            </div>
+          </form>
+        </div>
+      </main>
     </div>
   )
 }

@@ -16,9 +16,10 @@ async function llamar(ruta: string, nombre: string) {
 }
 
 export default async () => {
-  // las dos a la vez, así no se pasan del tiempo máximo
+  // las dos casi a la vez (así no se pasan del tiempo máximo), pero la de cursos arranca 8 segundos después:
+  // si arrancaban en el mismo segundo, Mercado Pago recibía demasiados pedidos juntos y frenaba algunos (error 429)
   await Promise.all([
-    llamar('/api/cursos/suscripcion/revision-diaria', 'Revisión de suscripciones de cursos'),
+    new Promise(ok => setTimeout(ok, 8000)).then(() => llamar('/api/cursos/suscripcion/revision-diaria', 'Revisión de suscripciones de cursos')),
     llamar('/api/admin/tareas-hora', 'Tareas de Luma'),
   ])
 }

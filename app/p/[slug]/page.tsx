@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { horaAMin, slotConflictsWithBlock } from '@/lib/datetime'
 import { ChevronLeft, ChevronRight, Check, Clock, Shield, ChevronDown, Music2, Camera, Mic, PlayCircle, FileDown, Link as LinkIcon } from 'lucide-react'
+import { toast } from '@/components/ToastProvider'
+import { temaPublico, idYouTube, comoFuncionaValido, alfa } from '@/lib/plantillas'
+import AudioTestimonio, { type TestimonioAudio } from '@/components/AudioTestimonio'
+import CarruselDeslizable from '@/components/CarruselDeslizable'
 
 
 type Terapeuta = {
@@ -11,6 +15,9 @@ type Terapeuta = {
   bio: string; avatar_url: string; mensaje_bienvenida: string
   tipo_pago: string; pagina_activa: boolean
   template?: string; slug?: string
+  template_modo?: string | null
+  como_funciona?: { mostrar: boolean; pasos: string[] } | null
+  video_presentacion?: string | null
   secciones?: { sobre_mi: boolean; testimonios: boolean; faq: boolean; disponibilidad: boolean }
   faq?: { pregunta: string; respuesta: string }[]
   valores?: { icon: string; name: string; desc: string }[]
@@ -26,6 +33,7 @@ type Terapeuta = {
   pausa_entre_turnos?: number | null
   moneda?: string
   zona_horaria?: string
+  usd_link?: string | null; usd_cuenta?: string | null; usd_usdt?: string | null; usd_usdt_red?: string | null
 }
 
 type Servicio = {
@@ -37,6 +45,7 @@ type Curso = {
   id: string; titulo: string; slug: string
   descripcion_corta: string; imagen_url: string
   precio: number; nivel: string
+  tipo?: string
 }
 
 const SIMBOLOS_MONEDA: Record<string, string> = {
@@ -57,77 +66,8 @@ function sinTildes(str: string) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
-const TEMPLATES = {
-  luna: {
-    bg: '#0D0B14', bg2: '#12101C', bg3: '#1A1628',
-    primary: '#C9A84C', primaryLight: '#E8D5A3', primaryDim: 'rgba(201,168,76,0.3)',
-    accent: '#6B3FA0', accentLight: '#9B6DD0', accentDim: 'rgba(107,63,160,0.2)',
-    text: '#D4C5A9', textDim: '#7A6B8A', cream: '#F0E8D5',
-    border: 'rgba(201,168,76,0.2)',
-    fontTitle: "'Cormorant Garamond', serif", fontBody: "'Jost', sans-serif", fontSubtitle: "'Jost', sans-serif",
-    googleFonts: 'Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Jost:wght@300;400;500;600',
-    deco: '✦', stars: true, dark: true,
-    cardBg: 'rgba(26,22,40,0.6)', heroBg: 'linear-gradient(135deg,#1A1035,#0D0B14)',
-    navBg: 'linear-gradient(to bottom,rgba(13,11,20,0.97),rgba(13,11,20,0))',
-    btnBg: 'linear-gradient(135deg,#6B3FA0,#8B5CF6)', btnColor: '#E8D5A3',
-  },
-  aura: {
-    bg: '#F8F4FF', bg2: '#F0EBFF', bg3: '#E8E0FF',
-    primary: '#7C3AED', primaryLight: '#A78BFA', primaryDim: 'rgba(124,58,237,0.2)',
-    accent: '#EC4899', accentLight: '#F9A8D4', accentDim: 'rgba(236,72,153,0.15)',
-    text: '#4B5563', textDim: '#9CA3AF', cream: '#1F2937', border: 'rgba(124,58,237,0.15)',
-    fontTitle: "'Playfair Display', serif", fontBody: "'DM Sans', sans-serif", fontSubtitle: "'DM Sans', sans-serif",
-    googleFonts: 'Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:wght@300;400;500;600',
-    deco: '◈', stars: false, dark: false,
-    cardBg: 'rgba(255,255,255,0.8)', heroBg: 'linear-gradient(135deg,#F8F4FF,#EDE9FE)',
-    navBg: 'rgba(248,244,255,0.95)', btnBg: 'linear-gradient(135deg,#7C3AED,#EC4899)', btnColor: 'white',
-  },
-  tierra: {
-    bg: '#FAF7F0', bg2: '#F5F0E8', bg3: '#EDE8DC',
-    primary: '#92400E', primaryLight: '#D97706', primaryDim: 'rgba(146,64,14,0.2)',
-    accent: '#065F46', accentLight: '#10B981', accentDim: 'rgba(6,95,70,0.15)',
-    text: '#44403C', textDim: '#A8A29E', cream: '#1C1917', border: 'rgba(146,64,14,0.15)',
-    fontTitle: "'Lora', serif", fontBody: "'Nunito', sans-serif", fontSubtitle: "'Nunito', sans-serif",
-    googleFonts: 'Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito:wght@300;400;500;600',
-    deco: '❧', stars: false, dark: false,
-    cardBg: 'rgba(255,255,255,0.7)', heroBg: 'linear-gradient(135deg,#FAF7F0,#F5F0E8)',
-    navBg: 'rgba(250,247,240,0.95)', btnBg: 'linear-gradient(135deg,#92400E,#D97706)', btnColor: 'white',
-  },
-  rosa: {
-    bg: '#FFF0F6', bg2: '#FFE4F0', bg3: '#FFD6E8',
-    primary: '#BE185D', primaryLight: '#F472B6', primaryDim: 'rgba(190,24,93,0.2)',
-    accent: '#9D174D', accentLight: '#EC4899', accentDim: 'rgba(157,23,77,0.15)',
-    text: '#4A1942', textDim: '#9D7A95', cream: '#2D0A25', border: 'rgba(190,24,93,0.15)',
-    fontTitle: "'Playfair Display', serif", fontBody: "'DM Sans', sans-serif", fontSubtitle: "'DM Sans', sans-serif",
-    googleFonts: 'Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:wght@300;400;500;600',
-    deco: '✿', stars: false, dark: false,
-    cardBg: 'rgba(255,255,255,0.85)', heroBg: 'linear-gradient(135deg,#FFF0F6,#FFE4F0)',
-    navBg: 'rgba(255,240,246,0.95)', btnBg: 'linear-gradient(135deg,#BE185D,#EC4899)', btnColor: 'white',
-  },
-  violeta: {
-    bg: '#1E0A3C', bg2: '#2D1058', bg3: '#3D1570',
-    primary: '#C084FC', primaryLight: '#E9D5FF', primaryDim: 'rgba(192,132,252,0.3)',
-    accent: '#A855F7', accentLight: '#D8B4FE', accentDim: 'rgba(168,85,247,0.2)',
-    text: '#DDD6FE', textDim: '#8B5CF6', cream: '#FAF5FF', border: 'rgba(192,132,252,0.25)',
-    fontTitle: "'Cormorant Garamond', serif", fontBody: "'Jost', sans-serif", fontSubtitle: "'Jost', sans-serif",
-    googleFonts: 'Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Jost:wght@300;400;500;600',
-    deco: '✧', stars: true, dark: true,
-    cardBg: 'rgba(61,21,112,0.5)', heroBg: 'linear-gradient(135deg,#1E0A3C,#2D1058)',
-    navBg: 'linear-gradient(to bottom,rgba(30,10,60,0.97),rgba(30,10,60,0))',
-    btnBg: 'linear-gradient(135deg,#7C3AED,#C084FC)', btnColor: 'white',
-  },
-  verde: {
-    bg: '#F0FDF4', bg2: '#DCFCE7', bg3: '#BBF7D0',
-    primary: '#065F46', primaryLight: '#10B981', primaryDim: 'rgba(6,95,70,0.2)',
-    accent: '#047857', accentLight: '#34D399', accentDim: 'rgba(4,120,87,0.15)',
-    text: '#1C4532', textDim: '#6B7280', cream: '#022C22', border: 'rgba(6,95,70,0.15)',
-    fontTitle: "'Lora', serif", fontBody: "'Nunito', sans-serif", fontSubtitle: "'Nunito', sans-serif",
-    googleFonts: 'Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito:wght@300;400;500;600',
-    deco: '❧', stars: false, dark: false,
-    cardBg: 'rgba(255,255,255,0.8)', heroBg: 'linear-gradient(135deg,#F0FDF4,#DCFCE7)',
-    navBg: 'rgba(240,253,244,0.95)', btnBg: 'linear-gradient(135deg,#065F46,#10B981)', btnColor: 'white',
-  },
-}
+// plantillas: lib/plantillas.ts (6 plantillas, en claro y oscuro)
+const TEMA_CARGA = temaPublico('luna', 'oscuro')
 
 const TESTIMONIOS_DEFAULT = [
   { texto: 'La sesión fue increíble. Llegué confundida y me fui con total claridad.', nombre: 'Camila R.' },
@@ -167,6 +107,10 @@ async function buscarOCrearPaciente(
   return 'servidor'
 }
 
+// cupón que la consultante aplicó (lo revisa y lo calcula siempre el servidor)
+let cuponDeReserva = ''
+function ponerCuponDeReserva(c: string) { cuponDeReserva = c }
+
 async function crearSesionYBooking(
   _supabase: ReturnType<typeof createClient>,
   opts: {
@@ -190,14 +134,24 @@ async function crearSesionYBooking(
         therapistId: opts.terapeutaId, serviceId: opts.servicio.id, fecha: opts.fecha, hora: opts.hora,
         mensaje: opts.mensaje, nombre: opts.nombre, whatsapp: opts.whatsapp, metodoPago: opts.metodoPago,
         ...(opts.id ? { id: opts.id } : {}),
+        ...(cuponDeReserva ? { cupon: cuponDeReserva } : {}),
       }),
     })
     const r = await res.json().catch(() => ({ ok: false }))
     if (!r.ok || !r.sesion) {
       console.error('No se pudo crear la reserva:', r.motivo)
-      if (r.motivo === 'ocupado') alert('Ese horario se acaba de ocupar. Elegí otro, por favor.')
-      else if (r.motivo === 'demasiadas') alert('Hiciste muchas reservas seguidas. Esperá un rato e intentá de nuevo.')
-      else if (r.motivo === 'servicio_invalido') alert('Este servicio ya no está disponible. Actualizá la página, por favor.')
+      if (r.motivo === 'ocupado') {
+        toast('Ese horario se acaba de ocupar. Elegí otro, por favor.', 'error')
+        try { window.dispatchEvent(new CustomEvent('luma-dia-completo', { detail: '' })) } catch {} // refresca los horarios
+      }
+      else if (r.motivo === 'cupon') toast(r.mensaje || 'Este cupón ya no está disponible.', 'error')
+      else if (r.motivo === 'demasiadas') toast('Hiciste muchas reservas seguidas. Esperá un rato e intentá de nuevo.', 'error')
+      else if (r.motivo === 'servicio_invalido') toast('Este servicio ya no está disponible. Actualizá la página, por favor.', 'error')
+      else if (r.motivo === 'dia_completo') {
+        toast('Ese día se acaba de completar. Elegí otro día, por favor.', 'error')
+        // la página deja de ofrecer horarios ese día sin tener que recargar
+        try { window.dispatchEvent(new CustomEvent('luma-dia-completo', { detail: opts.fecha })) } catch {}
+      }
       return null
     }
     return r.sesion as { id: string }
@@ -268,6 +222,36 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [disponibilidad, setDisponibilidad] = useState<Disponibilidad[]>([])
   const [sesionesOcupadas, setSesionesOcupadas] = useState<{fecha:string;hora:string;duracion:number}[]>([])
+  // días que ya llegaron al máximo de sesiones (los dice el servidor, con las mismas reglas que usa al reservar)
+  const [diasLlenos, setDiasLlenos] = useState<string[]>([])
+  // turnos ocupados según el servidor: se SUMAN a los que ya traía la página (nunca se ofrece un horario tomado)
+  const [ocupadosServidor, setOcupadosServidor] = useState<{fecha:string;hora:string;duracion:number}[]>([])
+  const refrescarAgendaRef = useRef<() => void>(() => {})
+  async function refrescarAgenda(terapeutaId?: string) {
+    const id = terapeutaId || terapeuta?.user_id
+    if (!id) return
+    try {
+      const r = await fetch(`/api/reservas/agenda-publica?t=${encodeURIComponent(id)}`, { cache: 'no-store' })
+      if (!r.ok) return
+      const j = await r.json()
+      if (Array.isArray(j.ocupados)) setOcupadosServidor(j.ocupados)
+      if (Array.isArray(j.diasCompletos)) setDiasLlenos(prev => [...new Set([...prev, ...j.diasCompletos])])
+    } catch {}
+  }
+  refrescarAgendaRef.current = () => { refrescarAgenda() }
+
+  useEffect(() => {
+    const alLlenarse = (e: Event) => {
+      const f = String((e as CustomEvent).detail || '')
+      if (f) setDiasLlenos(prev => prev.includes(f) ? prev : [...prev, f])
+      refrescarAgendaRef.current()
+      // vuelve a los horarios para elegir otro (lo que ya escribió en el formulario queda guardado)
+      setHoraSel(''); setPaso(prev => Math.min(prev, 2))
+      setTimeout(() => horariosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 200)
+    }
+    window.addEventListener('luma-dia-completo', alLlenarse)
+    return () => window.removeEventListener('luma-dia-completo', alLlenarse)
+  }, [])
   const [bloqueos, setBloqueos] = useState<{fecha_inicio:string;fecha_fin:string}[]>([])
   const [entregasLlenas, setEntregasLlenas] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -306,6 +290,17 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const [testiIdx, setTestiIdx] = useState(0)
   const [servicioModal, setServicioModal] = useState<Servicio | null>(null)
   const [monedaSel, setMonedaSel] = useState<'ars'|'usd'>('ars')
+  // reserva elegida en dólares (con las formas de pago en dólares que configuró la terapeuta)
+  const [enUSD, setEnUSD] = useState(false)
+  // cupón (por código o por link ?cupon=)
+  const [cuponTexto, setCuponTexto] = useState('')
+  const [cuponLink, setCuponLink] = useState('')
+  const [cupon, setCupon] = useState<null | { codigo: string; porcentaje: number; precioFinal: number; precioFinalUsd: number; servicioId: string }>(null)
+  const [cuponError, setCuponError] = useState('')
+  const [validandoCupon, setValidandoCupon] = useState(false)
+  const [ventasAbiertas, setVentasAbiertas] = useState(true)
+  const [audiosTesti, setAudiosTesti] = useState<TestimonioAudio[]>([])
+  const [enviandoUSD, setEnviandoUSD] = useState(false)
 
   const reservaRef = useRef<HTMLDivElement>(null)
   const horariosRef = useRef<HTMLDivElement>(null)
@@ -396,6 +391,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .eq('slug', slugDecoded).single()
       if (!perfil) { setLoading(false); return }
       setTerapeuta(perfil)
+      refrescarAgenda(perfil.user_id)
       try {
         const { data: { user: visitante } } = await supabase.auth.getUser()
         setEsDuena(!!visitante && visitante.id === perfil.user_id)
@@ -403,7 +399,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       // ¿puede tomar reservas? (si falla la consulta, seguimos mostrando la página: nunca cortamos por un error)
       try {
         const r = await fetch(`/api/pagina-disponible?slug=${encodeURIComponent(slugDecoded)}`, { cache: 'no-store' })
-        if (r.ok) { const j = await r.json(); if (j && j.disponible === false) setDisponible(false) }
+        if (r.ok) { const j = await r.json(); if (j && j.disponible === false) setDisponible(false); if (j && j.ventas === false) setVentasAbiertas(false) }
       } catch {}
       const [{ data: servs }, { data: disp }, { data: sess }, { data: blocks }, { data: cursosData }] = await Promise.all([
         supabase.from('services').select('*').eq('user_id', perfil.user_id).eq('activo', true),
@@ -415,6 +411,22 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       ])
       if (servs) setServicios(servs)
       if (cursosData) setCursos(cursosData)
+      // testimonios en audio (si la tabla todavía no existe o falla, la página sigue igual)
+      try {
+        const { data: aud, error: errAud } = await supabase.from('testimonios_audio').select('id, path, duracion, nombre, frase, servicio, orden').eq('terapeuta_id', perfil.user_id).order('orden', { ascending: true }).limit(15)
+        if (!errAud && aud) setAudiosTesti(aud.map((a: any) => ({ id: a.id, url: supabase.storage.from('testimonios-audio').getPublicUrl(a.path).data.publicUrl, duracion: Number(a.duracion) || 0, nombre: a.nombre || '', frase: a.frase || '', servicio: a.servicio || '' })))
+      } catch {}
+      // precio en dólares de los cursos (aparte: si la base todavía no tiene la columna, los cursos se ven igual que siempre)
+      if (cursosData && cursosData.length) {
+        try {
+          const { data: usd, error: errUsd } = await supabase.from('courses').select('id, precio_usd').in('id', cursosData.map((c: any) => c.id))
+          if (!errUsd && usd) setCursos(cursosData.map((c: any) => ({ ...c, precio_usd: (usd as any[]).find(u => u.id === c.id)?.precio_usd ?? null })))
+        } catch {}
+        try {
+          const { data: tipos, error: errTipo } = await supabase.from('courses').select('id, tipo').in('id', cursosData.map((c: any) => c.id))
+          if (!errTipo && tipos) setCursos(prev => prev.map((c: any) => ({ ...c, tipo: (tipos as any[]).find(x => x.id === c.id)?.tipo || 'curso' })))
+        } catch {}
+      }
       if (disp) setDisponibilidad(disp)
         if (sess) setSesionesOcupadas(sess.map((s: any) => ({
           fecha: s.fecha?.split('T')[0] || '',
@@ -440,21 +452,55 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   // ── helpers de calendario ─────────────────────────────────────────────────
 
+  // ocupados de la página + del servidor, sin repetir
+  const todosOcupados = useMemo(() => {
+    const vistos = new Set<string>(); const lista: {fecha:string;hora:string;duracion:number}[] = []
+    for (const s of [...sesionesOcupadas, ...ocupadosServidor]) {
+      const k = `${s.fecha}|${s.hora}|${s.duracion}`
+      if (!vistos.has(k)) { vistos.add(k); lista.push(s) }
+    }
+    return lista
+  }, [sesionesOcupadas, ocupadosServidor])
+
+  // al elegir un servicio en vivo, queda elegido el primer día CON lugar (antes quedaba marcado el primero pero vacío)
+  useEffect(() => {
+    if (!servicioSel || servicioSel.tipo_servicio === 'entrega' || fechaSel || diasSel.length === 0) return
+    const idx = diasSel.findIndex(d => horariosDisponibles(formatDate(d)).length > 0)
+    const i = idx >= 0 ? idx : 0
+    setDiaActivoIdx(i); setFechaSel(formatDate(diasSel[i]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicioSel, fechaSel, diasSel, diasLlenos, todosOcupados])
+
+  // ¿ese día ya llegó al máximo de sesiones? (entregas no cuentan)
+  function diaCompleto(fecha: string): boolean {
+    if (diasLlenos.includes(fecha)) return true
+    const maxDia = Number((terapeuta as any)?.max_sesiones_dia) || 0
+    if (!(maxDia > 0)) return false
+    return todosOcupados.filter(s => s.fecha === fecha && s.hora && s.hora !== '00:00').length >= maxDia
+  }
+
   function horariosDisponibles(fecha: string): string[] {
     if (!servicioSel) return []
     const diaSemana = new Date(fecha + 'T12:00:00').getDay()
     const franjas = disponibilidad.filter(d => d.dia_semana === diaSemana && d.activo)
     if (franjas.length === 0) return []
+    // máximo de sesiones por día (opcional, lo pone la terapeuta en Agenda → Disponibilidad).
+    // Las entregas (hora 00:00) no cuentan. El servidor lo vuelve a revisar al reservar.
+    if (diaCompleto(fecha)) return []
+    const ahoraFecha = new Date()
+    const hoyStr = formatDate(ahoraFecha)
+    const ahoraMin = ahoraFecha.getHours() * 60 + ahoraFecha.getMinutes()
     const dur = servicioSel.duracion_estimada || 60
     const horarios: string[] = []
     for (const franja of franjas) {
     const inicio = horaAMin(franja.hora_inicio)
     const fin = horaAMin(franja.hora_fin)
     for (let min = inicio; min + dur <= fin; min += 30) {
+      if (fecha === hoyStr && min <= ahoraMin) continue // hoy: no se ofrecen horarios que ya pasaron
       const h = Math.floor(min / 60), m = min % 60
       const horaStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
       const pausa = terapeuta?.pausa_entre_turnos || 0
-      const conflictoSesion = sesionesOcupadas.some(s => {
+      const conflictoSesion = todosOcupados.some(s => {
         if (s.fecha !== fecha) return false
         const sI = horaAMin(s.hora), sF = sI + s.duracion + pausa
         return min < sF && min + dur > sI
@@ -481,6 +527,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   function diaDisponible(fecha: Date) {
     if (fecha < new Date(new Date().setHours(0, 0, 0, 0))) return false
+    if (servicioSel && servicioSel.tipo_servicio !== 'entrega' && diaCompleto(formatDate(fecha))) return false
     return disponibilidad.find(d => d.dia_semana === fecha.getDay())?.activo || false
   }
 
@@ -534,6 +581,34 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
       setErrorMsg('Hubo un error al confirmar. Intentá de nuevo.')
     } finally {
       setEnviandoTransferencia(false)
+    }
+  }
+
+  // DÓLARES: pagó por fuera (link, cuenta o USDT) y avisa. El turno queda pendiente hasta que la terapeuta confirma.
+  async function confirmarUSD() {
+    if (enviandoUSD) return
+    if (!terapeuta || !servicioSel || !fechaSel || !horaSel || !form.nombre || !form.whatsapp) {
+      setErrorMsg('Para reservar, elegí el servicio, el día y el horario, y completá tu nombre y WhatsApp.')
+      return
+    }
+    setEnviandoUSD(true)
+    setErrorMsg('')
+    try {
+      const supabase = createClient()
+      const pacienteId = await buscarOCrearPaciente(supabase, terapeuta.user_id, form.nombre, form.whatsapp)
+      const sesion = await crearSesionYBooking(supabase, {
+        terapeutaId: terapeuta.user_id, pacienteId,
+        servicio: servicioSel, fecha: fechaSel, hora: horaSel,
+        mensaje: form.mensaje, nombre: form.nombre, whatsapp: form.whatsapp,
+        metodoPago: 'usd',
+      })
+      if (sesion) setEnviado(true)
+      else if (!errorMsg) setErrorMsg('No se pudo reservar. Revisá tu conexión e intentá de nuevo.')
+    } catch (e) {
+      console.error(e)
+      setErrorMsg('No se pudo reservar. Revisá tu conexión e intentá de nuevo.')
+    } finally {
+      setEnviandoUSD(false)
     }
   }
 
@@ -631,15 +706,45 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
   // ── derivados ─────────────────────────────────────────────────────────────
 
-  const t = TEMPLATES[(terapeuta?.template as keyof typeof TEMPLATES) || 'luna']
+  const t = temaPublico(terapeuta?.template, terapeuta?.template_modo)
   const fotoUrl = terapeuta?.avatar_url || '' // sin foto: se muestra la inicial (nunca una foto de ejemplo)
   const secciones = terapeuta?.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true }
   const faqItems = (terapeuta?.faq || []).filter(f => (f?.pregunta || '').trim())
   const isLuna = (terapeuta?.template || 'luna') === 'luna'
+  const hayUSD = !!(terapeuta?.usd_link || terapeuta?.usd_cuenta || terapeuta?.usd_usdt)
   const mostrarTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   const mostrarMP = !!terapeuta?.mp_activo
   const requierePago = (terapeuta?.tipo_pago === 'sena' || terapeuta?.tipo_pago === 'completo') && (mostrarMP || mostrarTransferencia)
   const formularioListo = !!(form.nombre.trim() && form.whatsapp.trim())
+
+  // ?cupon=CODIGO: se guarda para la reserva y para los links de cursos
+  useEffect(() => {
+    try { const c = new URLSearchParams(window.location.search).get('cupon'); if (c) { const limpio = c.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20); setCuponLink(limpio); setCuponTexto(limpio) } } catch {}
+  }, [])
+  // si cambia el servicio, el cupón se vuelve a revisar (puede no servir para el otro)
+  useEffect(() => { if (cupon && servicioSel && cupon.servicioId !== servicioSel.id) { setCupon(null); ponerCuponDeReserva('') } }, [servicioSel?.id])
+  // con el link de cupón, se aplica solo cuando ya completó nombre y WhatsApp
+  useEffect(() => {
+    if (cuponLink && formularioListo && servicioSel && !cupon && !validandoCupon && !cuponError && Number(servicioSel.precio_base) > 0) aplicarCupon(cuponLink)
+  }, [cuponLink, formularioListo, servicioSel?.id])
+  async function aplicarCupon(codigo?: string) {
+    const cod = (codigo ?? cuponTexto).trim()
+    if (!servicioSel || !cod || validandoCupon) return
+    setValidandoCupon(true); setCuponError('')
+    try {
+      const res = await fetch('/api/cupones/validar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'sesion', id: servicioSel.id, codigo: cod, whatsapp: form.whatsapp }) })
+      const r = await res.json().catch(() => ({ ok: false, mensaje: 'No pudimos revisar el cupón. Probá de nuevo.' }))
+      if (!r.ok) { setCupon(null); ponerCuponDeReserva(''); setCuponError(r.mensaje || 'Este cupón ya no está disponible.'); return }
+      setCupon({ codigo: r.codigo, porcentaje: r.porcentaje, precioFinal: r.precioFinal, precioFinalUsd: r.precioFinalUsd, servicioId: servicioSel.id })
+      setCuponTexto(r.codigo); ponerCuponDeReserva(r.codigo)
+      toast(`Cupón ${r.codigo} aplicado: −${r.porcentaje}%`)
+    } finally { setValidandoCupon(false) }
+  }
+  function quitarCupon() { setCupon(null); setCuponTexto(''); setCuponLink(''); setCuponError(''); ponerCuponDeReserva('') }
+  const precioARS = cupon ? cupon.precioFinal : Number(servicioSel?.precio_base || 0)
+  const precioUSDFinal = cupon && cupon.precioFinalUsd ? cupon.precioFinalUsd : Number(servicioSel?.precio_usd || 0)
+  const linkCurso = (slugCurso: string) => `/p/${terapeuta?.slug}/cursos/${slugCurso}${cuponLink ? `?cupon=${encodeURIComponent(cuponLink)}` : ''}`
 
   const qBusqueda = sinTildes(busqueda.trim())
   const serviciosFiltrados = !qBusqueda ? servicios : servicios.filter(s => sinTildes(s.nombre).includes(qBusqueda) || sinTildes(s.descripcion||'').includes(qBusqueda))
@@ -649,8 +754,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   // ── renders de carga/error ────────────────────────────────────────────────
 
   if (loading) return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:TEMPLATES.luna.bg,color:TEMPLATES.luna.primary,fontFamily:'serif',fontSize:'14px',letterSpacing:'2px'}}>
-      {TEMPLATES.luna.deco} cargando {TEMPLATES.luna.deco}
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:TEMA_CARGA.bg,color:TEMA_CARGA.primary,fontFamily:'serif',fontSize:'14px',letterSpacing:'2px'}}>
+      {TEMA_CARGA.deco} cargando {TEMA_CARGA.deco}
     </div>
   )
 
@@ -702,6 +807,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   const valoresReales = (terapeuta.valores || []).filter(v => (v?.name || '').trim())
   const bioReal = (terapeuta.bio || '').trim()
   const testiReales = (terapeuta.testimonios || []).filter((x: any) => (x?.texto || '').trim())
+  const videoId = idYouTube(terapeuta.video_presentacion)
+  const comoFunciona = comoFuncionaValido(terapeuta.como_funciona)
+  const pasosComo = comoFunciona.pasos.map(p => (p || '').trim()).filter(Boolean)
+  const etiquetaFoto = (terapeuta.especialidad || '').split('·')[0].trim()
+  // franjas: cada sección visible alterna el fondo base con la franja de otro tono (nunca dos iguales seguidas)
+  let nFranja = 0
+  const franja = () => (nFranja++ % 2 === 0 ? 'franja franja-b' : 'franja')
   function armarHref(b: { accion: string; url: string; curso_slug: string; mensaje_whatsapp: string }) {
     if (b.accion === 'whatsapp') return waNumero ? `https://wa.me/${waNumero}${b.mensaje_whatsapp ? `?text=${encodeURIComponent(b.mensaje_whatsapp)}` : ''}` : ''
     if (b.accion === 'curso') return b.curso_slug && cursos.some(c => c.slug === b.curso_slug) ? `/p/${terapeuta!.slug}/cursos/${b.curso_slug}` : ''
@@ -738,6 +850,9 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           --border:${t.border};--card-bg:${t.cardBg};
           --font-title:${t.fontTitle};--font-body:${t.fontBody};--font-subtitle:${t.fontSubtitle};
           --btn-bg:${t.btnBg};--btn-color:${t.btnColor};
+          --superficie:${t.superficie};--banda:${t.banda};--acento:${t.acento};--sobre-acento:${t.sobreAcento};
+          --chip:${t.chip};--chip-txt:${t.chipTxt};--linea:${t.linea};--icono:${t.icono};--luz:${t.luz};
+          --final:${t.final};--final-txt:${t.finalTxt};--final-suave:${t.finalSuave};--cta-final-fondo:${t.ctaFinalFondo};--cta-final-txt:${t.ctaFinalTxt};
         }
         *{box-sizing:border-box;margin:0;padding:0}
         html{background:${t.bg} !important;width:100%}
@@ -761,7 +876,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .hero-mandala{
           position:absolute;inset:0;z-index:0;pointer-events:none;
           opacity:${t.dark ? 0.2 : 0.16};
-          background-image:url('${['tierra','rosa','aura'].includes((terapeuta?.template as string) || 'luna') ? '/landing/fondo-claro.png' : '/landing/fondo-pagina-publica.png'}');
+          background-image:url('${t.patronFondo}');
           background-size:cover;
           background-position:center;
           background-repeat:no-repeat;
@@ -902,6 +1017,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .curso-desc{position:relative;z-index:2;font-size:12px;color:rgba(255,255,255,0.8);line-height:1.3;margin-bottom:14px;font-family:var(--font-subtitle);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-decoration:none}
         .curso-bottom{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px}
         .curso-precio{font-family:var(--font-title);font-weight:600;font-size:16px;color:white;text-decoration:none}
+        .curso-precio-usd{font-size:13px;font-weight:500;opacity:.85}
         .curso-btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;background:white;color:#1A1035;border-radius:50px;font-size:11px;font-weight:700;white-space:nowrap;font-family:var(--font-subtitle);text-decoration:none}
 
         .cursos-mobile{display:flex;flex-direction:column;gap:16px}
@@ -960,6 +1076,8 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
         .dias-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:20px;scrollbar-width:none}
         .dias-scroll::-webkit-scrollbar{display:none}
+        .dia-pill.lleno{opacity:.55}
+        .dia-pill-lleno{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
         .dia-pill{flex-shrink:0;padding:10px 16px;border-radius:50px;border:0.5px solid var(--border);background:var(--card-bg);cursor:pointer;transition:all 0.2s;text-align:center}
         .dia-pill.act{background:var(--btn-bg);border-color:var(--accent)}
         .dia-pill-dia{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;font-family:var(--font-subtitle);font-weight:600}
@@ -1046,6 +1164,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           .cta-final{margin:0 40px 60px}
           .nav{padding:20px 40px}
           .hero-trust{justify-content:flex-start}
+          .hero .hero-ctas{align-items:flex-start}
         }
         @media(max-width:767px){
           .hero{flex-direction:column;text-align:center;padding:90px 24px 60px;gap:32px;align-items:center}
@@ -1058,6 +1177,49 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         .pago-fallido-titulo{font-family:var(--font-title);font-size:24px;font-weight:400;color:var(--cream);margin:0 0 10px}
         .pago-fallido-texto{font-size:14px;line-height:1.6;color:var(--text);font-family:var(--font-subtitle);margin:0 0 14px}
         .pago-fallido .wsp-btn{margin-top:12px;width:100%;justify-content:center}
+        /* ── estructura nueva (etapa 7): franjas, foto en arco, cómo funciona, video ── */
+        .divider{display:none}
+        .franja{position:relative;z-index:1;background:var(--bg)}
+        .franja-b{background:var(--banda)}
+        .franja > .section{padding:56px 20px}
+        .carta{width:230px;height:290px;border-radius:115px 115px 26px 26px;border:none;background:${t.foto};box-shadow:0 18px 36px rgba(0,0,0,0.22)}
+        .carta-inicial{color:${t.fotoTxt};background:none}
+        .carta-overlay{display:none}
+        .carta-etiqueta{position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:700;letter-spacing:0.1em;padding:8px 14px;border-radius:18px;background:var(--superficie);color:var(--cream);box-shadow:0 6px 16px rgba(0,0,0,0.18);font-family:var(--font-subtitle);z-index:2}
+        /* marco de la foto (28/10): arco con estrellas, del color firme de la plantilla, y brillo del color principal */
+        .carta-wrap{width:290px;max-width:78vw}
+        .carta-glow{display:none}
+        .marco{position:relative;width:100%;aspect-ratio:1080/1608}
+        .marco .carta{position:absolute;left:6.1%;width:87.8%;top:10.6%;height:78.1%;border-radius:50% 50% 0 0 / 37.7% 37.7% 0 0;border:2px solid ${t.label};box-shadow:0 0 34px 4px ${alfa(t.acento, 0.6)},0 0 70px 10px ${alfa(t.acento, 0.28)}}
+        .marco-linea{position:absolute;inset:0;z-index:2;pointer-events:none;background:${t.label};-webkit-mask:url('/landing/tarotista.png') center / 100% 119.4% no-repeat;mask:url('/landing/tarotista.png') center / 100% 119.4% no-repeat;filter:drop-shadow(0 0 6px ${alfa(t.acento, 0.55)})}
+        .carta-wrap .carta-etiqueta{bottom:3%;z-index:3}
+        @media(min-width:768px){.carta-wrap{width:340px;max-width:none}}
+        .hero-cta-fancy{--heroBlack:var(--acento)}
+        .hero-cta-dots::before{background-color:var(--luz)}
+        .hero-cta-texto,.hero-cta-fancy .hero-cta-sparkle .path{color:var(--sobre-acento)}
+        .hero-cta-fancy::before{box-shadow:0 12px 24px var(--accent-dim)}
+        @media (prefers-reduced-motion:reduce){.hero-cta-dots::before,.carta-wrap{animation:none}}
+        .como-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px}
+        .como-paso{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+        .como-num{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-title);font-size:23px;font-weight:700;background:var(--superficie);color:var(--cream);box-shadow:0 6px 14px rgba(0,0,0,0.12)}
+        .como-txt{font-size:13px;font-weight:600;line-height:1.35;color:var(--cream);font-family:var(--font-subtitle);overflow-wrap:anywhere}
+        .sobre-card{background:none !important;border:none !important;box-shadow:none !important;padding:0 !important}
+        .sobre-values{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .sobre-val{background:var(--superficie);border:none;border-radius:16px;padding:14px 8px;box-shadow:0 6px 16px rgba(0,0,0,0.08)}
+        .sobre-val-icon{width:44px;height:44px;margin:0 auto 8px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--chip);font-size:20px}
+        .sobre-val-name{font-family:var(--font-title);font-size:17px;letter-spacing:0;text-transform:none;color:var(--cream)}
+        .video-pres{position:relative;width:100%;aspect-ratio:16/9;margin-top:24px;border-radius:20px;overflow:hidden;background:${t.foto};box-shadow:0 12px 26px rgba(0,0,0,0.2)}
+        .video-pres iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+        .anuncio-card::after{background:var(--superficie)}
+        .anuncio-num{background:var(--chip);border:none;box-shadow:none}
+        .anuncio-num span{color:var(--chip-txt)}
+        .cta-final{background:var(--final) !important;border:none !important}
+        .cta-final .section-label{color:var(--final-suave)}
+        .cta-final h2{color:var(--final-txt) !important}
+        .cta-final p{color:var(--final-suave) !important}
+        .cta-final .hero-cta{background:var(--cta-final-fondo);color:var(--cta-final-txt);border:none;box-shadow:none}
+        @media(max-width:420px){.sobre-values{gap:8px}.sobre-val{padding:12px 6px}.sobre-val-name{font-size:15px}.como-txt{font-size:12px}}
+        @media(max-width:340px){.sobre-values{grid-template-columns:1fr}}
         .pago-fallido-cerrar{margin-top:14px;background:none;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:var(--font-subtitle);text-decoration:underline}
       `}</style>
 
@@ -1119,7 +1281,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div key={i} className="hero-destello" style={{top:d.top,left:d.left,fontSize:d.size,animationDelay:d.delay}}>{d.simbolo}</div>
         ))}
         <div className="carta-wrap">
-          <div className="carta-glow"/>
+          <div className="marco">
           <div className="carta">
             {fotoUrl ? (
               <img src={fotoUrl} alt={terapeuta.nombre_profesional} className="carta-foto"
@@ -1128,10 +1290,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               <div className="carta-inicial">{(terapeuta.nombre_profesional || '').trim().charAt(0).toUpperCase() || t.deco}</div>
             )}
             <div className="carta-overlay"/>
-            <div className="carta-frame"/>
-            <div className="carta-roman">{t.deco} XVIII {t.deco}</div>
-            <div className="carta-name">{terapeuta.especialidad?.split('·')[0]?.trim() || ''}</div>
           </div>
+          {/* marco dorado del diseño (public/landing/tarotista.png), pintado con el color de la plantilla */}
+          <div className="marco-linea" aria-hidden="true"/>
+          </div>
+          {etiquetaFoto && <div className="carta-etiqueta">{t.deco} {etiquetaFoto}</div>}
         </div>
         <div className="hero-text">
           {(terapeuta.especialidad || '').trim() && <div className="hero-esp">{terapeuta.especialidad}</div>}
@@ -1158,8 +1321,23 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
         <div className="hero-scroll"><ChevronDown size={20}/></div>
       </section>
 
-      {mostrarDestacado && dest && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+      {comoFunciona.mostrar && pasosComo.length > 0 && (
+        <div className={franja()}>
+          <section className="section">
+            <div className="section-label">Cómo funciona</div>
+            <div className="como-grid" style={{gridTemplateColumns:`repeat(${pasosComo.length}, minmax(0, 1fr))`}}>
+              {pasosComo.map((p, i) => (
+                <div key={i} className="como-paso">
+                  <span className="como-num">{i + 1}</span>
+                  <span className="como-txt">{p}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {mostrarDestacado && dest && (<div className={franja()}>
         <section className="section">
           <a className="dest-card" href={destHref}
             {...(dest.accion === 'curso' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
@@ -1174,35 +1352,10 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             </div>
           </a>
         </section>
-      </>)}
-
-      {secciones.sobre_mi && (bioReal || valoresReales.length > 0) && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
-        <section className="section">
-          <div className="section-label">Sobre mí</div>
-          <h2 className="section-title">Mi propósito</h2>
-          <div className="sobre-card">
-            {bioReal && (
-            <p style={{fontSize:'15px',lineHeight:'1.9',color:'var(--text)',fontFamily:'var(--font-subtitle)',fontWeight:400,marginBottom:'8px'}}>
-              {terapeuta.bio}
-            </p>
-            )}
-            {valoresReales.length > 0 && <div className="sobre-values">
-              {valoresReales.map(v => (
-                <div key={v.name} className="sobre-val">
-                  <div className="sobre-val-icon">{v.icon}</div>
-                  <div className="sobre-val-name">{v.name}</div>
-                  <div className="sobre-val-desc">{v.desc}</div>
-                </div>
-              ))}
-            </div>}
-          </div>
-        </section>
-      </>)}
-
-      <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+      </div>)}
 
       {/* ── SECCIÓN RESERVA ── */}
+      <div className={franja()}>
       <section className="section" ref={reservaRef}>
         <div className="section-label">Servicios</div>
         <h2 className="section-title">¿Cómo puedo acompañarte?</h2>
@@ -1275,13 +1428,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           ) : (<>
             <div className="cursos-mobile">
               {cursosFiltrados.map(c => (
-                <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
+                <a key={c.id} className="curso-card" href={linkCurso(c.slug)} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
                   <div className="curso-overlay"/>
-                  {c.nivel && <div className="curso-badge">{c.nivel}</div>}
+                  {c.tipo === 'descargable' ? <div className="curso-badge">Descargable</div> : c.nivel && <div className="curso-badge">{c.nivel}</div>}
                   <div className="curso-h2">{c.titulo}</div>
                   {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
                   <div className="curso-bottom">
-                  <div className="curso-precio">{c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}</div>
+                  <div className="curso-precio">{!ventasAbiertas ? 'No disponible por ahora' : c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}{ventasAbiertas && hayUSD && Number((c as any).precio_usd) > 0 && Number(c.precio) !== 0 && <span className="curso-precio-usd"> · USD {Number((c as any).precio_usd).toLocaleString('es-AR')}</span>}</div>
                     <div className="curso-btn">{t.deco} Ver detalle</div>
                   </div>
                 </a>
@@ -1290,13 +1443,13 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
 
             <div className="cursos-desktop">
               {cursosFiltrados.slice(cursoPageIdx*3, cursoPageIdx*3+3).map(c => (
-                <a key={c.id} className="curso-card" href={`/p/${terapeuta.slug}/cursos/${c.slug}`} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
+                <a key={c.id} className="curso-card" href={linkCurso(c.slug)} style={{backgroundImage: c.imagen_url ? `url(${c.imagen_url})` : undefined}}>
                   <div className="curso-overlay"/>
-                  {c.nivel && <div className="curso-badge">{c.nivel}</div>}
+                  {c.tipo === 'descargable' ? <div className="curso-badge">Descargable</div> : c.nivel && <div className="curso-badge">{c.nivel}</div>}
                   <div className="curso-h2">{c.titulo}</div>
                   {c.descripcion_corta && <div className="curso-desc">{c.descripcion_corta}</div>}
                   <div className="curso-bottom">
-                  <div className="curso-precio">{c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}</div>
+                  <div className="curso-precio">{!ventasAbiertas ? 'No disponible por ahora' : c.precio != null && Number(c.precio) === 0 ? 'Gratis' : `$${c.precio?.toLocaleString()}`}{ventasAbiertas && hayUSD && Number((c as any).precio_usd) > 0 && Number(c.precio) !== 0 && <span className="curso-precio-usd"> · USD {Number((c as any).precio_usd).toLocaleString('es-AR')}</span>}</div>
                     <div className="curso-btn">{t.deco} Ver detalle</div>
                   </div>
                 </a>
@@ -1358,17 +1511,32 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             {!mostrarCalFull ? (<>
               <div className="dias-scroll">
                 {diasSel.map((d,i) => (
-                  <div key={i} className={`dia-pill${diaActivoIdx===i?' act':''}`}
+                  <div key={i} className={`dia-pill${diaActivoIdx===i?' act':''}${diaCompleto(formatDate(d))?' lleno':''}`}
                     onClick={() => { setDiaActivoIdx(i); setFechaSel(formatDate(d)); setHoraSel('') }}>
                     <div className="dia-pill-dia">{DIAS_CORTO[d.getDay()]}</div>
                     <div className="dia-pill-num">{d.getDate()}</div>
+                    {diaCompleto(formatDate(d)) && <div className="dia-pill-lleno">Completo</div>}
                   </div>
                 ))}
               </div>
               {fechaSel && (
                 <div className="horas-grid">
                   {horariosDisponibles(fechaSel).length === 0
-                    ? <div style={{gridColumn:'1/-1',textAlign:'center',color:'var(--text-dim)',fontSize:'13px',padding:'16px',fontFamily:'var(--font-subtitle)'}}>No hay horarios disponibles este día</div>
+                    ? (() => {
+                        const lleno = diaCompleto(fechaSel)
+                        const idxProx = diasSel.findIndex(d => formatDate(d) > fechaSel && horariosDisponibles(formatDate(d)).length > 0)
+                        return (
+                          <div style={{gridColumn:'1/-1',textAlign:'center',color:'var(--text-dim)',fontSize:'13px',padding:'16px',fontFamily:'var(--font-subtitle)',lineHeight:1.5}}>
+                            {lleno ? 'Este día ya está completo.' : 'No hay horarios disponibles este día.'} Probá con otra fecha.
+                            {idxProx >= 0 && (
+                              <button onClick={() => { setDiaActivoIdx(idxProx); setFechaSel(formatDate(diasSel[idxProx])); setHoraSel('') }}
+                                style={{display:'block',margin:'12px auto 0',padding:'10px 16px',borderRadius:'10px',border:'0.5px solid var(--border)',background:'var(--card-bg)',color:'var(--cream)',fontSize:'12px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',minHeight:'44px'}}>
+                                Ver el próximo día con lugar: {DIAS_CORTO[diasSel[idxProx].getDay()]} {diasSel[idxProx].getDate()}
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()
                     : horariosDisponibles(fechaSel).map(h => (
                       <button key={h} className={`hora-btn${horaSel===h?' sel':''}`}
                         onClick={() => { setHoraSel(h); setPaso(3); setTimeout(() => formularioRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 100) }}>{h}</button>
@@ -1440,13 +1608,78 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {servicioSel?.tipo_servicio === 'entrega' && (
                   <div className="resumen-row"><span className="resumen-lbl">Entrega estimada</span><span className="resumen-val">En {servicioSel.plazo_horas}hs</span></div>
                 )}
-                <div className="resumen-row"><span className="resumen-lbl">Total</span><span className="resumen-total">${servicioSel?.precio_base.toLocaleString()}</span></div>
+                {cupon && (
+                  <div className="resumen-row"><span className="resumen-lbl">Cupón {cupon.codigo} (−{cupon.porcentaje}%)</span>
+                    <span className="resumen-val" style={{textDecoration:'line-through',opacity:0.6}}>{enUSD ? `USD ${servicioSel?.precio_usd}` : `$${servicioSel?.precio_base.toLocaleString()}`}</span></div>
+                )}
+                <div className="resumen-row"><span className="resumen-lbl">Total</span><span className="resumen-total">{enUSD ? `USD ${precioUSDFinal}` : `$${precioARS.toLocaleString('es-AR')}`}</span></div>
               </div>
+
+              {Number(servicioSel?.precio_base) > 0 && (
+                <div className="field" style={{marginTop:'-4px'}}>
+                  <label>¿Tenés un cupón?</label>
+                  <div style={{display:'flex',gap:'8px'}}>
+                    <input value={cuponTexto} placeholder="Ej: LUNA20" disabled={!!cupon} style={{flex:1,textTransform:'uppercase',letterSpacing:'1px'}}
+                      onChange={e => { setCuponTexto(e.target.value); setCuponError('') }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); aplicarCupon() } }}/>
+                    {cupon
+                      ? <button type="button" onClick={quitarCupon} style={{padding:'0 14px',borderRadius:'12px',border:'1px solid var(--border)',background:'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',minHeight:'44px'}}>Quitar</button>
+                      : <button type="button" onClick={() => aplicarCupon()} disabled={!cuponTexto.trim() || validandoCupon} style={{padding:'0 14px',borderRadius:'12px',border:'1px solid var(--border)',background:'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',minHeight:'44px'}}>{validandoCupon ? '...' : 'Aplicar'}</button>}
+                  </div>
+                  {cupon && <div className="field-hint" style={{color:'#34D399'}}>Cupón aplicado al total: −{cupon.porcentaje}%</div>}
+                  {cuponError && <div className="field-hint" style={{color:'#F87171'}}>{cuponError}</div>}
+                </div>
+              )}
 
               {errorMsg && <div className="error-msg">{errorMsg}</div>}
 
+              {/* CASO 0: paga en dólares (formas que configuró la terapeuta) */}
+              {enUSD && (<>
+                <div className="section-label" style={{marginBottom:'12px',justifyContent:'flex-start'}}>Pagá en dólares</div>
+                <div className="transferencia-datos">
+                  {terapeuta.usd_link && (
+                    <div style={{marginBottom:'12px'}}>
+                      <div className="transferencia-titulo">Link de pago</div>
+                      <a className="confirmar-btn" style={{display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',marginTop:'8px'}}
+                        href={/^https?:\/\//i.test(terapeuta.usd_link) ? terapeuta.usd_link : `https://${terapeuta.usd_link}`} target="_blank" rel="noopener noreferrer">
+                        Pagar USD {precioUSDFinal} ↗
+                      </a>
+                    </div>
+                  )}
+                  {terapeuta.usd_cuenta && (
+                    <div style={{marginBottom:'12px'}}>
+                      <div className="transferencia-titulo">Datos de cuenta</div>
+                      <div className="transferencia-instrucciones" style={{whiteSpace:'pre-line'}}>{terapeuta.usd_cuenta}</div>
+                    </div>
+                  )}
+                  {terapeuta.usd_usdt && (
+                    <div>
+                      <div className="transferencia-titulo">USDT{terapeuta.usd_usdt_red ? ` · red ${terapeuta.usd_usdt_red}` : ''}</div>
+                      <div className="transferencia-val" style={{fontSize:'12px',wordBreak:'break-all',margin:'6px 0'}}>{terapeuta.usd_usdt}</div>
+                      <button type="button" style={{width:'100%',padding:'11px',borderRadius:'12px',border:'1px solid var(--border)',background:'transparent',color:'var(--cream)',fontSize:'13px',fontWeight:600,cursor:'pointer',fontFamily:'inherit',minHeight:'44px'}}
+                        onClick={() => navigator.clipboard?.writeText(terapeuta.usd_usdt || '').then(() => toast('Dirección copiada'), () => toast('No se pudo copiar: copiala a mano', 'error'))}>
+                        Copiar dirección
+                      </button>
+                      {terapeuta.usd_usdt_red && <div className="field-hint" style={{marginTop:'6px'}}>Enviá solo por la red {terapeuta.usd_usdt_red}: si usás otra, el pago se pierde.</div>}
+                    </div>
+                  )}
+                </div>
+                <div className="field-hint" style={{margin:'10px 0 12px',lineHeight:1.5}}>
+                  1. Pagá USD {precioUSDFinal} con alguna de estas formas. 2. Volvé acá y tocá «Ya pagué»: tu turno queda reservado mientras {terapeuta.nombre_profesional} confirma el pago.
+                </div>
+                <button className="confirmar-btn" onClick={confirmarUSD} disabled={enviandoUSD}>
+                  {enviandoUSD ? `${t.deco} Reservando...` : `${t.deco} Ya pagué`}
+                </button>
+                {terapeuta.whatsapp && (
+                  <a className="field-hint" style={{display:'block',textAlign:'center',marginTop:'10px',textDecoration:'underline'}} target="_blank" rel="noopener noreferrer"
+                    href={`https://wa.me/${terapeuta.whatsapp.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Tengo una duda para pagar ${servicioSel?.nombre} en dólares.`)}`}>
+                    ¿Dudas? Escribile por WhatsApp
+                  </a>
+                )}
+              </>)}
+
               {/* CASO 1: requiere pago (sena o completo) */}
-              {requierePago && (<>
+              {requierePago && !enUSD && (<>
                 <div className="section-label" style={{marginBottom:'12px',justifyContent:'flex-start'}}>¿Cómo querés pagar?</div>
                 <div className="metodo-pago-wrap">
                   {mostrarMP && (
@@ -1475,6 +1708,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
                 {metodoPago === 'transferencia' && (<>
                   <div className="transferencia-datos">
                     <div className="transferencia-titulo">Datos para transferir</div>
+                    <div className="transferencia-row"><span className="transferencia-lbl">Monto</span><span className="transferencia-val">${precioARS.toLocaleString('es-AR')}{cupon ? ` (con ${cupon.codigo})` : ''}</span></div>
                     {terapeuta.alias_pago && <div className="transferencia-row"><span className="transferencia-lbl">Alias</span><span className="transferencia-val">{terapeuta.alias_pago}</span></div>}
                     {terapeuta.cbu && <div className="transferencia-row"><span className="transferencia-lbl">CBU</span><span className="transferencia-val" style={{fontSize:'12px'}}>{terapeuta.cbu}</span></div>}
                     {terapeuta.titular_cuenta && <div className="transferencia-row"><span className="transferencia-lbl">Titular</span><span className="transferencia-val">{terapeuta.titular_cuenta}</span></div>}
@@ -1509,7 +1743,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               </>)}
 
               {/* CASO 2: reserva libre (sin pago) */}
-              {!requierePago && (
+              {!requierePago && !enUSD && (
                 <button className="confirmar-btn" onClick={confirmarReservaLibre} disabled={enviando}>
                   {enviando ? `${t.deco} Confirmando...` : `${t.deco} Confirmar reserva`}
                 </button>
@@ -1523,10 +1757,12 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={36} color="white"/></div>
             <h2 className="exito-title">
-              {metodoPago === 'transferencia' ? '¡Reserva recibida!' : '¡Reserva confirmada!'}
+              {metodoPago === 'transferencia' || enUSD ? '¡Reserva recibida!' : '¡Reserva confirmada!'}
             </h2>
             <p className="exito-sub">
-              {metodoPago === 'transferencia'
+              {enUSD
+                ? <>Tu turno de <em>{servicioSel?.nombre}</em> quedó reservado. {terapeuta.nombre_profesional} confirma tu pago en dólares y te avisa.</>
+                : metodoPago === 'transferencia'
                 ? <>Tu reserva de <em>{servicioSel?.nombre}</em> fue registrada. Una vez que confirmemos tu pago, te vamos a avisar por WhatsApp.</>
                 : <>Tu sesión de <em>{servicioSel?.nombre}</em> quedó agendada. {terapeuta.nombre_profesional} se va a contactar con vos pronto.</>}
             </p>
@@ -1549,9 +1785,42 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
           </div>
         )}
       </section>
+      </div>
 
-      {mostrarAnuncio && anuncio && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+      {secciones.sobre_mi && (bioReal || valoresReales.length > 0 || videoId) && (
+        <div className={franja()}>
+        <section className="section">
+          <div className="section-label">Sobre mí</div>
+          <h2 className="section-title">Mi propósito</h2>
+          <div className="sobre-card">
+            {bioReal && (
+            <p style={{fontSize:'15px',lineHeight:'1.9',color:'var(--text)',fontFamily:'var(--font-subtitle)',fontWeight:400,marginBottom:'8px',whiteSpace:'pre-line'}}>
+              {terapeuta.bio}
+            </p>
+            )}
+            {valoresReales.length > 0 && <div className="sobre-values">
+              {valoresReales.map((v, i) => (
+                <div key={i} className="sobre-val">
+                  <div className="sobre-val-icon">{v.icon}</div>
+                  <div className="sobre-val-name">{v.name}</div>
+                  <div className="sobre-val-desc">{v.desc}</div>
+                </div>
+              ))}
+            </div>}
+            {videoId && (
+              <div className="video-pres">
+                <iframe src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
+                  title={`Video de presentación de ${terapeuta.nombre_profesional || 'la terapeuta'}`} loading="lazy"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin" allowFullScreen/>
+              </div>
+            )}
+          </div>
+        </section>
+        </div>
+      )}
+
+      {mostrarAnuncio && anuncio && (<div className={franja()}>
         <section className="section">
           <div className="anuncio-card">
             {anuncio.etiqueta && <div className="dest-etiqueta">{t.deco} {anuncio.etiqueta}</div>}
@@ -1567,13 +1836,23 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             )}
           </div>
         </section>
-      </>)}
+      </div>)}
 
-      {secciones.testimonios && testiReales.length > 0 && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+      {secciones.testimonios && (testiReales.length > 0 || audiosTesti.length > 0) && (<div className={franja()}>
         <section className="section">
           <div className="section-label">Testimonios</div>
           <h2 className="section-title">Lo que dicen</h2>
+          {audiosTesti.length > 0 && (
+            <div style={{marginBottom: testiReales.length > 0 ? '20px' : 0}}>
+              <CarruselDeslizable etiqueta="Testimonios en audio">
+                {audiosTesti.slice(0, ventasAbiertas ? 15 : 3).map(a => (
+                  <AudioTestimonio key={a.id} t={a} colores={{ fondo: t.superficie, texto: t.cream, suave: t.text, acento: t.acento, sobreAcento: t.sobreAcento, ondaOff: t.ondaOff, chip: t.chip, chipTxt: t.chipTxt, titulo: t.fontTitle }}/>
+                ))}
+              </CarruselDeslizable>
+            </div>
+          )}
+          {testiReales.length > 0 && (<>
+
           <div className="testi-card">
             <div className="testi-quote">"</div>
             <p className="testi-texto">{testiReales[testiIdx]?.texto}</p>
@@ -1598,11 +1877,11 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
               ›
             </button>
           </div>
+                  </>)}
         </section>
-      </>)}
+      </div>)}
 
-      {secciones.faq && faqItems.length > 0 && (<>
-        <div className="divider">{t.deco} {t.deco} {t.deco}</div>
+      {secciones.faq && faqItems.length > 0 && (<div className={franja()}>
         <section className="section">
           <div className="section-label">FAQ</div>
           <h2 className="section-title">Preguntas frecuentes</h2>
@@ -1616,7 +1895,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
             </div>
           ))}
         </section>
-      </>)}
+      </div>)}
 
       
 
@@ -1673,7 +1952,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
     ? `USD ${servicioModal.precio_usd}`
     : `${SIMBOLOS_MONEDA[terapeuta.moneda || 'ARS'] || '$'} ${servicioModal.precio_base.toLocaleString()}`}
 </div>
-{monedaSel === 'usd' && servicioModal.precio_usd ? (
+{monedaSel === 'usd' && servicioModal.precio_usd && !hayUSD ? (
   <a className="serv-modal-btn"
     href={`https://wa.me/${terapeuta.whatsapp?.replace(/\D/g,'').replace(/^0+/,'')}?text=${encodeURIComponent(`Hola! Quiero abonar ${servicioModal.nombre} en dólares (USD ${servicioModal.precio_usd}).`)}`}
     target="_blank" rel="noopener noreferrer"
@@ -1682,6 +1961,7 @@ export default function PaginaPublica({ params }: { params: Promise<{ slug: stri
   </a>
 ) : (
   <button className="serv-modal-btn" onClick={() => {
+              setEnUSD(monedaSel === 'usd' && !!servicioModal.precio_usd && hayUSD)
               setServicioSel(servicioModal)
               setFechaSel('')
               setHoraSel('')
@@ -1702,7 +1982,8 @@ setHoraSel('12:00')
                 setPaso(3)
                 setTimeout(() => formularioRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 150)
               } else {
-                // sesión en vivo: ir al calendario
+                // sesión en vivo: ir al calendario (con la agenda recién pedida al servidor)
+                refrescarAgenda()
                 setPaso(2)
                 setTimeout(() => horariosRef.current?.scrollIntoView({behavior:'smooth',block:'nearest'}), 150)
               }
@@ -1715,7 +1996,7 @@ setHoraSel('12:00')
       )}
 
 <footer className="footer">
-        © 2025 {terapeuta.nombre_profesional}
+        © {new Date().getFullYear()} {terapeuta.nombre_profesional}
         <div style={{marginTop:'8px',fontSize:'10px',opacity:0.5}}>
           Creado con{' '}
           <a href="https://lumaapp.lat" target="_blank" rel="noopener noreferrer"

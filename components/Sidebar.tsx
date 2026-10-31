@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock } from 'lucide-react'
+import { LayoutDashboard, Users, CalendarDays, Sparkles, TrendingUp, Settings, LogOut, HelpCircle, Map, BookOpen, Lock, Lightbulb } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { calcularAcceso, estadoPlan } from '@/lib/acceso'
 import { etiquetaPlan } from '@/lib/textoPlan'
@@ -100,7 +100,8 @@ export default function Sidebar() {
 
   const iniciales = perfil.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() || '?'
 
-  const tieneAccesoCursos = calcularAcceso(sub) === 'premium'
+  // mientras no se sabe el plan, no se muestra el candado (antes aparecía un instante, o para siempre si fallaba la carga)
+  const tieneAccesoCursos = !sub || calcularAcceso(sub) === 'premium'
 
   const links = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
@@ -129,8 +130,8 @@ export default function Sidebar() {
             z-index: 50;
             backdrop-filter: blur(16px) saturate(200%) contrast(180%);
             -webkit-backdrop-filter: blur(16px) saturate(200%) contrast(180%);
-            background: rgba(139,92,246,0.25);
-            border: 1px solid rgba(167,139,250,0.3);
+            background: rgba(var(--accent-rgb),0.25);
+            border: 1px solid rgba(var(--accent-2-rgb),0.3);
             box-shadow: 0 10px 40px rgba(0,0,0,0.25), 0 2px 0 rgba(255,255,255,0.05) inset;
             padding: 6px;
             border-radius: 99rem;
@@ -150,9 +151,9 @@ export default function Sidebar() {
   z-index: 200;
   backdrop-filter: blur(16px) saturate(200%);
   -webkit-backdrop-filter: blur(16px) saturate(200%);
-  background: rgba(139,92,246,0.25);
-  border: 1px solid rgba(167,139,250,0.4);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  background: var(--nav-glass);
+  border: 1px solid var(--nav-border);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.22);
   padding: 6px;
   border-radius: 99rem;
   display: flex;
@@ -160,10 +161,7 @@ export default function Sidebar() {
   gap: 4px;
   font-family: 'Inter', sans-serif;
 }
-html.dark .sb-mobile {
-  background: rgba(20,12,40,0.85);
-  border-color: rgba(139,92,246,0.35);
-}
+/* el tinte del vidrio sale de las variables del panel (claro: lavanda; oscuro: medianoche) */
 body.modal-ficha-abierto .sb-mobile {
   display: none;
 }
@@ -173,7 +171,7 @@ body.modal-ficha-abierto .sb-mobile {
   align-items: center;
   flex: 1 1 0;
   min-width: 0;
- color: rgb(140 110 185 / 85%);
+ color: var(--nav-item);
   text-decoration: none;
   padding: 8px 2px;
   border-radius: 999rem;
@@ -185,12 +183,12 @@ body.modal-ficha-abierto .sb-mobile {
 }
 .sb-mob-item:hover {
   background: rgba(255,255,255,0.15);
-  color: rgb(205, 173, 226);
+  color: var(--nav-active-text);
 }
 .sb-mob-item:active { transform: scale(0.96) }
 .sb-mob-item.active {
-  background: rgba(255,255,255,0.3);
-  color: rgb(73, 41, 138);
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
 }
 .sb-mob-icon {
   width: 28px; height: 28px;
@@ -207,15 +205,15 @@ body.modal-ficha-abierto .sb-mobile {
   z-index: 300;
   width: 40px; height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg,#6B3FA0,#8B5CF6);
-  border: 1px solid rgba(167,139,250,0.3);
+  background: var(--gradient-boton);
+  border: 1px solid rgba(var(--accent-2-rgb),0.3);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb),0.4);
   color: white;
   transition: all 0.2s;
 }
-.sb-float-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(139,92,246,0.5) }
+.sb-float-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(var(--accent-rgb),0.5) }
 .sb-float-btn:active { transform: scale(0.95) }
 
           /* ── MENÚ DESPLEGABLE ── */
@@ -225,19 +223,19 @@ body.modal-ficha-abierto .sb-mobile {
             right: 16px;
             z-index: 300;
             width: 200px;
-            background: linear-gradient(139deg,rgba(26,16,50,1) 0%,rgba(37,16,52,1) 100%);
+            background: var(--menu-oscuro);
             border-radius: 14px;
             padding: 12px 0;
             display: flex;
             flex-direction: column;
             gap: 0;
-            border: 0.5px solid rgba(139,92,246,0.25);
+            border: 0.5px solid rgba(var(--accent-rgb),0.25);
             box-shadow: 0 16px 48px rgba(0,0,0,0.5);
             animation: dropIn 0.15s ease;
           }
           html:not(.dark) .sb-dropdown {
-            background: linear-gradient(139deg,rgba(255,255,255,1) 0%,rgba(248,240,255,1) 100%);
-            border-color: rgba(139,92,246,0.15);
+            background: var(--menu-claro);
+            border-color: rgba(var(--accent-rgb),0.15);
             box-shadow: 0 16px 48px rgba(0,0,0,0.15);
           }
           @keyframes dropIn {
@@ -246,10 +244,10 @@ body.modal-ficha-abierto .sb-mobile {
           }
           .sb-dropdown-sep {
             border: none;
-            border-top: 1px solid rgba(139,92,246,0.15);
+            border-top: 1px solid rgba(var(--accent-rgb),0.15);
             margin: 6px 0;
           }
-          html:not(.dark) .sb-dropdown-sep { border-top-color: rgba(139,92,246,0.1) }
+          html:not(.dark) .sb-dropdown-sep { border-top-color: rgba(var(--accent-rgb),0.1) }
 
           .sb-dropdown-list {
             list-style: none;
@@ -261,7 +259,7 @@ body.modal-ficha-abierto .sb-mobile {
           .sb-dropdown-item {
             display: flex;
             align-items: center;
-            color: rgba(167,139,250,0.8);
+            color: rgba(var(--accent-2-rgb),0.8);
             gap: 10px;
             transition: all 0.2s ease;
             padding: 8px 10px;
@@ -276,15 +274,15 @@ body.modal-ficha-abierto .sb-mobile {
             width: 100%;
             text-align: left;
           }
-          html:not(.dark) .sb-dropdown-item { color: rgba(107,63,160,0.8) }
+          html:not(.dark) .sb-dropdown-item { color: rgba(var(--accent-deep-rgb),0.8) }
           .sb-dropdown-item:hover {
-            background: rgba(139,92,246,0.2);
+            background: rgba(var(--accent-rgb),0.2);
             color: white;
             transform: translate(1px,-1px);
           }
           html:not(.dark) .sb-dropdown-item:hover {
-            background: rgba(139,92,246,0.12);
-            color: #6B3FA0;
+            background: rgba(var(--accent-rgb),0.12);
+            color: var(--accent-deep);
           }
           .sb-dropdown-item:active { transform: scale(0.98) }
           .sb-dropdown-item.danger { color: rgba(252,165,165,0.8) }
@@ -299,8 +297,8 @@ body.modal-ficha-abierto .sb-mobile {
           }
 
           /* ── TOGGLE THEME ── */
-          .sb-plan-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(167,139,250,0.6);margin-bottom:3px}
-          html:not(.dark) .sb-plan-label{color:rgba(107,63,160,0.5)}
+          .sb-plan-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(var(--accent-2-rgb),0.6);margin-bottom:3px}
+          html:not(.dark) .sb-plan-label{color:rgba(var(--accent-deep-rgb),0.5)}
           .sb-plan-status{font-size:12px;font-weight:600;color:rgba(255,255,255,0.9)}
           html:not(.dark) .sb-plan-status{color:rgba(60,20,100,0.85)}
           .sb-plan-status.ok{color:#6EE7B7}
@@ -314,27 +312,27 @@ body.modal-ficha-abierto .sb-mobile {
             cursor: pointer;
             font-size: 13px;
             font-weight: 600;
-            color: rgba(167,139,250,0.8);
+            color: rgba(var(--accent-2-rgb),0.8);
             font-family: 'Inter', sans-serif;
             margin: 0 8px;
             transition: all 0.2s;
           }
-          html:not(.dark) .sb-mob-toggle-wrap { color: rgba(107,63,160,0.8) }
+          html:not(.dark) .sb-mob-toggle-wrap { color: rgba(var(--accent-deep-rgb),0.8) }
           .sb-mob-toggle-wrap:hover {
-            background: rgba(139,92,246,0.15);
+            background: rgba(var(--accent-rgb),0.15);
             color: white;
           }
           html:not(.dark) .sb-mob-toggle-wrap:hover {
-            background: rgba(139,92,246,0.08);
-            color: #6B3FA0;
+            background: rgba(var(--accent-rgb),0.08);
+            color: var(--accent-deep);
           }
           .sb-mob-toggle-left { display:flex;align-items:center;gap:8px }
           .sb-mob-toggle {
             width:36px;height:20px;border-radius:20px;
-            background:rgba(139,92,246,0.3);
+            background:rgba(var(--accent-rgb),0.3);
             position:relative;transition:background 0.2s;flex-shrink:0;
           }
-          .sb-mob-toggle.on { background:linear-gradient(135deg,#6B3FA0,#8B5CF6) }
+          .sb-mob-toggle.on { background:var(--gradient-boton) }
           .sb-mob-toggle-dot {
             position:absolute;top:2px;
             width:16px;height:16px;border-radius:50%;
@@ -403,7 +401,7 @@ body.modal-ficha-abierto .sb-mobile {
                     <div className={`sb-plan-status${et.ok ? ' ok' : ''}`}>{et.titulo}</div>
                     <div style={{fontSize:'11px',opacity:0.75,marginTop:'2px'}}>{et.detalle}</div>
                     {et.renovar && (
-                      <a href="/suscripcion" onClick={() => setMenuMobile(false)} style={{fontSize:'11px',color:'#C4A8FF',fontWeight:600,textDecoration:'none',display:'block',marginTop:'4px'}}>
+                      <a href="/suscripcion" onClick={() => setMenuMobile(false)} style={{fontSize:'11px',color:'var(--accent-2)',fontWeight:600,textDecoration:'none',display:'block',marginTop:'4px'}}>
                         Renovar ahora →
                       </a>
                     )}
@@ -415,6 +413,11 @@ body.modal-ficha-abierto .sb-mobile {
             <hr className="sb-dropdown-sep"/>
 
             <ul className="sb-dropdown-list">
+              <li>
+                <Link href="/altar" className="sb-dropdown-item" onClick={() => setMenuMobile(false)}>
+                  <Lightbulb size={16}/> <span>Altar de ideas</span>
+                </Link>
+              </li>
               <li>
                 <Link href="/courses" className="sb-dropdown-item" onClick={() => setMenuMobile(false)} style={{position:'relative'}}>
                   <BookOpen size={16}/> <span>Cursos</span>
@@ -457,8 +460,8 @@ body.modal-ficha-abierto .sb-mobile {
         
         .sb{
           width:200px;height:100vh;
-          background:linear-gradient(160deg,#F8F0FF 0%,#EEE8FF 40%,#F5E8FF 70%,#FFE8F5 100%);
-          border-right:0.5px solid rgba(139,92,246,0.15);
+          background:var(--bg-sidebar);
+          border-right:0.5px solid rgba(var(--accent-rgb),0.15);
           display:flex;flex-direction:column;
           padding:16px 10px;gap:2px;
           flex-shrink:0;overflow:hidden;
@@ -467,39 +470,34 @@ body.modal-ficha-abierto .sb-mobile {
           position:fixed;top:0;left:0;z-index:200;
         }
         @media(max-width:767px){.sb{display:none !important;}}
-        html.dark .sb{
-          background:linear-gradient(160deg,#1A1628 0%,#1E1A2E 40%,#211828 70%,#1E1520 100%);
-          border-right-color:rgba(100,80,180,0.2);
-        }
+        html.dark .sb{ border-right-color:var(--border); }
         .sb-header{padding:4px 8px 18px;display:flex;align-items:center;gap:10px}
         .sb-brand{display:flex;flex-direction:column}
-        .sb-brand-name{font-family:'Manrope',sans-serif;font-size:19px;font-weight:800;color:#3B0F8C;letter-spacing:-0.5px;line-height:1}
-        html.dark .sb-brand-name{color:#C4A8FF}
+        .sb-brand-name{font-family:'Manrope',sans-serif;font-size:19px;font-weight:800;color:var(--sb-marca);letter-spacing:-0.5px;line-height:1}
         .sb-brand-sub{font-size:9px;color:var(--text-muted);margin-top:2px;font-family:'Inter',sans-serif}
         .sb-section{font-size:9px;font-weight:700;color:var(--text-muted);letter-spacing:1.5px;text-transform:uppercase;padding:8px 10px 4px;font-family:'Inter',sans-serif}
         .sb-link{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;font-size:12.5px;font-weight:500;color:var(--text-secondary);text-decoration:none;transition:all 0.15s;white-space:nowrap;font-family:'Inter',sans-serif}
-        .sb-link:hover{background:rgba(139,92,246,0.08);color:var(--text-primary)}
-        .sb-link.active{background:white;color:#3B0F8C;font-weight:600;box-shadow:0 2px 12px rgba(139,92,246,0.15)}
-        html.dark .sb-link.active{background:rgba(139,92,246,0.2);color:#C4A8FF}
-        .sb-div{border:none;border-top:0.5px solid rgba(139,92,246,0.12);margin:6px 0}
+        .sb-link:hover{background:rgba(var(--accent-rgb),0.08);color:var(--text-primary)}
+        .sb-link.active{background:var(--sb-activo-bg);color:var(--sb-activo-texto);font-weight:600;box-shadow:0 2px 12px rgba(var(--accent-rgb),0.15)}
+        .sb-div{border:none;border-top:0.5px solid rgba(var(--accent-rgb),0.12);margin:6px 0}
         .sb-spacer{flex:1;min-height:0}
-        .sb-theme{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;margin-bottom:4px;background:rgba(139,92,246,0.06);cursor:pointer;border:none;width:100%;font-family:'Inter',sans-serif;transition:all 0.15s}
-        .sb-theme:hover{background:rgba(139,92,246,0.1)}
+        .sb-theme{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:10px;margin-bottom:4px;background:rgba(var(--accent-rgb),0.06);cursor:pointer;border:none;width:100%;font-family:'Inter',sans-serif;transition:all 0.15s}
+        .sb-theme:hover{background:rgba(var(--accent-rgb),0.1)}
         .sb-theme-left{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--text-secondary)}
         .sb-toggle{width:32px;height:18px;border-radius:20px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0;background:var(--border)}
-        .sb-toggle.on{background:linear-gradient(135deg,#6B3FA0,#8B5CF6)}
+        .sb-toggle.on{background:var(--gradient-boton)}
         .sb-toggle-dot{position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
         .sb-toggle.on .sb-toggle-dot{left:16px}
         .sb-toggle.off .sb-toggle-dot{left:2px}
-        .sb-trial{background:rgba(139,92,246,0.08);border-radius:10px;padding:8px 10px;border:0.5px solid rgba(139,92,246,0.15);margin-bottom:6px;flex-shrink:0}
-        html.dark .sb-trial{background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.25)}
+        .sb-trial{background:rgba(var(--accent-rgb),0.08);border-radius:10px;padding:8px 10px;border:0.5px solid rgba(var(--accent-rgb),0.15);margin-bottom:6px;flex-shrink:0}
+        html.dark .sb-trial{background:rgba(var(--accent-rgb),0.15);border-color:rgba(var(--accent-rgb),0.25)}
         .sb-trial-t{font-size:10px;font-weight:700;color:var(--accent);margin-bottom:1px;font-family:'Manrope',sans-serif}
         .sb-trial-s{font-size:9px;color:var(--text-muted);line-height:1.3}
         .sb-bar{height:3px;background:var(--border);border-radius:3px;margin-top:5px;overflow:hidden}
-        .sb-fill{height:100%;width:65%;background:linear-gradient(90deg,#8B5CF6,#F472B6);border-radius:3px}
-        .sb-user{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.6);border:0.5px solid rgba(139,92,246,0.15);transition:all 0.15s;font-family:'Inter',sans-serif}
-        html.dark .sb-user{background:rgba(255,255,255,0.05);border-color:rgba(139,92,246,0.2)}
-        .sb-avatar{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#8B5CF6,#F472B6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0;font-family:'Manrope',sans-serif}
+        .sb-fill{height:100%;width:65%;background:linear-gradient(90deg,var(--accent),var(--rosa-viejo));border-radius:3px}
+        .sb-user{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.6);border:0.5px solid rgba(var(--accent-rgb),0.15);transition:all 0.15s;font-family:'Inter',sans-serif}
+        html.dark .sb-user{background:rgba(255,255,255,0.05);border-color:rgba(var(--accent-rgb),0.2)}
+        .sb-avatar{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--rosa-viejo));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0;font-family:'Manrope',sans-serif}
         .sb-user-info{flex:1;min-width:0}
         .sb-user-name{font-size:11.5px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Manrope',sans-serif}
         .sb-user-plan{font-size:9px;color:var(--text-muted);margin-top:1px}
@@ -529,7 +527,18 @@ body.modal-ficha-abierto .sb-mobile {
 
         <div className="sb-section">Principal</div>
 
-        {links.slice(0,4).map(({ href, icon: Icon, label }) => (
+        {links.slice(0,1).map(({ href, icon: Icon, label }) => (
+          <Link key={href} href={href}
+            className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
+            <Icon size={13}/>{label}
+          </Link>
+        ))}
+
+        <Link href="/altar" className={`sb-link${pathname==='/altar'||pathname.startsWith('/altar/')?' active':''}`}>
+          <Lightbulb size={13}/>Altar de ideas
+        </Link>
+
+        {links.slice(1,4).map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}
             className={`sb-link${pathname === href || pathname.startsWith(href+'/') ? ' active' : ''}`}>
             <Icon size={13}/>{label}
@@ -587,7 +596,7 @@ body.modal-ficha-abierto .sb-mobile {
           const pct = Math.round((Math.min(7, diasPrueba) / 7) * 100)
 
           return (
-            <div className="sb-trial" style={{background: et.ok ? 'rgba(16,185,129,0.08)' : 'rgba(139,92,246,0.08)', borderColor: et.ok ? 'rgba(16,185,129,0.2)' : 'rgba(139,92,246,0.15)'}}>
+            <div className="sb-trial" style={{background: et.ok ? 'rgba(16,185,129,0.08)' : 'rgba(var(--accent-rgb),0.08)', borderColor: et.ok ? 'rgba(16,185,129,0.2)' : 'rgba(var(--accent-rgb),0.15)'}}>
               <div className="sb-trial-t" style={{color: et.ok ? '#059669' : 'var(--accent)'}}>{et.titulo}</div>
               <div className="sb-trial-s">{et.detalle}</div>
               {e.tipo === 'prueba' && <div className="sb-bar"><div className="sb-fill" style={{width:`${pct}%`}}/></div>}

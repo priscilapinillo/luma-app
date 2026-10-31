@@ -1,12 +1,17 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { User, Shield, Database, Settings, Camera, Eye, EyeOff, Download, Trash2, LogOut, ChevronDown, Copy, ExternalLink, Check } from 'lucide-react'
+import { User, Shield, Database, Settings, Camera, Eye, EyeOff, Download, Trash2, LogOut, ChevronDown, Copy, ExternalLink, Check, Sun, Moon } from 'lucide-react'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import MiPlan from '@/components/MiPlan'
 import { PASOS, calcularPasos, contarListos, primerIncompleto, limpiarSlug, type IdPaso } from '@/lib/progresoPagina'
+import { toast } from '@/components/ToastProvider'
+import CobrosDolares from '@/components/CobrosDolares'
+import TestimoniosAudio from '@/components/TestimoniosAudio'
+import { calcularAcceso } from '@/lib/acceso'
+import { PLANTILLAS, MODO_ANTERIOR, temaPublico, plantillaValida, modoValido, idYouTube, comoFuncionaValido, COMO_FUNCIONA_DEFAULT, type ComoFunciona } from '@/lib/plantillas'
 
 type Destacado = {
   activa: boolean
@@ -51,6 +56,9 @@ type Perfil = {
   pagina_activa: boolean; mensaje_bienvenida: string
   tipo_pago: string; slug: string
   template: string
+  template_modo: string | null
+  como_funciona: ComoFunciona
+  video_presentacion: string
   secciones: { sobre_mi: boolean; testimonios: boolean; faq: boolean; disponibilidad: boolean }
   faq: { pregunta: string; respuesta: string }[]
   mp_access_token: string
@@ -280,6 +288,9 @@ export default function AjustesPage() {
     moneda: 'ARS', formato_fecha: 'dd/mm/yyyy', avatar_url: '',
     pagina_activa: false, mensaje_bienvenida: '', tipo_pago: 'libre', slug: '',
     template: 'luna',
+    template_modo: null,
+    como_funciona: COMO_FUNCIONA_DEFAULT,
+    video_presentacion: '',
     secciones: { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
     faq: [],
     mp_access_token: '',
@@ -372,7 +383,10 @@ export default function AjustesPage() {
         mensaje_bienvenida: prof.mensaje_bienvenida || '',
         tipo_pago: prof.tipo_pago || 'libre',
         slug: prof.slug || '',
-        template: prof.template || 'luna',
+        template: plantillaValida(prof.template),
+        template_modo: prof.template_modo ?? null,
+        como_funciona: comoFuncionaValido(prof.como_funciona),
+        video_presentacion: prof.video_presentacion || '',
         secciones: prof.secciones || { sobre_mi: true, testimonios: true, faq: false, disponibilidad: true },
         faq: prof.faq || [],
         mp_access_token: cred?.access_token || prof.mp_access_token || '',
@@ -471,7 +485,7 @@ export default function AjustesPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        if (!silencioso) alert('Tu sesión expiró. Volvé a iniciar sesión para guardar los cambios.')
+        if (!silencioso) toast('Tu sesión expiró. Volvé a iniciar sesión para guardar los cambios.', 'error')
         setEstadoGuardado('error')
         return
       }
@@ -505,6 +519,9 @@ export default function AjustesPage() {
         tipo_pago: perfil.tipo_pago,
         slug: slugFijo,
         template: perfil.template,
+        template_modo: modoValido(perfil.template_modo, plantillaValida(perfil.template)),
+        como_funciona: perfil.como_funciona,
+        video_presentacion: (perfil.video_presentacion || '').trim(),
         secciones: perfil.secciones,
         faq: perfil.faq,
         mp_access_token: null,
@@ -523,9 +540,18 @@ export default function AjustesPage() {
         updated_at: new Date().toISOString(),
       }
       // .select('id') para confirmar que de verdad se guardó una fila
-      const { data: filas, error: errGuardar } = perfil.id
+      let { data: filas, error: errGuardar } = perfil.id
         ? await supabase.from('therapist_profiles').update(datos).eq('user_id', user.id).select('id')
         : await supabase.from('therapist_profiles').insert(datos).select('id')
+      // si la base todavía no tiene las columnas nuevas (SQL de la etapa 7 sin correr), se guarda todo lo demás igual
+      if (errGuardar && /template_modo|como_funciona|video_presentacion/.test(`${errGuardar.message || ''} ${errGuardar.details || ''}`)) {
+        const { template_modo: _a, como_funciona: _b, video_presentacion: _c, ...sinNuevas } = datos
+        void _a; void _b; void _c
+        const r2 = perfil.id
+          ? await supabase.from('therapist_profiles').update(sinNuevas).eq('user_id', user.id).select('id')
+          : await supabase.from('therapist_profiles').insert(sinNuevas).select('id')
+        filas = r2.data; errGuardar = r2.error
+      }
       if (errGuardar || !filas || filas.length === 0) {
         console.error('Error guardando perfil:', errGuardar)
         const esDireccionRepetida = errGuardar?.code === '23505' && /slug/i.test(`${errGuardar?.message || ''} ${errGuardar?.details || ''}`)
@@ -538,7 +564,7 @@ export default function AjustesPage() {
           return
         }
         if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
-        else { setEstadoGuardado('error'); alert('No se pudo guardar: ' + (errGuardar?.message || 'volvé a iniciar sesión e intentá de nuevo.')) }
+        else { setEstadoGuardado('error'); toast('No se pudo guardar: ' + (errGuardar?.message || 'volvé a iniciar sesión e intentá de nuevo.'), 'error') }
         return
       }
 
@@ -560,7 +586,7 @@ export default function AjustesPage() {
         perfilGuardadoRef.current = foto
       }
       ok = true
-      if (!(await sincronizarTokenMP(user.id, perfil.mp_access_token))) { setEstadoGuardado('error'); if (!silencioso) alert('Se guardó tu perfil, pero no se pudo guardar el token de Mercado Pago. Probá de nuevo.'); return } setEstadoGuardado('guardado')
+      if (!(await sincronizarTokenMP(user.id, perfil.mp_access_token))) { setEstadoGuardado('error'); if (!silencioso) toast('Se guardó tu perfil, pero no se pudo guardar el token de Mercado Pago. Probá de nuevo.', 'error'); return } setEstadoGuardado('guardado')
       if (!silencioso) {
         setMsgExito('Perfil guardado correctamente')
         setTimeout(() => setMsgExito(''), 3000)
@@ -568,7 +594,7 @@ export default function AjustesPage() {
     } catch (err) {
       console.error('Error guardando:', err)
       if (silencioso) setEstadoGuardado(typeof navigator !== 'undefined' && navigator.onLine === false ? 'sin_conexion' : 'error')
-      else { setEstadoGuardado('error'); alert('No se pudo guardar. Revisá tu conexión e intentá de nuevo.') }
+      else { setEstadoGuardado('error'); toast('No se pudo guardar. Revisá tu conexión e intentá de nuevo.', 'error') }
     } finally {
       guardandoRef.current = false
       setGuardando(false)
@@ -628,7 +654,7 @@ export default function AjustesPage() {
       const { data } = supabase.storage.from('avatars').getPublicUrl(path)
       setPerfil(prev => ({ ...prev, destacado: { ...prev.destacado, imagen_url: data.publicUrl } }))
     } catch (err: any) {
-      alert(err?.message || 'No se pudo subir la imagen.')
+      toast(err?.message || 'No se pudo subir la imagen.', 'error')
     } finally {
       setSubiendoDestacado(false)
       e.target.value = ''
@@ -656,7 +682,7 @@ export default function AjustesPage() {
       }
     } catch(err: any) {
       console.error('Error subiendo avatar:', err)
-      alert(err?.message || 'No se pudo procesar la imagen.')
+      toast(err?.message || 'No se pudo procesar la imagen.', 'error')
     } finally {
       setSubiendoAvatar(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -764,7 +790,7 @@ export default function AjustesPage() {
   }
 
   // interruptor reutilizable (mismo diseño que los de antes)
-  const interruptor = (activo: boolean, alCambiar: (v: boolean) => void, color = '#8B5CF6') => (
+  const interruptor = (activo: boolean, alCambiar: (v: boolean) => void, color = 'var(--accent)') => (
     <label style={{position:'relative',width:'40px',height:'22px',cursor:'pointer',display:'block',flexShrink:0}}>
       <input type="checkbox" style={{opacity:0,width:0,height:0,position:'absolute'}}
         checked={activo} onChange={e => alCambiar(e.target.checked)}/>
@@ -822,7 +848,7 @@ export default function AjustesPage() {
         <div style={{fontSize:'16px',fontWeight:800,color:'var(--text-primary)',marginBottom:'8px',fontFamily:"'Manrope',sans-serif"}}>No pudimos cargar tus datos</div>
         <p style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:1.6,margin:'0 0 18px'}}>Revisá tu conexión y reintentá. No se cambió nada de tu perfil.</p>
         <button className="save-btn" onClick={() => { setLoading(true); cargarDatos() }}
-          style={{padding:'11px 22px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'11px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+          style={{padding:'11px 22px',background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'white',border:'none',borderRadius:'11px',fontSize:'13px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
           Reintentar
         </button>
       </div>
@@ -847,7 +873,7 @@ export default function AjustesPage() {
   .s-card-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:14px;display:flex;align-items:center;gap:7px;font-family:'Manrope',sans-serif}
   .avatar-wrap{display:flex;align-items:center;gap:16px;margin-bottom:20px}
   .avatar-img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
-  .avatar-placeholder{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:white;flex-shrink:0}
+  .avatar-placeholder{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:white;flex-shrink:0}
   .avatar-name{font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:2px;font-family:'Manrope',sans-serif}
   .avatar-spec{font-size:12px;color:var(--text-muted)}
   .avatar-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--accent-light);color:var(--accent);border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px;transition:all 0.15s}
@@ -859,8 +885,8 @@ export default function AjustesPage() {
   .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
   .field textarea{min-height:70px;resize:none}
   .field-hint{font-size:10px;color:var(--text-muted);margin-top:2px}
-  .save-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s}
-  .save-btn:hover{box-shadow:0 6px 16px rgba(139,92,246,0.4);transform:translateY(-1px)}
+  .save-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(var(--accent-rgb),0.3);transition:all 0.15s}
+  .save-btn:hover{box-shadow:0 6px 16px rgba(var(--accent-rgb),0.4);transform:translateY(-1px)}
   .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
   .msg-exito{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#059669;background:#DCFCE7;padding:7px 12px;border-radius:8px;border:0.5px solid #BBF7D0;margin-left:10px}
   .pass-field{position:relative;margin-bottom:12px}
@@ -876,7 +902,7 @@ export default function AjustesPage() {
   .subs-plan{font-size:20px;font-weight:800;color:white;letter-spacing:-0.5px;margin-bottom:4px;font-family:'Manrope',sans-serif}
   .subs-info{font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:14px}
   .subs-trial-bar{height:6px;background:rgba(255,255,255,0.15);border-radius:6px;overflow:hidden;margin-bottom:8px}
-  .subs-trial-fill{height:100%;background:linear-gradient(90deg,#A78BFA,#C084FC);border-radius:6px}
+  .subs-trial-fill{height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent-soft));border-radius:6px}
   .subs-trial-text{font-size:11px;color:rgba(255,255,255,0.5)}
   .danger-zone{border:0.5px solid #FECACA;border-radius:14px;padding:16px 18px;background:#FFF5F5}
   html.dark .danger-zone{background:#200808;border-color:#7F1D1D}
@@ -894,8 +920,8 @@ export default function AjustesPage() {
   .pref-label{font-size:13px;font-weight:500;color:var(--text-primary)}
   .pref-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
   .pref-select{padding:6px 10px;border-radius:8px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;cursor:pointer}
-  .confirm-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-  .confirm-box{background:var(--bg-card);border-radius:20px;padding:24px;width:360px;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+  .confirm-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+  .confirm-box{background:var(--bg-card);border-radius:20px;padding:24px;width:360px;box-shadow:0 32px 80px rgba(var(--shadow-rgb),0.25)}
   .confirm-title{font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:8px;font-family:'Manrope',sans-serif}
   .confirm-text{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:20px}
   .confirm-btns{display:flex;gap:8px}
@@ -931,7 +957,7 @@ export default function AjustesPage() {
   .pr-prog-txt{font-size:13px;color:var(--text-secondary);margin-bottom:8px}
   .pr-prog-txt strong{color:var(--text-primary)}
   .pr-barra{height:8px;border-radius:8px;background:var(--bg-input);overflow:hidden}
-  .pr-barra>div{height:100%;background:linear-gradient(90deg,#8B5CF6,#C084FC);border-radius:8px;transition:width .4s}
+  .pr-barra>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-soft));border-radius:8px;transition:width .4s}
   .pr-bloque{background:var(--bg-card);border:0.5px solid var(--border-light);border-radius:18px;margin-bottom:10px;box-shadow:0 2px 12px var(--shadow);overflow:hidden;scroll-margin-top:16px}
   .pr-bloque.abierto{border-color:var(--border)}
   .pr-cab{display:flex;align-items:center;gap:12px;width:100%;padding:16px 18px;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;color:inherit}
@@ -948,7 +974,7 @@ export default function AjustesPage() {
   .pr-bloque.abierto .pr-flecha{transform:rotate(180deg)}
   .pr-cuerpo{padding:14px 18px 18px;border-top:0.5px solid var(--border-light)}
   .pr-resumen{font-size:13px;color:var(--text-secondary);line-height:1.6;background:var(--bg-input);border-radius:12px;padding:12px 14px;margin-bottom:12px}
-  .pr-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;box-shadow:0 4px 12px rgba(139,92,246,.3);text-decoration:none}
+  .pr-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;box-shadow:0 4px 12px rgba(var(--accent-rgb),.3);text-decoration:none}
   .pr-btn.sec{background:var(--accent-light);color:var(--accent);box-shadow:none}
   .pr-btn:disabled{opacity:.5;cursor:not-allowed}
   .pr-aviso{font-size:12px;line-height:1.5;padding:10px 12px;border-radius:10px;background:#FFFBEB;border:0.5px solid #FDE68A;color:#92400E;margin:8px 0}
@@ -973,16 +999,36 @@ export default function AjustesPage() {
   .pr-acciones{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
   .pr-copiar{position:relative;border-radius:13px;padding:2px;overflow:hidden;display:inline-flex;isolation:isolate}
   .pr-copiar::after{content:'';position:absolute;inset:0;border-radius:13px;background:var(--border);z-index:-2}
-  .pr-copiar::before{content:'';position:absolute;left:50%;top:50%;width:300%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(0deg);background:conic-gradient(from 0deg,transparent 0deg,transparent 240deg,#C084FC 300deg,#FDE68A 330deg,transparent 360deg);animation:pr-girar 7s linear infinite;z-index:-1}
+  .pr-copiar::before{content:'';position:absolute;left:50%;top:50%;width:300%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(0deg);background:conic-gradient(from 0deg,transparent 0deg,transparent 240deg,var(--accent-soft) 300deg,#FDE68A 330deg,transparent 360deg);animation:pr-girar 7s linear infinite;z-index:-1}
   .pr-copiar button{border-radius:11px;padding:12px 18px;border:none;background:var(--bg-card);color:var(--text-primary);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%}
   .pr-copiar button:disabled{opacity:.5;cursor:not-allowed}
   @keyframes pr-girar{to{transform:translate(-50%,-50%) rotate(360deg)}}
-  @media (prefers-reduced-motion: reduce){.pr-copiar::before{animation:none;background:#A78BFA}}
+  @media (prefers-reduced-motion: reduce){.pr-copiar::before{animation:none;background:var(--accent-2)}}
   .pr-ver{font-size:14px;padding:13px 22px}
   .pr-ios{display:flex;flex-direction:column;gap:8px;margin:10px 0}
   .pr-ios div{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);line-height:1.4}
   .pr-ios b{width:26px;height:26px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
-  .pr-plantillas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .pr-plantillas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .pl-op{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 10px 12px;border-radius:16px;border:2px solid transparent;cursor:pointer;text-align:left;font-family:inherit;box-shadow:0 2px 10px rgba(0,0,0,.08);transition:transform .15s,border-color .2s,box-shadow .2s}
+  .pl-op:active{transform:scale(.97)}
+  .pl-op.elegida{box-shadow:0 6px 18px rgba(0,0,0,.16)}
+  .pl-franja{width:100%;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+  .pl-boton{width:46%;height:10px;border-radius:6px}
+  .pl-muestras{display:flex;gap:3px}
+  .pl-muestras span{width:12px;height:12px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .pl-nombre{font-size:18px;font-weight:700;line-height:1}
+  .pl-desc{font-size:10.5px;line-height:1.3}
+  .pl-tilde{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.25);animation:plAparece .2s ease}
+  @keyframes plAparece{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+  .pl-modo{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:var(--bg-input);border:0.5px solid var(--border-light)}
+  .pl-modo button{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:11px;border:none;background:transparent;color:var(--text-muted);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s,color .2s}
+  .pl-modo button.on{background:var(--bg-card);color:var(--text-primary);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .pl-video{position:relative;width:100%;max-width:420px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;margin-top:10px;background:#000}
+  .pl-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .cf-pasos{display:flex;flex-direction:column;gap:8px}
+  .cf-paso{display:flex;align-items:center;gap:10px}
+  .cf-num{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border)}
+  .cf-paso input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:0.5px solid var(--border);font-size:13px;font-family:inherit;color:var(--text-primary);background:var(--bg-card);outline:none}
   @media(max-width:768px){
     .pr-cab{padding:14px;gap:10px}
     .pr-cuerpo{padding:12px 14px 16px}
@@ -1126,37 +1172,73 @@ export default function AjustesPage() {
             {/* 4. DISEÑO */}
             {bloque('diseno', (<>
               <div className="pr-plantillas">
-      {[
-        { id:'luna', nombre:'Luna', desc:'Oscuro · Místico · Tarot', emoji:'🌙', bg:'#0D0B14', color:'#C9A84C' },
-        { id:'aura', nombre:'Aura', desc:'Claro · Limpio · Wellness', emoji:'✨', bg:'#F8F4FF', color:'#8B5CF6' },
-        { id:'tierra', nombre:'Tierra', desc:'Orgánico · Beige · Natural', emoji:'🌿', bg:'#FAF7F0', color:'#92400E' },
-        { id:'rosa', nombre:'Rosa', desc:'Romántico · Suave · Femenino', emoji:'🌸', bg:'#FFF0F6', color:'#BE185D' },
-        { id:'violeta', nombre:'Violeta', desc:'Profundo · Mágico · Intenso', emoji:'💜', bg:'#1E0A3C', color:'#C084FC' },
-        { id:'verde', nombre:'Verde', desc:'Natural · Sanador · Fresco', emoji:'🍃', bg:'#F0FDF4', color:'#065F46' },
-      ].map(t => (
-        <div key={t.id}
-          onClick={() => setPerfil({...perfil, template: t.id})}
-          style={{
-            background: t.bg, borderRadius:'14px', padding:'16px 12px',
-            border: perfil.template === t.id ? `2px solid ${t.color}` : '1.5px solid var(--border)',
-            cursor:'pointer', textAlign:'center', transition:'all 0.2s',
-            boxShadow: perfil.template === t.id ? `0 0 16px ${t.color}44` : 'none'
-          }}>
-          <div style={{fontSize:'24px',marginBottom:'6px'}}>{t.emoji}</div>
-          <div style={{fontSize:'13px',fontWeight:700,color:t.color,marginBottom:'3px'}}>{t.nombre}</div>
-          <div style={{fontSize:'10px',color:'#888',lineHeight:1.4}}>{t.desc}</div>
-        </div>
-      ))}
+                {PLANTILLAS.map(p => {
+                  const tm = temaPublico(p.id, perfil.template_modo || MODO_ANTERIOR[p.id])
+                  const elegida = plantillaValida(perfil.template) === p.id
+                  return (
+                    <button type="button" key={p.id} className={`pl-op${elegida ? ' elegida' : ''}`} aria-pressed={elegida}
+                      onClick={() => { if (!elegida) { setPerfil({...perfil, template: p.id}); toast(`Elegiste ${p.nombre}. Se guarda solo.`, 'success') } }}
+                      style={{background: tm.bg, color: tm.cream, borderColor: elegida ? tm.acento : 'transparent'}}>
+                      {elegida && <span className="pl-tilde" style={{background: tm.acento, color: tm.sobreAcento}}><Check size={12}/></span>}
+                      <span className="pl-franja" style={{background: tm.banda}}>
+                        <span className="pl-boton" style={{background: tm.acento}}/>
+                      </span>
+                      <span className="pl-muestras">{p.muestra.slice(0, 5).map(c => <span key={c} style={{background: c}}/>)}</span>
+                      <span className="pl-nombre" style={{fontFamily: "'Cormorant Garamond', serif"}}>{p.nombre}</span>
+                      <span className="pl-desc" style={{color: tm.textDim}}>{p.desc}</span>
+                    </button>
+                  )
+                })}
               </div>
+              <div className="pr-sub">Modo de tu página</div>
+              <div className="pl-modo" role="radiogroup" aria-label="Modo de tu página">
+                {(['claro', 'oscuro'] as const).map(m => {
+                  const actual = modoValido(perfil.template_modo, plantillaValida(perfil.template))
+                  return (
+                    <button type="button" key={m} role="radio" aria-checked={actual === m} className={actual === m ? 'on' : ''}
+                      onClick={() => { if (actual !== m) { setPerfil({...perfil, template_modo: m}); toast(m === 'claro' ? 'Tu página ahora es clara.' : 'Tu página ahora es oscura.', 'success') } }}>
+                      {m === 'claro' ? <Sun size={15}/> : <Moon size={15}/>} {m === 'claro' ? 'Claro' : 'Oscuro'}
+                    </button>
+                  )
+                })}
+              </div>
+              {perfil.slug && slugPublicado && (
+                <a className="pr-btn" href={`/p/${slugPublicado}`} target="_blank" rel="noopener noreferrer" style={{marginTop:'12px'}}>Ver cómo queda mi página →</a>
+              )}
               <div className="field-hint" style={{marginTop:'8px'}}>Cambiar de estilo no borra ni cambia nada de lo que cargaste.</div>
             </>))}
 
             {/* 5. SECCIONES */}
             {bloque('secciones', (<>
+              {/* Cómo funciona */}
+              <div className="pr-sec">
+                <div className="pref-row">
+                  <div><div className="pref-label">Cómo funciona</div><div className="pref-sub">3 pasos cortos debajo de tu portada</div></div>
+                  {interruptor(perfil.como_funciona.mostrar, v => setPerfil({...perfil, como_funciona: {...perfil.como_funciona, mostrar: v}}))}
+                </div>
+                {perfil.como_funciona.mostrar && (
+                  <div className="pr-sec-form">
+                    <div className="cf-pasos">
+                      {perfil.como_funciona.pasos.map((p, i) => (
+                        <label key={i} className="cf-paso">
+                          <span className="cf-num">{i + 1}</span>
+                          <input value={p} maxLength={60} placeholder={COMO_FUNCIONA_DEFAULT.pasos[i]} aria-label={`Paso ${i + 1}`}
+                            onChange={e => { const pasos = [...perfil.como_funciona.pasos]; pasos[i] = e.target.value; setPerfil({...perfil, como_funciona: {...perfil.como_funciona, pasos}}) }}/>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="field-hint" style={{marginTop:'8px'}}>Frases cortas, de pocas palabras. Si dejás uno vacío, no se muestra.</div>
+                    {perfil.como_funciona.pasos.every(p => !p.trim()) && (
+                      <div className="pr-aviso">Los tres pasos están vacíos: la sección no se va a ver. <button onClick={() => setPerfil({...perfil, como_funciona: COMO_FUNCIONA_DEFAULT})}>Poner los de ejemplo</button></div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Sobre mí */}
               <div className="pr-sec">
                 <div className="pref-row">
-                  <div><div className="pref-label">Sobre mí</div><div className="pref-sub">Tu bio y tus valores</div></div>
+                  <div><div className="pref-label">Sobre mí</div><div className="pref-sub">Tu bio, tus valores y tu video</div></div>
                   {interruptor(perfil.secciones.sobre_mi, v => setPerfil({...perfil, secciones: {...perfil.secciones, sobre_mi: v}}))}
                 </div>
                 {perfil.secciones.sobre_mi && (
@@ -1164,6 +1246,21 @@ export default function AjustesPage() {
                     {!perfil.bio.trim() && (
                       <div className="pr-aviso">Activaste Sobre mí pero todavía no escribiste tu bio. <button onClick={() => irABloque('perfil')}>Escribila en el bloque 1</button></div>
                     )}
+                    <div className="field" style={{marginBottom:'12px'}}>
+                      <label>Video de presentación (YouTube)</label>
+                      <input placeholder="Pegá el link de YouTube, por ejemplo https://youtu.be/..." value={perfil.video_presentacion}
+                        onChange={e => setPerfil({...perfil, video_presentacion: e.target.value})}/>
+                      {perfil.video_presentacion.trim() && !idYouTube(perfil.video_presentacion) ? (
+                        <div className="pr-aviso">Ese link no es de YouTube o está incompleto. Abrí tu video en YouTube, tocá «Compartir» y copiá el link.</div>
+                      ) : (
+                        <div className="field-hint">Aparece debajo de tus valores. Grabalo en horizontal (el celu acostado), así se ve completo. Subilo a YouTube como «Público» o «No listado».</div>
+                      )}
+                      {idYouTube(perfil.video_presentacion) && (
+                        <div className="pl-video">
+                          <iframe src={`https://www.youtube-nocookie.com/embed/${idYouTube(perfil.video_presentacion)}?rel=0`} title="Vista previa de tu video" loading="lazy" allowFullScreen/>
+                        </div>
+                      )}
+                    </div>
                     <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',margin:'8px 0 10px'}}>Tus valores</div>
     {perfil.valores.map((v, i) => (
       <div key={i} style={{background:'var(--bg-input)',borderRadius:'14px',padding:'14px',border:'0.5px solid var(--border-light)',marginBottom:'12px',display:'flex',flexDirection:'column',gap:'10px'}}>
@@ -1234,8 +1331,10 @@ export default function AjustesPage() {
                 </div>
                 {perfil.secciones.testimonios && (
                   <div className="pr-sec-form">
+                    <TestimoniosAudio nivel={suscripcion ? calcularAcceso(suscripcion) : null} servicios={serviciosActivos}/>
+                    <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.5px',margin:'4px 0 10px'}}>Testimonios escritos</div>
                     {!perfil.testimonios.some(t => (t.texto || '').trim()) && (
-                      <div className="pr-aviso">Activaste Testimonios pero no cargaste ninguno.</div>
+                      <div className="field-hint" style={{marginBottom:'8px'}}>Todavía no cargaste testimonios escritos. Si tenés audios, ya se ven en tu página.</div>
                     )}
     {perfil.testimonios.map((testi, i) => (
       <div key={i} style={{background:'var(--bg-input)',borderRadius:'12px',padding:'12px',marginBottom:'8px',border:'0.5px solid var(--border-light)'}}>
@@ -1344,7 +1443,7 @@ export default function AjustesPage() {
           : <span style={{fontSize:'12px',color:'var(--text-muted)'}}>📷 Sin imagen</span>}
       </div>
       <div style={{display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap'}}>
-        <label style={{fontSize:'12px',fontWeight:600,color:'var(--accent, #8B5CF6)',cursor:'pointer',margin:0}}>
+        <label style={{fontSize:'12px',fontWeight:600,color:'var(--accent, var(--accent))',cursor:'pointer',margin:0}}>
           {subiendoDestacado ? 'Subiendo...' : perfil.destacado.imagen_url ? 'Cambiar imagen' : 'Subir imagen'}
           <input type="file" accept="image/*" style={{display:'none'}} disabled={subiendoDestacado} onChange={subirImagenDestacado}/>
         </label>
@@ -1682,6 +1781,7 @@ export default function AjustesPage() {
       </div>
     </>)}
               </fieldset>
+              <CobrosDolares />
             </>))}
 
             {/* 8. AVISOS */}
@@ -1864,7 +1964,7 @@ export default function AjustesPage() {
               <div className="s-card-title"><Download size={14}/>Exportar datos</div>
               <div className="export-grid">
                 <div className="export-card" onClick={() => exportarCSV('pacientes')}>
-                  <div className="export-icon"><User size={16} color="#7C3AED"/></div>
+                  <div className="export-icon"><User size={16} color="var(--accent-strong)"/></div>
                   <div className="export-title">Pacientes</div>
                   <div className="export-sub">CSV con todos tus pacientes</div>
                 </div>

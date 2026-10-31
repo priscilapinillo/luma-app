@@ -43,6 +43,22 @@ body {
   --red-light: #FEF2F2;
   --teal: #14B8A6;
   --teal-light: #CCFBF1;
+  /* etapa 4: bonus de regalo y cupones */
+  --pink: #DB2777;
+  --pink-light: #FCE7F3;
+  --overlay: rgba(26,16,53,0.28);
+  /* etapa 6: los violetas que estaban escritos a mano en el panel, ahora con nombre (mismo color de siempre fuera del panel) */
+  --accent-2: #A78BFA;
+  --accent-strong: #7C3AED;
+  --accent-deep: #6B3FA0;
+  --accent-soft: #C084FC;
+  --accent-rgb: 139,92,246;
+  --accent-2-rgb: 167,139,250;
+  --accent-deep-rgb: 107,63,160;
+  --shadow-rgb: 100,60,200;
+  --ink-rgb: 26,16,53;
+  --rosa-viejo: #F472B6;
+  --gradient-boton: linear-gradient(135deg, #6B3FA0, #8B5CF6);
 }
 
 html.dark {
@@ -65,6 +81,9 @@ html.dark {
   --green-light: #052015;
   --red-light: #200808;
   --teal-light: #041A18;
+  --pink: #F472B6;
+  --pink-light: #3A1530;
+  --overlay: rgba(0,0,0,0.45);
 }
 
 /* Scrollbar */
@@ -154,3 +173,123 @@ body.modal-open .sb-mobile {
 body.modal-open .sb-float-btn {
   display: none !important;
 }
+/* Celu: la barra de navegación de abajo flota sobre el contenido. Dejamos lugar al final de cada pantalla
+   del panel para que el último elemento (por ejemplo, la última alumna y su botón) nunca quede tapado. */
+@media (max-width: 767px) {
+  .app-container > main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+}
+/* Toque: que se note que la app responde (deploy 30/10).
+   Usa la propiedad "scale" (no "transform"), así no pisa los botones que ya usan transform para ubicarse. */
+button:not(:disabled):active { scale: 0.97; }
+[role="button"]:active { scale: 0.985; }
+button, [role="button"] { -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active, [role="button"]:active { scale: none; }
+}
+
+/* Menús desplegables (deploy 30/10): salen del botón que los abre, crecen y aparecen suave. Nunca de golpe. */
+@keyframes luma-desplegar { from { opacity: 0; scale: 0.96; translate: 0 -6px; } to { opacity: 1; scale: 1; translate: 0 0; } }
+.luma-desplegable { animation: luma-desplegar 0.18s ease-out both; transform-origin: top right; }
+.luma-desplegable-izq { transform-origin: top left; }
+@media (prefers-reduced-motion: reduce) { .luma-desplegable { animation: none; } }
+
+/* ═══════════ ETAPA 6 · BLUE HOUR (solo el panel de la terapeuta: Inicio, Agenda, Pacientes, Servicios, Cursos, Finanzas, Ajustes y Altar) ═══════════
+   Todo vive adentro de .panel-luma (app/(app)/layout.tsx). Las páginas públicas, el aula de las alumnas, Admin, la landing y Luma Links
+   no cambian: siguen con los colores de arriba. El modo oscuro sale de las mismas variables. */
+.panel-luma {
+  --bg: #F5EEE4;
+  --bg-card: #FFFCF7;
+  --bg-input: #FBF7F1;
+  --border: #E6DCCE;
+  --border-light: #EFE7DB;
+  --text-primary: #27344A;
+  --text-secondary: #6E7388;
+  --text-muted: #9A9CAE;
+  --accent: #27344A;
+  --accent-2: #626B91;
+  --accent-strong: #1F2A3D;
+  --accent-deep: #4C5580;
+  --accent-soft: #A99BB8;
+  --accent-light: #E9E3EF;
+  --accent-hover: #F1ECF4;
+  --accent-rgb: 98,107,145;
+  --accent-2-rgb: 169,155,184;
+  --accent-deep-rgb: 76,85,128;
+  --shadow-rgb: 39,52,74;
+  --ink-rgb: 26,34,50;
+  --shadow: rgba(39,52,74,0.07);
+  --shadow-card: 0 2px 18px rgba(39,52,74,0.07);
+  --gradient-accent: linear-gradient(135deg, #27344A, #4C5580);
+  --gradient-boton: linear-gradient(135deg, #27344A, #4C5580);
+  --gradient-hero: linear-gradient(135deg, #27344A 0%, #626B91 55%, #D6A6A5 100%);
+  --bg-sidebar: linear-gradient(165deg, #FBF6EE 0%, #F4EDE4 50%, #EEE7EF 100%);
+  --gradient-sidebar: var(--bg-sidebar);
+  --rosa-viejo: #D6A6A5;
+  --pink: #A65A6E;
+  --pink-light: #F6E4E2;
+  --overlay: rgba(26,34,50,0.32);
+  /* piezas propias del panel */
+  --saludo-bg: #DCD3E6;
+  --saludo-text: #4C5580;
+  --w-ing-bg: #F6E4E2; --w-ing-borde: #EBCBC8; --w-ing-blob: #D6A6A5; --w-ing-label: #8E5553; --w-ing-title: #6E3433; --w-ing-pill: #EED5D2;
+  --w-dis-bg: #E6E9F2; --w-dis-borde: #D2D8E8; --w-dis-blob: #626B91; --w-dis-label: #4C5580; --w-dis-title: #27344A;
+  --vencido: #A24B47;
+  --sb-marca: #27344A;
+  --sb-activo-bg: #FFFCF7;
+  --sb-activo-texto: #27344A;
+  --nav-glass: rgba(217,208,227,0.72);
+  --nav-border: rgba(98,107,145,0.28);
+  --nav-item: rgba(39,52,74,0.62);
+  --nav-active-bg: rgba(255,252,247,0.78);
+  --nav-active-text: #27344A;
+  --menu-claro: linear-gradient(139deg, #FFFCF7 0%, #F3EEF5 100%);
+  --menu-oscuro: linear-gradient(139deg, #27344A 0%, #1F2A3D 100%);
+}
+html.dark .panel-luma {
+  --bg: #1A2232;
+  --bg-card: #27344A;
+  --bg-input: #222D41;
+  --border: #34425C;
+  --border-light: #2D3A52;
+  --text-primary: #F0E6D8;
+  --text-secondary: #B9B3C6;
+  --text-muted: #8C8AA3;
+  --accent: #737DB0;
+  --accent-2: #A99BB8;
+  --accent-strong: #5E68A0;
+  --accent-deep: #C9C0D9;
+  --accent-soft: #A99BB8;
+  --accent-light: #2E3A5A;
+  --accent-hover: #2C3850;
+  --accent-rgb: 169,155,184;
+  --accent-2-rgb: 169,155,184;
+  --accent-deep-rgb: 201,192,217;
+  --shadow-rgb: 0,0,0;
+  --ink-rgb: 8,12,20;
+  --shadow: rgba(0,0,0,0.35);
+  --shadow-card: 0 2px 20px rgba(0,0,0,0.28);
+  --gradient-accent: linear-gradient(135deg, #5E68A0, #8790C2);
+  --gradient-boton: linear-gradient(135deg, #5E68A0, #8790C2);
+  --gradient-hero: linear-gradient(135deg, #3E4468 0%, #626B91 60%, #8A6A7E 100%);
+  --bg-sidebar: linear-gradient(165deg, #1E2738 0%, #1A2232 60%, #1F2236 100%);
+  --rosa-viejo: #D6A6A5;
+  --pink: #E7A5B6;
+  --pink-light: #43323D;
+  --overlay: rgba(0,0,0,0.5);
+  --saludo-bg: #3E4468;
+  --saludo-text: #F0E6D8;
+  --w-ing-bg: #43323D; --w-ing-borde: #5A4150; --w-ing-blob: #D6A6A5; --w-ing-label: #E8C4C1; --w-ing-title: #F6E4E2; --w-ing-pill: #5A4150;
+  --w-dis-bg: #2E3A5A; --w-dis-borde: #3D4B6E; --w-dis-blob: #A99BB8; --w-dis-label: #C9C0D9; --w-dis-title: #F0E6D8;
+  --vencido: #F09A92;
+  --sb-marca: #F0E6D8;
+  --sb-activo-bg: #A99BB8;
+  --sb-activo-texto: #1A2232;
+  --nav-glass: rgba(39,52,74,0.72);
+  --nav-border: rgba(169,155,184,0.3);
+  --nav-item: rgba(240,230,216,0.62);
+  --nav-active-bg: #A99BB8;
+  --nav-active-text: #1A2232;
+}
+/* el fondo de atrás de todo (se ve al estirar la pantalla en el celu) */
+body:has(.panel-luma) { background: #F5EEE4; }
+html.dark body:has(.panel-luma) { background: #1A2232; }

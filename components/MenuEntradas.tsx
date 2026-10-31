@@ -48,7 +48,7 @@ export default function MenuEntradas() {
           <Link key={o.href} href={o.href} className="me-opcion" role="menuitem" onClick={() => setAbierto(null)}>
             <span className="me-icono" aria-hidden="true"><o.Icono size={18} strokeWidth={1.8} /></span>
             <span className="me-textos">
-              <span className="me-titulo">{o.titulo} <span aria-hidden="true">{o.emoji}</span></span>
+              <span className="me-titulo">{o.titulo}</span>
               <span className="me-detalle">{o.detalle}</span>
             </span>
           </Link>
@@ -65,21 +65,22 @@ export default function MenuEntradas() {
         .me-btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .2s,color .2s,border-color .2s}
         .me-btn svg{transition:transform .2s}
         .me-btn[aria-expanded="true"] svg{transform:rotate(180deg)}
-        .me-entrar{background:transparent;border:1px solid rgba(255,255,255,0.22);color:#F3EEFF;font-size:14px;font-weight:500;padding:9px 14px;border-radius:10px}
-        .me-entrar:hover,.me-entrar[aria-expanded="true"]{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.4)}
-        .me-registrar{background:linear-gradient(135deg,#8B5CF6,#A78BFA);border:1px solid transparent;color:#fff;font-size:14px;font-weight:700;padding:9px 16px;border-radius:10px;box-shadow:0 6px 20px rgba(139,92,246,0.35)}
-        .me-btn:focus-visible,.me-opcion:focus-visible{outline:2px solid #C9A84C;outline-offset:3px}
+        .me-entrar{background:transparent;border:1px solid rgba(240,230,216,0.28);color:#F0E6D8;font-size:14px;font-weight:600;padding:10px 14px;border-radius:12px}
+        .me-entrar:hover,.me-entrar[aria-expanded="true"]{background:rgba(240,230,216,0.1);border-color:rgba(240,230,216,0.45)}
+        .me-registrar{background:#F0E6D8;border:1px solid transparent;color:#27344A;font-size:14px;font-weight:800;padding:10px 16px;border-radius:12px;box-shadow:0 8px 22px rgba(0,0,0,0.25)}
+        .me-registrar:hover{background:#FFFCF7}
+        .me-btn:focus-visible,.me-opcion:focus-visible{outline:2px solid #D6A6A5;outline-offset:3px}
         .me-panel{position:absolute;right:0;top:calc(100% + 10px);width:290px;max-width:calc(100vw - 32px);
-          background:#1A1430;border:1px solid rgba(201,168,76,0.28);border-radius:14px;padding:6px;
-          box-shadow:0 18px 40px rgba(0,0,0,0.45);z-index:300;animation:meAbrir .16s ease}
+          background:#FFFCF7;border:1px solid #E6DCCE;border-radius:18px;padding:6px;
+          box-shadow:0 22px 50px rgba(39,52,74,0.25);z-index:300;animation:meAbrir .16s ease}
         @keyframes meAbrir{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-        .me-opcion{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;text-decoration:none;color:#F4EFE6}
+        .me-opcion{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;text-decoration:none;color:#27344A}
         .me-opcion+.me-opcion{margin-top:2px}
-        .me-opcion:hover{background:rgba(139,92,246,0.16)}
-        .me-icono{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(201,168,76,0.12);color:#C9A84C}
+        .me-opcion:hover{background:#F1ECF4}
+        .me-icono{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#E9E3EF;color:#4C5580}
         .me-textos{display:flex;flex-direction:column;gap:2px;min-width:0}
-        .me-titulo{font-size:15px;font-weight:600;line-height:1.3}
-        .me-detalle{font-size:12.5px;color:#B7A9D9;line-height:1.4}
+        .me-titulo{font-size:15px;font-weight:700;line-height:1.3}
+        .me-detalle{font-size:12.5px;color:#6E7388;line-height:1.4}
         @media(max-width:640px){
           .me-caja{gap:8px;position:relative}
           .me-item{position:static}

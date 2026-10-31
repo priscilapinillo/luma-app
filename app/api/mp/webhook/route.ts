@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { mpLuma, revisarPlanLuma, duenaDePreapproval } from '@/lib/planLuma'
+import { revisarPagoUnico } from '@/lib/pagosLuma'
 
 // Aviso de Mercado Pago sobre los planes de Luma (lo que pagan las terapeutas).
 // El aviso solo dice "mirá esta suscripción": Luma le pregunta todo a Mercado Pago y revisa el plan completo
@@ -55,10 +56,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ recibido: true })
     }
 
-    if (!validarFirma(req, dataId)) {
+    // Los avisos de pagos únicos pueden llegar sin firma. No hace falta: con un aviso de pago Luma no aplica nada
+    // por sí mismo, sino que le pregunta el pago a Mercado Pago con su clave y revisa referencia, dueña y monto.
+    // Un aviso falso solo provoca una consulta que no encuentra nada. Para el resto de los avisos, la firma sigue siendo obligatoria.
+    if (type !== 'payment' && !validarFirma(req, dataId)) {
       console.error('Webhook: firma inválida, se rechaza la notificación')
       return NextResponse.json({ error: 'Firma inválida' }, { status: 401 })
     }
+    if (type === 'payment' && !/^\d{5,20}$/.test(String(dataId))) return NextResponse.json({ recibido: true })
 
     if (type === 'preapproval' || type === 'subscription_preapproval') {
       await revisarDuenaDe(String(dataId))
@@ -66,6 +71,10 @@ export async function POST(req: NextRequest) {
       const r = await mpLuma(`/authorized_payments/${encodeURIComponent(String(dataId))}`)
       if (r.ok && r.data?.preapproval_id) await revisarDuenaDe(String(r.data.preapproval_id))
       else console.error('Webhook: no se pudo leer el cobro', dataId, r.status)
+    } else if (type === 'payment') {
+      // pago único del plan de Luma (un mes, anual o diferencia). Si no es de Luma, se ignora solo.
+      const r = await revisarPagoUnico(String(dataId))
+      console.log(`Webhook: pago ${dataId} → ${r.estado}${r.aplicado ? ' (aplicado)' : r.motivo ? ` (${r.motivo})` : ''}`)
     } else {
       console.log(`Webhook: tipo de notificación no manejado todavía: ${type}`)
     }

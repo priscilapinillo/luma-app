@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import TarjetaDescargable from '@/components/TarjetaDescargable'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { LogOut, Clock, Star } from 'lucide-react'
 import { tieneAccesoCurso } from '@/lib/acceso'
+import { toast } from '@/components/ToastProvider'
 import LunaProgreso from '@/components/aula/LunaProgreso'
 import NovedadesAula, { FECHA_NOVEDADES } from '@/components/aula/NovedadesAula'
 import CompartirLogro from '@/components/aula/CompartirLogro'
@@ -34,6 +36,7 @@ type Inscripcion = {
     imagen_url: string
     slug: string
     cobro_automatico?: boolean
+    tipo?: string
   }
   terapeuta: {
     nombre_profesional: string
@@ -121,9 +124,20 @@ export default function MisCursosPage() {
     } finally { if (!seVa) setAccionando(null) }
   }
 
+  // botón "cancelar" para TODOS los estados en que Mercado Pago todavía podría cobrarle
+  // (antes solo aparecía con la suscripción al día: con la cuota rechazada o sin terminar no tenía cómo frenarla)
+  function botonCancelar(i: Inscripcion, texto: string) {
+    return (
+      <button className="mc-link" disabled={accionando === i.id} onClick={e => { e.stopPropagation(); cancelarSuscripcion(i) }}>
+        {accionando === i.id ? 'Cancelando…' : texto}
+      </button>
+    )
+  }
+
   async function cancelarSuscripcion(i: Inscripcion) {
     const hasta = fechaLarga(i.fecha_vencimiento)
-    if (!confirm(`¿Cancelar la renovación automática de "${i.course.titulo}"?\n\nNo se te va a cobrar más.${hasta ? ` Seguís teniendo acceso hasta el ${hasta}.` : ''}`)) return
+    const conAcceso = tieneAccesoCurso({ estado: i.estado, modalidad: i.modalidad, fecha_vencimiento: i.fecha_vencimiento })
+    if (!confirm(`¿Cancelar la renovación automática de "${i.course.titulo}"?\n\nNo se te va a cobrar más.${conAcceso && hasta ? ` Seguís teniendo acceso hasta el ${hasta}.` : ''}`)) return
     setAccionando(i.id)
     try {
       const res = await fetch('/api/cursos/suscripcion/cancelar', {
@@ -132,6 +146,7 @@ export default function MisCursosPage() {
       })
       const r = await res.json().catch(() => ({ ok: false }))
       if (!r.ok) { setMensajes(prev => ({ ...prev, [i.id]: r.mensaje || 'No se pudo cancelar. Probá de nuevo en unos minutos.' })); return }
+      toast('Listo: no se te va a cobrar más.')
       await cargarDatos(false)
     } finally { setAccionando(null) }
   }
@@ -171,6 +186,12 @@ export default function MisCursosPage() {
       const { data: cursos } = await supabase
         .from('courses').select('id, titulo, imagen_url, slug, user_id, cobro_automatico')
         .in('id', courseIds)
+
+      // tipo de cada uno (curso o descargable): aparte, así si la base no tiene la columna la lista se ve igual
+      try {
+        const { data: tipos, error: errTipo } = await supabase.from('courses').select('id, tipo').in('id', courseIds)
+        if (!errTipo && tipos) for (const c of (cursos || []) as any[]) c.tipo = (tipos as any[]).find(x => x.id === c.id)?.tipo || 'curso'
+      } catch {}
 
       const terapeutaIds = [...new Set((cursos || []).map(c => c.user_id))]
       const { data: terapeutas } = await supabase
@@ -442,8 +463,10 @@ export default function MisCursosPage() {
                     </div>
                     {avisoBloqueo === f.lesson_id && (
                       <div className="mc-sus alerta" style={{marginTop:'-4px',marginBottom:'10px'}}>
-                        Esta lección está bloqueada hasta que renueves tu acceso a “{i?.course.titulo}”. Tus apuntes siguen en tu cuaderno.
-                        <button className="mc-link" onClick={() => { setAvisoBloqueo(''); setPestana('cursos') }}>Ver cómo renovar</button>
+                        {i?.estado === 'baja'
+                          ? <>Tu acceso a “{i?.course.titulo}” terminó. Tus apuntes siguen en tu cuaderno.</>
+                          : <>Esta lección está bloqueada hasta que renueves tu acceso a “{i?.course.titulo}”. Tus apuntes siguen en tu cuaderno.</>}
+                        {i?.estado !== 'baja' && <button className="mc-link" onClick={() => { setAvisoBloqueo(''); setPestana('cursos') }}>Ver cómo renovar</button>}
                       </div>
                     )}
                   </div>
@@ -456,7 +479,7 @@ export default function MisCursosPage() {
         {inscripciones.length > 0 && pestana === 'cuadernos' && (
           <div>
             <div style={{fontSize:'12px',color:'#737373',marginBottom:'12px'}}>🔒 Tus cuadernos son privados: solo los ves vos.</div>
-            {inscripciones.map(i => {
+            {inscripciones.filter(i => i.course.tipo !== 'descargable').map(i => {
               const n = apuntesPorCurso[i.course.id] || 0
               return (
                 <div key={i.id} className="mc-fila" onClick={() => router.push(`/mi-cuenta/cursos/${i.course.id}/cuaderno`)}>
@@ -485,14 +508,18 @@ export default function MisCursosPage() {
         )}
 
         {pestana !== 'cursos' ? null : inscripciones.length === 0 ? (
-          <div className="mc-empty">Todavía no compraste ningún curso.</div>
+          <div className="mc-empty">Todavía no compraste ningún curso ni descargable.</div>
         ) : (
           <div className="mc-grid">
             {inscripciones.map(i => {
               const acceso = tieneAccesoCurso({ estado: i.estado, modalidad: i.modalidad, fecha_vencimiento: i.fecha_vencimiento })
+              if (i.course.tipo === 'descargable') return (
+                <TarjetaDescargable key={i.id} courseId={i.course.id} titulo={i.course.titulo} imagen={i.course.imagen_url}
+                  terapeuta={i.terapeuta?.nombre_profesional} acceso={acceso} estado={i.estado} whatsapp={i.terapeuta?.whatsapp}/>
+              )
               const ln = luna[i.course.id]
               const terminado = !!ln && ln.total > 0 && ln.hechas >= ln.total
-              const sinEmpezarPago = !acceso && i.estado !== 'activa'
+              const sinEmpezarPago = !acceso && i.estado !== 'activa' && i.estado !== 'baja'
               const dias = diasParaVencer(i.fecha_vencimiento)
               const proximoAVencer = acceso && i.modalidad === 'suscripcion' && dias !== null && dias <= DIAS_AVISO_VENCE &&
                 !['activa', 'esperando_cobro', 'con_problemas'].includes(i.suscripcion_estado || '')
@@ -535,6 +562,7 @@ export default function MisCursosPage() {
                     {i.suscripcion_estado === 'con_problemas' && (
                       <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>
                         ⚠️ No pudimos cobrar tu cuota. Actualizá tu tarjeta en Mercado Pago (Tu perfil → Suscripciones). Tenés acceso hasta el {fechaLarga(i.fecha_vencimiento)}.
+                        {botonCancelar(i, 'Prefiero cancelar la renovación')}
                       </div>
                     )}
                     {i.suscripcion_estado === 'cancelada' && i.modalidad === 'suscripcion' && (
@@ -580,9 +608,14 @@ export default function MisCursosPage() {
                         ✦ {certificados[i.id] ? 'Compartir mi certificado' : 'Compartir mi logro'}
                       </button>
                     )}
+                  </>) : i.estado === 'baja' ? (<>
+                    <span className="mc-badge pendiente_pago">Acceso terminado</span>
+                    <div className="mc-pendiente-txt">Tu acceso a este curso terminó. Si querés volver, escribile a {i.terapeuta?.nombre_profesional || 'la terapeuta'}.</div>
                   </>) : i.suscripcion_estado === 'esperando_cobro' ? (<>
                     <span className="mc-badge pendiente_pago">⏳ Confirmando tu primer cobro</span>
                     <div className="mc-pendiente-txt">Tu suscripción está activa. El acceso se habilita apenas Mercado Pago acredite el cobro (suele tardar unos minutos). No hace falta que pagues de nuevo.</div>
+                    <div className="mc-sus" onClick={e => e.stopPropagation()}>{botonCancelar(i, 'Cancelar la suscripción')}</div>
+                    {mensajes[i.id] && <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>{mensajes[i.id]}</div>}
                   </>) : i.suscripcion_estado === 'pendiente' || i.suscripcion_estado === 'rechazada' ? (<>
                     <span className="mc-badge pendiente_pago">{i.suscripcion_estado === 'rechazada' ? '⚠️ Tarjeta rechazada' : '⏳ Suscripción sin completar'}</span>
                     <div className="mc-pendiente-txt">{i.suscripcion_estado === 'rechazada' ? 'El primer cobro fue rechazado y no se te cobró nada. Podés probar con otra tarjeta.' : 'Todavía no terminaste en Mercado Pago. Si te llegó a descontar dinero, Mercado Pago lo devuelve solo. Para completarla, usá tarjeta de crédito o débito (no dinero en cuenta).'}</div>
@@ -590,11 +623,14 @@ export default function MisCursosPage() {
                       <button className="mc-btn-completar" style={{border:'none',cursor:'pointer',fontFamily:'inherit'}} disabled={accionando === i.id} onClick={() => irASuscripcion(i)}>
                         {accionando === i.id ? 'Preparando…' : i.suscripcion_estado === 'rechazada' ? 'Probar con otra tarjeta →' : 'Completar ahora →'}
                       </button>
+                      {botonCancelar(i, 'No quiero suscribirme')}
                     </div>
                     {mensajes[i.id] && <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>{mensajes[i.id]}</div>}
                   </>) : i.suscripcion_estado === 'con_problemas' ? (<>
                     <span className="mc-badge pendiente_pago">⚠️ Cuota sin cobrar</span>
                     <div className="mc-pendiente-txt">Mercado Pago no pudo cobrar tu cuota y sigue intentando. Actualizá tu tarjeta en Mercado Pago (Tu perfil → Suscripciones): cuando se cobre, el acceso vuelve solo.</div>
+                    <div className="mc-sus" onClick={e => e.stopPropagation()}>{botonCancelar(i, 'Prefiero cancelar la renovación')}</div>
+                    {mensajes[i.id] && <div className="mc-sus alerta" onClick={e => e.stopPropagation()}>{mensajes[i.id]}</div>}
                   </>) : i.estado !== 'activa' ? (<>
                     <span className="mc-badge pendiente_pago">⏳ Pago pendiente</span>
                     <div className="mc-pendiente-txt">

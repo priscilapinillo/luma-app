@@ -35,7 +35,11 @@ export default function LinksLayout({ children }: { children: React.ReactNode })
   }, [pathname])
 
   if (!listo) return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}>Cargando...</div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',background:'#F5EEE4',color:'#6E7388',font:"600 14px 'Inter',sans-serif"}}>
+      <style>{`@keyframes lkLay{to{transform:rotate(360deg)}}`}</style>
+      <span aria-hidden="true" style={{width:'16px',height:'16px',borderRadius:'50%',border:'2px solid #E6DCCE',borderTopColor:'#27344A',animation:'lkLay 1s linear infinite'}}/>
+      Cargando…
+    </div>
   )
   return <>{children}</>
 }

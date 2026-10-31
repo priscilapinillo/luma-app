@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type React from 'react'
 import { createClient } from '@/lib/supabase'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { toast } from '@/components/ToastProvider'
 
 // solo para mostrar o no la página: el permiso real lo verifica el servidor
 const ADMIN_EMAIL = 'priscilapinillo78@gmail.com'
@@ -89,12 +90,12 @@ export default function AdminNovedadesPage() {
       const { data } = supabase.storage.from('avatars').getPublicUrl(path)
       setForm(prev => ({ ...prev, imagen_url: data.publicUrl }))
     } catch (e: any) {
-      alert('No se pudo subir la imagen: ' + (e?.message || 'intentá de nuevo'))
+      toast('No se pudo subir la imagen: ' + (e?.message || 'intentá de nuevo'), 'error')
     } finally { setSubiendo(false) }
   }
 
   async function publicar() {
-    if (!form.titulo.trim()) { alert('Poné un título.'); return }
+    if (!form.titulo.trim()) { toast('Poné un título.', 'error'); return }
     const aviso = (form.notificar
       ? 'Se va a publicar y les va a llegar una notificación a todas las terapeutas con notificaciones activadas.'
       : 'Se va a publicar sin notificación.')
@@ -105,7 +106,7 @@ export default function AdminNovedadesPage() {
     setResultado('')
     try {
       const r = await api('/api/admin/novedades', 'POST', form)
-      if (!r.ok) { alert('No se pudo publicar: ' + (r.motivo || 'error')); return }
+      if (!r.ok) { toast('No se pudo publicar: ' + (r.motivo || 'error'), 'error'); return }
       let extra = ''
       if (proximaALanzar) {
         const b = await api('/api/admin/proximas', 'DELETE', { id: proximaALanzar.id })
@@ -124,7 +125,7 @@ export default function AdminNovedadesPage() {
   async function borrarNovedad(id: string) {
     if (!confirm('¿Borrar esta novedad? Deja de verse en la página de Novedades.')) return
     const r = await api('/api/admin/novedades', 'DELETE', { id })
-    if (!r.ok) { alert('No se pudo borrar.'); return }
+    if (!r.ok) { toast('No se pudo borrar.', 'error'); return }
     setLista(prev => prev.filter(n => n.id !== id))
   }
 
@@ -135,12 +136,12 @@ export default function AdminNovedadesPage() {
   }
 
   async function crearProxima() {
-    if (!nuevaProx.titulo.trim()) { alert('Poné un título.'); return }
+    if (!nuevaProx.titulo.trim()) { toast('Poné un título.', 'error'); return }
     setGuardandoProx(true)
     try {
       const orden = proximas.length ? Math.max(...proximas.map(p => p.orden)) + 1 : 0
       const r = await api('/api/admin/proximas', 'POST', { ...nuevaProx, orden, visible: true })
-      if (!r.ok) { alert('No se pudo guardar: ' + (r.motivo || 'error')); return }
+      if (!r.ok) { toast('No se pudo guardar: ' + (r.motivo || 'error'), 'error'); return }
       setNuevaProx(PROX_VACIA)
       cargarProximas()
     } finally { setGuardandoProx(false) }
@@ -148,11 +149,11 @@ export default function AdminNovedadesPage() {
 
   async function guardarEdicion() {
     if (!editando) return
-    if (!editando.titulo.trim()) { alert('El título no puede quedar vacío.'); return }
+    if (!editando.titulo.trim()) { toast('El título no puede quedar vacío.', 'error'); return }
     setGuardandoProx(true)
     try {
       const r = await api('/api/admin/proximas', 'PATCH', editando)
-      if (!r.ok) { alert('No se pudo guardar: ' + (r.motivo || 'error')); return }
+      if (!r.ok) { toast('No se pudo guardar: ' + (r.motivo || 'error'), 'error'); return }
       setEditando(null)
       cargarProximas()
     } finally { setGuardandoProx(false) }
@@ -160,7 +161,7 @@ export default function AdminNovedadesPage() {
 
   async function cambiarVisible(p: Proxima) {
     const r = await api('/api/admin/proximas', 'PATCH', { id: p.id, visible: !p.visible })
-    if (!r.ok) { alert('No se pudo cambiar.'); return }
+    if (!r.ok) { toast('No se pudo cambiar.', 'error'); return }
     setProximas(prev => prev.map(x => x.id === p.id ? { ...x, visible: !p.visible } : x))
   }
 
@@ -171,14 +172,14 @@ export default function AdminNovedadesPage() {
     // intercambia posiciones (usa el índice como orden para que no queden empates)
     const ra = await api('/api/admin/proximas', 'PATCH', { id: a.id, orden: j })
     const rb = await api('/api/admin/proximas', 'PATCH', { id: b.id, orden: i })
-    if (!ra.ok || !rb.ok) alert('No se pudo reordenar del todo. Recargá la página.')
+    if (!ra.ok || !rb.ok) toast('No se pudo reordenar del todo. Recargá la página.', 'error')
     cargarProximas()
   }
 
   async function borrarProxima(p: Proxima) {
     if (!confirm(`¿Borrar "${p.titulo}" de Próximas actualizaciones?`)) return
     const r = await api('/api/admin/proximas', 'DELETE', { id: p.id })
-    if (!r.ok) { alert('No se pudo borrar.'); return }
+    if (!r.ok) { toast('No se pudo borrar.', 'error'); return }
     setProximas(prev => prev.filter(x => x.id !== p.id))
   }
 
@@ -198,7 +199,7 @@ export default function AdminNovedadesPage() {
   async function borrarIdea(id: string) {
     if (!confirm('¿Borrar esta idea?')) return
     const r = await api('/api/admin/ideas', 'DELETE', { id })
-    if (!r.ok) { alert('No se pudo borrar.'); return }
+    if (!r.ok) { toast('No se pudo borrar.', 'error'); return }
     setIdeas(prev => prev.filter(x => x.id !== id))
   }
 
@@ -221,6 +222,7 @@ export default function AdminNovedadesPage() {
     <div style={{minHeight:'100vh',background:'#FAFAFA',fontFamily:"'Inter',sans-serif",padding:'28px 18px 80px'}}>
       <div style={{maxWidth:'680px',margin:'0 auto'}}>
         <div style={{fontSize:'12px',fontWeight:700,letterSpacing:'2px',color:'#7C3AED',textTransform:'uppercase'}}>Solo vos</div>
+        <a href="/admin" style={{fontSize:'13px',fontWeight:700,color:'#7C3AED',textDecoration:'none'}}>← Panel de Admin</a>
         <h1 style={{fontSize:'24px',fontWeight:800,margin:'4px 0 16px'}}>Panel de Novedades</h1>
         <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'18px'}}>
           {pestanaBtn('novedades', '✦ Novedades')}

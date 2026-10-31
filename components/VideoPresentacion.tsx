@@ -20,23 +20,24 @@ export default function VideoPresentacion() {
   return (
     <section className="vp-section">
       <style>{`
-        .vp-section{position:relative;padding:100px 6%;background:linear-gradient(180deg,#1E1B2E 0%,#0D0B14 100%);overflow:hidden;text-align:center}
-        .vp-kicker{font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#C9A84C;margin-bottom:12px}
-        .vp-title{font-family:'Cormorant Garamond',serif;font-size:clamp(32px,4.5vw,52px);font-weight:600;color:#F9F6F0;margin-bottom:10px}
-        .vp-sub{font-family:'Montserrat',sans-serif;font-size:15px;color:#C9BFE0;margin-bottom:40px}
-        .vp-marco{position:relative;max-width:880px;margin:0 auto;border-radius:22px;padding:2px;overflow:hidden;isolation:isolate;box-shadow:0 30px 80px rgba(107,63,160,0.4)}
+        .vp-section{position:relative;padding:100px 6%;background:radial-gradient(700px 420px at 50% 0%,rgba(98,107,145,0.55),transparent 70%),linear-gradient(160deg,#27344A,#1F2A3D);overflow:hidden;text-align:center;border-radius:48px;margin:0 16px}
+        .vp-kicker{font-family:'Inter',sans-serif;font-size:12px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#C9C0D9;margin-bottom:14px}
+        .vp-title{font-family:'Avigea','Cormorant Garamond',serif;font-size:clamp(44px,6vw,76px);font-weight:400;line-height:.9;letter-spacing:-.025em;color:#F0E6D8;margin-bottom:14px}
+        .vp-sub{font-family:'Inter',sans-serif;font-size:16px;color:#D9D1E4;margin-bottom:40px}
+        .vp-marco{position:relative;max-width:880px;margin:0 auto;border-radius:22px;padding:2px;overflow:hidden;isolation:isolate;box-shadow:0 30px 80px rgba(0,0,0,0.4)}
         .vp-marco::before{content:'';position:absolute;z-index:-1;left:50%;top:50%;width:200%;aspect-ratio:1;transform:translate(-50%,-50%);
-          background:conic-gradient(from 0deg,transparent 0deg,rgba(201,168,76,0.3) 40deg,#E8D5A3 80deg,rgba(201,168,76,0.3) 120deg,transparent 160deg,transparent 200deg,rgba(139,92,246,0.35) 240deg,#C4B5FD 275deg,rgba(139,92,246,0.35) 310deg,transparent 360deg);
+          background:conic-gradient(from 0deg,transparent 0deg,rgba(214,166,165,0.35) 40deg,#F0E6D8 80deg,rgba(214,166,165,0.35) 120deg,transparent 160deg,transparent 200deg,rgba(169,155,184,0.4) 240deg,#DCD3E6 275deg,rgba(169,155,184,0.4) 310deg,transparent 360deg);
           animation:vpGira 8s linear infinite}
         @keyframes vpGira{to{transform:translate(-50%,-50%) rotate(360deg)}}
         @media (prefers-reduced-motion:reduce){.vp-marco::before{animation:none}}
+        @media(max-width:640px){.vp-section{margin:0 10px;border-radius:32px;padding:70px 5%}}
         .vp-video{position:relative;padding-bottom:56.25%;height:0;border-radius:20px;overflow:hidden;background:#000}
         .vp-video iframe,.vp-portada{position:absolute;inset:0;width:100%;height:100%;border:none}
         .vp-portada{cursor:pointer;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;padding:0}
         .vp-play{width:78px;height:78px;border-radius:50%;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,0.4);transition:transform .2s}
         .vp-portada:hover .vp-play{transform:scale(1.08)}
       `}</style>
-      <div className="vp-kicker">✦ Antes de elegir ✦</div>
+      <div className="vp-kicker">Antes de elegir</div>
       <h2 className="vp-title">¿Luma es para vos?</h2>
       <p className="vp-sub">En un par de minutos te muestro cómo es trabajar con Luma.</p>
       <div className="vp-marco">
@@ -48,7 +49,7 @@ export default function VideoPresentacion() {
           ) : (
             <button className="vp-portada" style={{backgroundImage:`url(${portada})`}} onClick={() => setReproduciendo(true)} aria-label="Reproducir video de presentación">
               <span className="vp-play">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="#6B3FA0" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="#27344A" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
               </span>
             </button>
           )}

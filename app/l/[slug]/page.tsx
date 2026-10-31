@@ -5,22 +5,24 @@ import { createClient } from '@/lib/supabase'
 import { useParams } from 'next/navigation'
 import { urlSegura, urlWhatsapp, origenDeVisita } from '@/lib/linksUtil'
 import { Camera, Music2, PlayCircle, Mic, MessageCircle, Mail, FileDown, ShoppingBag, Link as LinkIcon } from 'lucide-react'
+import { temaPublico, alfa } from '@/lib/plantillas'
 
 type Link = { tipo: string; titulo: string; url: string; imagen_url?: string; mensaje?: string }
 type Promo = { activa: boolean; titulo: string; descripcion: string; texto_boton: string; url: string }
 type Perfil = {
   nombre: string; profesion: string; bio: string
-  foto_url: string; template: string; links: Link[]; promo: Promo | null
+  foto_url: string; template: string; template_modo?: string | null; links: Link[]; promo: Promo | null
 }
 
-const TEMPLATES: Record<string, any> = {
-  luna: { bg: '#0D0B14', card: 'rgba(26,22,40,0.55)', border: 'rgba(201,168,76,0.25)', primary: '#C9A84C', text: '#F0E8D5', textDim: '#B8A88F', fondo: '/landing/fondo-pagina-publica.png', dark: true },
-  aura: { bg: '#F8F4FF', card: 'rgba(255,255,255,0.55)', border: 'rgba(124,58,237,0.2)', primary: '#7C3AED', text: '#1F2937', textDim: '#6B7280', fondo: '/landing/fondo-claro.png', dark: false },
-  tierra: { bg: '#FAF7F0', card: 'rgba(255,255,255,0.55)', border: 'rgba(146,64,14,0.2)', primary: '#92400E', text: '#1C1917', textDim: '#78716C', fondo: '/landing/fondo-claro.png', dark: false },
-  rosa: { bg: '#FFF0F6', card: 'rgba(255,255,255,0.6)', border: 'rgba(190,24,93,0.2)', primary: '#BE185D', text: '#2D0A25', textDim: '#9D7A95', fondo: '/landing/fondo-claro.png', dark: false },
-  violeta: { bg: '#1E0A3C', card: 'rgba(61,21,112,0.5)', border: 'rgba(192,132,252,0.25)', primary: '#C084FC', text: '#FAF5FF', textDim: '#C4B5FD', fondo: '/landing/fondo-pagina-publica.png', dark: true },
-  verde: { bg: '#F0FDF4', card: 'rgba(255,255,255,0.6)', border: 'rgba(6,95,70,0.2)', primary: '#065F46', text: '#022C22', textDim: '#6B7280', fondo: '/landing/fondo-pagina-publica.png', dark: false },
+// mismas 6 plantillas (claro y oscuro) que la página de reservas: lib/plantillas.ts
+function temaLinks(template?: string, modo?: string | null) {
+  const tm = temaPublico(template, modo)
+  return {
+    tm, bg: tm.bg, card: alfa(tm.superficie, tm.dark ? 0.72 : 0.8), border: tm.border, primary: tm.label,
+    text: tm.cream, textDim: tm.textDim, fondo: tm.patronFondo, dark: tm.dark, acento: tm.acento, sobreAcento: tm.sobreAcento,
+  }
 }
+const TEMA_CARGA = temaLinks('luna', 'oscuro')
 
 const ROMANOS = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII']
 
@@ -40,11 +42,11 @@ export default function LinksPublicPage() {
 
   async function cargar() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from('luma_links_profiles')
-      .select('nombre, profesion, bio, foto_url, template, links, promo')
-      .eq('slug', slug)
-      .maybeSingle()
+    const columnas = 'nombre, profesion, bio, foto_url, template, links, promo'
+    let res: { data: any; error: unknown } = await supabase.from('luma_links_profiles').select(columnas + ', template_modo').eq('slug', slug).maybeSingle()
+    // si la base todavía no tiene la columna del modo, se muestra igual (con el modo de siempre de su plantilla)
+    if (res.error) res = await supabase.from('luma_links_profiles').select(columnas).eq('slug', slug).maybeSingle()
+    const data = res.data as Perfil | null
     if (data) setPerfil({ ...data, links: data.links || [], promo: data.promo || null })
     setLoading(false)
     // estadística: una visita por sesión del navegador (sin datos de quien visita)
@@ -66,25 +68,34 @@ export default function LinksPublicPage() {
     } catch {}
   }
 
-  if (loading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0D0B14',color:'#C9A84C',fontFamily:'serif'}}>cargando...</div>
-  if (!perfil) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'sans-serif'}}>Página no encontrada</div>
+  if (loading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:TEMA_CARGA.bg,color:TEMA_CARGA.primary,fontFamily:"'Cormorant Garamond',serif",letterSpacing:'2px'}}>✦ cargando ✦</div>
+  if (!perfil) return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',gap:'10px',alignItems:'center',justifyContent:'center',background:TEMA_CARGA.bg,color:TEMA_CARGA.text,fontFamily:"'Inter',sans-serif",padding:'24px',textAlign:'center'}}>
+      <div style={{fontSize:'34px',color:TEMA_CARGA.primary}}>✦</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:'26px',fontWeight:600}}>Esta página no existe</div>
+      <div style={{fontSize:'14px',color:TEMA_CARGA.textDim,maxWidth:'300px',lineHeight:1.5}}>Puede que el link tenga un error o que la página se haya dado de baja.</div>
+    </div>
+  )
 
-  const t = TEMPLATES[perfil.template] || TEMPLATES.luna
+  const t = temaLinks(perfil.template, perfil.template_modo)
   const promo = perfil.promo && perfil.promo.activa && perfil.promo.url ? perfil.promo : null
 
   return (
-    <div style={{minHeight:'100vh',position:'relative',background:t.bg,fontFamily:"'Jost',sans-serif",color:t.text}}>
+    <div style={{minHeight:'100vh',position:'relative',background:t.bg,fontFamily:"'Inter',sans-serif",color:t.text}}>
+      <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${t.tm.googleFonts}&display=swap`}/>
       <style>{`
         
         *{box-sizing:border-box;margin:0;padding:0}
         .lp-bg{position:fixed;inset:0;z-index:0;background-image:url('${t.fondo}');background-size:cover;background-position:center;opacity:${t.dark ? 0.22 : 0.14}}
         .lp-content{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:40px 20px 60px;display:flex;flex-direction:column;align-items:center}
-        .lp-carta-wrap{position:relative;margin-bottom:14px;animation:lpFloat 4.5s ease-in-out infinite}
-        .lp-carta-glow{position:absolute;inset:-30px;border-radius:50%;background:radial-gradient(circle, ${t.primary}55, transparent 70%);filter:blur(18px);z-index:0;animation:lpPulso 3.5s ease-in-out infinite}
-        .lp-carta{position:relative;z-index:1;width:190px;height:290px;border-radius:16px;overflow:hidden;border:1.5px solid ${t.primary};box-shadow:0 20px 50px rgba(0,0,0,0.3)}
-        .lp-carta img{width:100%;height:100%;object-fit:cover;position:relative;z-index:1}
-        .lp-carta::before{content:'';position:absolute;inset:7px;border:1px solid ${t.primary}AA;border-radius:10px;pointer-events:none;z-index:2}
-        .lp-carta::after{content:'';position:absolute;inset:11px;border:1px solid ${t.primary}55;border-radius:8px;pointer-events:none;z-index:2}
+        /* foto en arco con el marco de estrellas (igual que la página de reservas), del color firme de la plantilla */
+        .lp-carta-wrap{position:relative;width:250px;max-width:72vw;margin-bottom:14px;animation:lpFloat 4.5s ease-in-out infinite}
+        .lp-marco{position:relative;width:100%;aspect-ratio:1080/1608}
+        .lp-carta{position:absolute;left:6.1%;width:87.8%;top:10.6%;height:78.1%;overflow:hidden;border-radius:50% 50% 0 0 / 37.7% 37.7% 0 0;border:2px solid ${t.primary};background:${t.tm.foto};box-shadow:0 0 34px 4px ${alfa(t.acento, 0.6)},0 0 70px 10px ${alfa(t.acento, 0.28)}}
+        .lp-carta img{width:100%;height:100%;object-fit:cover;display:block}
+        .lp-carta-inicial{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:90px;color:${t.tm.fotoTxt}}
+        .lp-marco-linea{position:absolute;inset:0;z-index:2;pointer-events:none;background:${t.primary};-webkit-mask:url('/landing/tarotista.png') center / 100% 119.4% no-repeat;mask:url('/landing/tarotista.png') center / 100% 119.4% no-repeat;filter:drop-shadow(0 0 6px ${alfa(t.acento, 0.55)})}
+        @media (prefers-reduced-motion:reduce){.lp-carta-wrap{animation:none}}
         @keyframes lpFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
         @keyframes lpPulso{0%,100%{opacity:0.5;transform:scale(1)}50%{opacity:0.85;transform:scale(1.08)}}
         .lp-nombre{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;margin-bottom:2px;text-align:center}
@@ -175,16 +186,20 @@ export default function LinksPublicPage() {
         .lp-frente-etiqueta{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:${t.primary};margin-bottom:5px;font-weight:700}
         .lp-frente-titulo{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:16px;color:${t.text};line-height:1.05;margin-bottom:6px}
         .lp-frente-desc{font-size:9px;color:${t.textDim};line-height:1.2;margin-bottom:8px}
-        .lp-frente-btn{font-size:8px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;color:${t.dark ? '#1A1035' : '#fff'};background:${t.primary};border-radius:20px;padding:6px 14px;text-decoration:none}
+        .lp-frente-btn{font-size:8px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;color:${t.sobreAcento};background:${t.acento};border-radius:20px;padding:6px 14px;text-decoration:none}
       `}</style>
 
       <div className="lp-bg"/>
 
       <div className="lp-content">
       <div className="lp-carta-wrap">
-          <div className="lp-carta-glow"/>
-          <div className="lp-carta">
-            {perfil.foto_url && <img src={perfil.foto_url} alt={perfil.nombre}/>}
+          <div className="lp-marco">
+            <div className="lp-carta">
+              {perfil.foto_url
+                ? <img src={perfil.foto_url} alt={perfil.nombre}/>
+                : <div className="lp-carta-inicial">{(perfil.nombre || '').trim().charAt(0).toUpperCase() || '✦'}</div>}
+            </div>
+            <div className="lp-marco-linea" aria-hidden="true"/>
           </div>
         </div>
         <div className="lp-nombre">{perfil.nombre}</div>

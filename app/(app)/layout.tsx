@@ -5,10 +5,12 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Sidebar from "@/components/Sidebar"
 import { AppProvider } from "@/lib/context"
-import ToastProvider from "@/components/ToastProvider"
 import { calcularAcceso, pareceDesactualizado, estadoPlan, type TipoEstado } from '@/lib/acceso'
 import BloqueoPlan from '@/components/BloqueoPlan'
 import { verificarPlanEnVivo } from '@/lib/verificarPlan'
+import LatidoActividad from '@/components/LatidoActividad'
+import AvisoBlueHour from '@/components/AvisoBlueHour'
+import AvisoPlantillas from '@/components/AvisoPlantillas'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -68,19 +70,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AppProvider>
-      <div className="app-container" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', paddingLeft: '200px' }}>
-        <Sidebar />
-        <main style={{ 
-          flex: 1, 
-          overflowY: 'auto', 
-          overflowX: 'hidden', 
-          background: 'var(--bg)',
-        }}>
-          {children}
-        </main>
+      {/* .panel-luma: la estética Blue Hour (y su modo oscuro) vive solo acá adentro */}
+      <div className="panel-luma">
+        <div className="app-container" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', paddingLeft: '200px' }}>
+          <Sidebar />
+          <main style={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            overflowX: 'hidden', 
+            background: 'var(--bg)',
+          }}>
+            {children}
+          </main>
+        </div>
+        {mostrarBloqueo && <BloqueoPlan tipo={tipoPlan} />}
+        <LatidoActividad />
+        <AvisoBlueHour />
+        <AvisoPlantillas />
       </div>
-      <ToastProvider />
-      {mostrarBloqueo && <BloqueoPlan tipo={tipoPlan} />}
     </AppProvider>
   )
-}
+}

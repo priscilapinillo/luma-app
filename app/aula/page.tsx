@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { ESTILOS_ACCESO } from '@/components/landing/estilosAcceso'
 
 // Entrada de las ALUMNAS (lumaapp.lat/aula).
 // - Solo inicia sesión: las cuentas de alumna se crean al comprar un curso desde el link de la profesora.
@@ -83,136 +84,76 @@ export default function AulaEntrarPage() {
     }
   }
 
-  if (revisando) return <div className="au-cargando">Cargando…</div>
+  if (revisando) return (
+    <div className="au" style={{ alignItems: 'center', justifyContent: 'center', gap: 10, color: '#6E7388', fontWeight: 600, fontSize: 14 }}>
+      <style>{ESTILOS_ACCESO}</style>
+      <i className="au-girar" style={{ borderColor: '#E6DCCE', borderTopColor: '#27344A' }} aria-hidden="true" />Cargando…
+    </div>
+  )
 
   return (
-    <div className="au-pagina">
-      <style>{`
-        @font-face{font-family:'Avigea';src:url('/fonts/Avigea.ttf') format('truetype');font-display:swap}
-        *{box-sizing:border-box;margin:0;padding:0}
-        :root{
-          --au-noche:#140F24; --au-hondo:#1E1734; --au-crema:#F4EFE6; --au-oro:#C9A84C;
-          --au-lavanda:#B7A9D9; --au-linea:rgba(244,239,230,0.14); --au-error:#F2A7A7;
-        }
-        .au-cargando{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#140F24;color:#B7A9D9;font-family:'Montserrat',sans-serif;font-size:14px}
-        .au-pagina{min-height:100vh;background:var(--au-noche);color:var(--au-crema);font-family:'Montserrat',sans-serif;
-          display:flex;flex-direction:column;align-items:center;padding:28px 16px 56px}
-        .au-logo{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--au-crema);text-decoration:none;align-self:center;margin-bottom:56px}
-        .au-logo span{color:var(--au-oro)}
-        .au-col{width:100%;max-width:400px}
-
-        /* las fases de la luna: cada lección, un paso más */
-        .au-fases{display:flex;justify-content:center;gap:10px;margin-bottom:28px}
-        .au-fase{width:11px;height:11px;border-radius:50%;background:var(--au-crema);border:1px solid rgba(201,168,76,0.55)}
-        .au-fase:nth-child(1){box-shadow:inset 11px 0 0 0 var(--au-noche)}
-        .au-fase:nth-child(2){box-shadow:inset 7px 0 0 0 var(--au-noche)}
-        .au-fase:nth-child(3){box-shadow:inset 4px 0 0 0 var(--au-noche)}
-        .au-fase:nth-child(4){box-shadow:none;background:var(--au-oro);border-color:var(--au-oro)}
-        .au-fase:nth-child(5){box-shadow:inset -4px 0 0 0 var(--au-noche)}
-        .au-fase:nth-child(6){box-shadow:inset -7px 0 0 0 var(--au-noche)}
-        .au-fase:nth-child(7){box-shadow:inset -11px 0 0 0 var(--au-noche)}
-        @media (prefers-reduced-motion:no-preference){
-          .au-fase{opacity:0;animation:auFase .5s ease forwards}
-          .au-fase:nth-child(1){animation-delay:.05s}.au-fase:nth-child(2){animation-delay:.12s}
-          .au-fase:nth-child(3){animation-delay:.19s}.au-fase:nth-child(4){animation-delay:.26s}
-          .au-fase:nth-child(5){animation-delay:.33s}.au-fase:nth-child(6){animation-delay:.40s}
-          .au-fase:nth-child(7){animation-delay:.47s}
-          @keyframes auFase{to{opacity:1}}
-        }
-
-        .au-h1{font-family:'Avigea','Cormorant Garamond',serif;font-weight:400;font-size:clamp(44px,11vw,64px);line-height:1.05;text-align:center;letter-spacing:.5px}
-        .au-frase{font-family:'Cormorant Garamond',serif;font-size:20px;line-height:1.45;color:var(--au-lavanda);text-align:center;margin:12px auto 40px;max-width:30ch}
-
-        .au-campo{display:flex;flex-direction:column;gap:7px;margin-bottom:18px}
-        .au-campo label{font-size:13px;color:var(--au-lavanda)}
-        .au-input-wrap{position:relative}
-        .au-campo input{width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--au-linea);background:var(--au-hondo);color:var(--au-crema);font-size:16px;font-family:inherit;outline:none;transition:border-color .2s}
-        .au-campo input:focus{border-color:var(--au-oro)}
-        .au-ojo{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--au-lavanda);font-size:12px;cursor:pointer;font-family:inherit;padding:6px}
-
-        .au-btn{width:100%;padding:15px;border:none;border-radius:12px;background:var(--au-crema);color:var(--au-noche);font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:6px;transition:background .2s}
-        .au-btn:hover{background:#FFFFFF}
-        .au-btn:disabled{opacity:.6;cursor:not-allowed}
-        :is(.au-btn,.au-link,.au-campo input,.au-ojo,a):focus-visible{outline:2px solid var(--au-oro);outline-offset:3px}
-
-        .au-link{background:none;border:none;color:var(--au-lavanda);font-size:13px;font-family:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 0}
-        .au-link:hover{color:var(--au-crema)}
-        .au-centro{text-align:center;margin-top:16px}
-
-        .au-error{font-size:13px;color:var(--au-error);margin-bottom:14px;line-height:1.5}
-        .au-ok{font-size:13px;color:var(--au-crema);background:var(--au-hondo);border:1px solid var(--au-linea);border-radius:12px;padding:12px 14px;margin-top:16px;line-height:1.55}
-        .au-aviso{background:var(--au-hondo);border:1px solid rgba(201,168,76,0.4);border-radius:14px;padding:16px 18px;margin-bottom:22px;font-size:14px;line-height:1.6}
-        .au-aviso a{color:var(--au-oro);font-weight:600}
-
-        .au-pie{margin-top:48px;padding-top:22px;border-top:1px solid var(--au-linea);font-size:13px;line-height:1.65;color:var(--au-lavanda);text-align:center}
-        .au-pie a{color:var(--au-crema)}
-      `}</style>
-
-      <Link href="/" className="au-logo">Luma<span>.</span></Link>
-
-      <main className="au-col">
-        <div className="au-fases" aria-hidden="true">
-          {Array.from({ length: 7 }).map((_, i) => <span key={i} className="au-fase" />)}
-        </div>
-        <h1 className="au-h1">Tu aula</h1>
-        <p className="au-frase">Lo que empezaste sigue acá, esperándote.</p>
-
-        {aviso === 'terapeuta' && (
-          <div className="au-aviso" role="status">
-            Esta es una cuenta de terapeuta, no de alumna. Para entrar a tu panel, usá <Link href="/auth/login">Iniciar sesión de terapeutas</Link>.
-            <br />Si en realidad querías hacer un curso, entrá desde el link que te pasó tu profesora.
-          </div>
-        )}
-        {aviso === 'links' && (
-          <div className="au-aviso" role="status">
-            Esta es una cuenta de Luma Links. Entrá desde <Link href="/links/login">Luma Links</Link>.
-          </div>
-        )}
-        {aviso === 'sin_cursos' && (
-          <div className="au-aviso" role="status">
-            Esta cuenta todavía no tiene cursos. Para anotarte, entrá desde el link del curso que te pasó tu profesora: ahí elegís cómo pagar y queda todo en tu aula.
-          </div>
-        )}
-
-        <form onSubmit={entrar} noValidate>
-          <div className="au-campo">
-            <label htmlFor="au-email">Email</label>
-            <input id="au-email" type="email" autoComplete="email" inputMode="email" required
-              value={email} onChange={e => setEmail(e.target.value)} placeholder="el que usaste al comprar tu curso" />
-          </div>
-          <div className="au-campo">
-            <label htmlFor="au-pass">Contraseña</label>
-            <div className="au-input-wrap">
-              <input id="au-pass" type={verPassword ? 'text' : 'password'} autoComplete="current-password" required
-                value={password} onChange={e => setPassword(e.target.value)} style={{ paddingRight: '64px' }} />
-              <button type="button" className="au-ojo" onClick={() => setVerPassword(!verPassword)}
-                aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
-                {verPassword ? 'Ocultar' : 'Ver'}
-              </button>
+    <div className="au aula">
+      <style>{ESTILOS_ACCESO}</style>
+      <aside className="au-lado" aria-hidden="true">
+        <span className="au-estrella au-titila" style={{ top: 110, right: 90, fontSize: 16, color: '#A65A6E' }}>✦</span>
+        <span className="au-estrella au-titila" style={{ bottom: 190, left: 54, fontSize: 12, color: '#626B91', animationDelay: '.8s' }}>✦</span>
+        <Link href="/" className="au-logo" tabIndex={-1}>Luma<span>.</span><small>AULA</small></Link>
+        <h2 className="au-frase">Lo que empezaste sigue <em>acá</em>, esperándote.</h2>
+        <p className="au-frase2"><span className="au-subraya">Una clase a la vez.</span></p>
+        <div className="au-vis">
+          <div className="au-curso au-flotar">
+            <div className="au-curso-portada">Tu curso</div>
+            <div className="au-curso-cuerpo">
+              <div className="au-curso-fila"><b style={{ color: '#27344A' }}>Vas por la clase 8</b><span>72%</span></div>
+              <div className="au-curso-barra"><span /></div>
+              <div className="au-curso-clase"><i><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg></i>Seguir donde lo dejaste</div>
             </div>
           </div>
-
-          {error && <div className="au-error" role="alert">{error}</div>}
-
-          <button className="au-btn" type="submit" disabled={cargando || !email.trim() || !password}>
-            {cargando ? 'Entrando…' : 'Entrar a mis cursos'}
-          </button>
-        </form>
-
-        <div className="au-centro">
-          <button type="button" className="au-link" onClick={recuperar} disabled={recuperando}>
-            {recuperando ? 'Enviando…' : 'Olvidé mi contraseña'}
-          </button>
+          <div className="au-certif au-caer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6" /><path d="M8.5 14L7 22l5-3 5 3-1.5-8" /></svg>Tu certificado, al terminar</div>
         </div>
-        {mailEnviado && (
-          <div className="au-ok" role="status">
-            Te mandamos un mail a <strong>{email.trim()}</strong> para crear una contraseña nueva. Si no lo ves, revisá spam.
-          </div>
-        )}
+        <span className="au-lado-pie">Tus clases, tus materiales y tu certificado, en un solo lugar</span>
+      </aside>
+      <main className="au-main">
+        <div className="au-caja">
+          <Link href="/" className="au-logo-celu">Luma<span>.</span></Link>
+          <form className="au-form au-entra" onSubmit={entrar} noValidate>
+            <div><h1 className="au-h1">Tu aula</h1><p className="au-sub">Entrá con el email que usaste al comprar tu curso.</p></div>
 
-        <div className="au-pie">
-          ¿Todavía no tenés tu curso? Entrá desde el link que te pasó tu profesora.
-          <br />¿Sos terapeuta? <Link href="/auth/login">Entrá acá</Link>
+            {aviso === 'terapeuta' && (
+              <div className="au-aviso lavanda" role="status">
+                <span>Esta es una cuenta de terapeuta, no de alumna. Para entrar a tu panel, usá <Link href="/auth/login">Iniciar sesión de terapeutas</Link>.</span>
+                <span>Si en realidad querías hacer un curso, entrá desde el link que te pasó tu profesora.</span>
+              </div>
+            )}
+            {aviso === 'links' && (
+              <div className="au-aviso citrino" role="status">Esta es una cuenta de Luma Links. Entrá desde <Link href="/links/login">Luma Links</Link>.</div>
+            )}
+            {aviso === 'sin_cursos' && (
+              <div className="au-aviso lavanda" role="status">Esta cuenta todavía no tiene cursos. Para anotarte, entrá desde el link del curso que te pasó tu profesora: ahí elegís cómo pagar y queda todo en tu aula.</div>
+            )}
+
+            <label className="au-campo" htmlFor="au-email">Email
+              <span className="au-in"><input id="au-email" type="email" autoComplete="email" inputMode="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="el que usaste al comprar tu curso" /></span>
+            </label>
+            <label className="au-campo" htmlFor="au-pass">Contraseña
+              <span className="au-in"><input id="au-pass" type={verPassword ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} />
+                <button type="button" className="au-ojo" onClick={() => setVerPassword(!verPassword)} aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              </span>
+            </label>
+            <button type="button" className="au-link derecha" onClick={recuperar} disabled={recuperando}>{recuperando ? 'Enviando…' : 'Olvidé mi contraseña'}</button>
+
+            {error && <div className="au-error" role="alert">{error}</div>}
+            {mailEnviado && (
+              <div className="au-aviso lavanda" role="status"><span>Te mandamos un mail a <strong>{email.trim()}</strong> para crear una contraseña nueva. Si no lo ves, revisá spam.</span></div>
+            )}
+
+            <button className="au-btn" type="submit" disabled={cargando || !email.trim() || !password}>{cargando ? <><i className="au-girar"/>Entrando…</> : 'Entrar a mis cursos'}</button>
+
+            <div className="au-otros">
+              <span>¿Todavía no tenés tu curso? Entrá desde el link que te pasó tu profesora.</span>
+              <span>¿Sos terapeuta? <Link href="/auth/login">Entrá acá</Link></span>
+            </div>
+          </form>
         </div>
       </main>
     </div>

@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { Search, Plus, X, Tag, Phone, Mail, Calendar, FileText, Edit2, Trash2, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { useArchivosFirmados } from '@/lib/archivosPrivados'
+import { toast } from '@/components/ToastProvider'
 
 type Paciente = {
   id: string; nombre: string; apellido: string; celular: string
@@ -31,6 +33,7 @@ export default function PacientesPage() {
   const [sesiones, setSesiones] = useState<Record<string, Sesion[]>>({})
   const [archivos, setArchivos] = useState<Record<string, Archivo[]>>({})
   const [sessionNotes, setSessionNotes] = useState<Record<string, SessionNote[]>>({})
+  const verArchivo = useArchivosFirmados(Object.values(sessionNotes).flat().map(n => n.archivo_url))
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState<Paciente | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
@@ -161,12 +164,12 @@ export default function PacientesPage() {
   }
 
   async function guardarPaciente() {
-    if (!form.nombre) { alert('El nombre es obligatorio'); return }
+    if (!form.nombre) { toast('El nombre es obligatorio', 'error'); return }
     setGuardando(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setGuardando(false); return }
+      if (!user) { setGuardando(false); toast('Tu sesión expiró. Volvé a iniciar sesión.', 'error'); return }
 
       if (editando && pacienteSeleccionado) {
         const { data } = await supabase.from('patients').update({
@@ -179,7 +182,7 @@ export default function PacientesPage() {
           const actualizado = { ...data, etiquetas: form.etiquetas }
           setPacientes(prev => prev.map(p => p.id === data.id ? actualizado : p))
           setPacienteSeleccionado(actualizado)
-        }
+        } else { toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error'); return }
       } else {
         const { data } = await supabase.from('patients').insert({
           user_id: user.id, nombre: form.nombre, apellido: form.apellido,
@@ -195,11 +198,13 @@ export default function PacientesPage() {
           setSesiones(prev => ({ ...prev, [data.id]: [] }))
           setArchivos(prev => ({ ...prev, [data.id]: [] }))
           setSessionNotes(prev => ({ ...prev, [data.id]: [] }))
-        }
+        } else { toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error'); return }
       }
       setModalNuevo(false)
+      toast(editando ? 'Cambios guardados' : 'Paciente guardada')
     } catch (err) {
       console.error('Error guardando paciente:', err)
+      toast('No se pudo guardar. Revisá tu conexión; si tu plan venció, renovalo para seguir.', 'error')
     } finally {
       setGuardando(false)
     }
@@ -370,8 +375,8 @@ export default function PacientesPage() {
         .p-header{display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
         .p-title{font-size:18px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif}
         .p-count{font-size:12px;color:var(--text-muted);margin-top:2px}
-        .p-new-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3);transition:all 0.15s;flex-shrink:0}
-        .p-new-btn:hover{box-shadow:0 6px 16px rgba(139,92,246,0.4);transform:translateY(-1px)}
+        .p-new-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(var(--accent-rgb),0.3);transition:all 0.15s;flex-shrink:0}
+        .p-new-btn:hover{box-shadow:0 6px 16px rgba(var(--accent-rgb),0.4);transform:translateY(-1px)}
         .sr{position:relative;flex-shrink:0}
         .si{width:100%;padding:9px 34px 9px 12px;border-radius:11px;border:0.5px solid var(--border);font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;font-family:inherit}
         .si:focus{border-color:var(--accent)}
@@ -380,7 +385,7 @@ export default function PacientesPage() {
         .pc{background:var(--bg-card);border-radius:14px;padding:12px 14px;border:none;display:flex;align-items:center;gap:12px;cursor:pointer;flex-shrink:0;transition:all 0.15s;box-shadow:0 2px 12px var(--shadow)}
         .pc:hover{transform:translateY(-1px)}
         .pc.sel{box-shadow:0 6px 20px var(--shadow);transform:translateY(-1px);border:0.5px solid var(--border)}
-        .pc-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),#DDD6FE);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0}
+        .pc-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent-light),var(--border));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0}
         .pc-body{flex:1;min-width:0}
         .pc-name{font-size:13px;font-weight:600;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .pc-sub{font-size:11px;color:var(--text-muted);margin-top:1px}
@@ -391,7 +396,7 @@ export default function PacientesPage() {
         .pr-fixed{padding:18px 20px 14px;flex-shrink:0;border-bottom:0.5px solid var(--border-light);overflow-y:auto;max-height:55%}
         .pr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
         .pr-left{display:flex;align-items:center;gap:12px}
-        .pr-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#A78BFA);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0;box-shadow:0 4px 14px rgba(139,92,246,0.3)}
+        .pr-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0;box-shadow:0 4px 14px rgba(var(--accent-rgb),0.3)}
         .pr-name{font-size:16px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
         .pr-alias{font-size:11px;color:var(--text-muted);margin-top:1px}
         .pr-edit-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--accent-light);color:var(--accent);border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;flex-shrink:0}
@@ -423,14 +428,14 @@ export default function PacientesPage() {
         .tag-p{background:#FEF9C3;color:#854D0E;border-color:#FDE68A}
         .tag-ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0}
         .tag-d{background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE}
-        .ficha-modal-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.6);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(6px);padding:20px}
+        .ficha-modal-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.6);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(6px);padding:20px}
         .ficha-modal-box{background:var(--bg-card);border-radius:20px;width:min(900px,92vw);height:75vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,0.4);position:relative}
         .ficha-modal-img{width:100%;height:220px;object-fit:cover;display:block}
         .ficha-modal-body{padding:20px 24px 28px}
         .ficha-modal-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:10px;background:rgba(0,0,0,0.45);border:none;color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}
         @media(max-width:768px){.ficha-modal-box{width:94vw;height:82vh}}
-        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
-        .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.5);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+        .mo-box{background:var(--bg-card);border-radius:22px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(var(--shadow-rgb),0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
         .mo-title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .mo-close{width:28px;height:28px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
@@ -440,8 +445,8 @@ export default function PacientesPage() {
         .field input:focus,.field textarea:focus{border-color:var(--accent)}
         .field textarea{min-height:70px;resize:none}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(139,92,246,0.35);transition:all 0.15s}
-        .save-btn:hover{box-shadow:0 6px 20px rgba(139,92,246,0.45);transform:translateY(-1px)}
+        .save-btn{width:100%;padding:11px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(var(--accent-rgb),0.35);transition:all 0.15s}
+        .save-btn:hover{box-shadow:0 6px 20px rgba(var(--accent-rgb),0.45);transform:translateY(-1px)}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
         .tag-input-row{display:flex;gap:6px}
         .tag-input{flex:1;padding:8px 11px;border-radius:10px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none}
@@ -636,7 +641,7 @@ export default function PacientesPage() {
       )}
     </div>
     <button onClick={agregarNota}
-      style={{padding:'5px 12px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',border:'none',borderRadius:'7px',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+      style={{padding:'5px 12px',background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'white',border:'none',borderRadius:'7px',fontSize:'11px',fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
       + Guardar ficha
     </button>
   </div>
@@ -670,7 +675,7 @@ export default function PacientesPage() {
                             boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.12)',
                             transform: isHovered ? 'scale(1.015)' : 'scale(1)',
                             transition:'all 0.3s cubic-bezier(0.34,1.56,0.64,1)',
-                            background: tieneImagen ? `url(${n.archivo_url}) center/cover no-repeat` : `linear-gradient(135deg, ${color.tab}, #FFFFFF)`,
+                            background: tieneImagen ? `url(${verArchivo(n.archivo_url)}) center/cover no-repeat` : `linear-gradient(135deg, ${color.tab}, #FFFFFF)`,
                           }}>
                           {tieneImagen && (
                             <div style={{
@@ -708,7 +713,7 @@ export default function PacientesPage() {
           <div className="ficha-modal-overlay" onClick={() => { setNotaModalAbierta(null); setEditandoNota(null); setArchivoNota(null) }}>
             <div className="ficha-modal-box" onClick={e => e.stopPropagation()}>
               <button className="ficha-modal-close" onClick={() => { setNotaModalAbierta(null); setEditandoNota(null); setArchivoNota(null) }}><X size={16}/></button>
-              {tieneImagen && <img src={n.archivo_url!} alt="" className="ficha-modal-img"/>}
+              {tieneImagen && <img src={verArchivo(n.archivo_url)} alt="" className="ficha-modal-img"/>}
               <div className="ficha-modal-body">
                 {isEditing ? (
                   <>
@@ -725,7 +730,7 @@ export default function PacientesPage() {
                         📎 {archivoNota ? archivoNota.name.slice(0,18)+'...' : n.archivo_nombre ? 'Cambiar archivo' : 'Adjuntar'}
                       </button>
                       {n.archivo_url && !archivoNota && (
-                        <a href={n.archivo_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'11px',color:'var(--accent)',fontWeight:600}}>Ver actual</a>
+                        <a href={verArchivo(n.archivo_url)} target="_blank" rel="noopener noreferrer" style={{fontSize:'11px',color:'var(--accent)',fontWeight:600}}>Ver actual</a>
                       )}
                     </div>
                     <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
@@ -734,7 +739,7 @@ export default function PacientesPage() {
                         Cancelar
                       </button>
                       <button onClick={() => guardarEdicionNota(n)} disabled={subiendoNotaArchivo}
-                        style={{padding:'7px 14px',borderRadius:'8px',border:'none',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:subiendoNotaArchivo?0.6:1}}>
+                        style={{padding:'7px 14px',borderRadius:'8px',border:'none',background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'white',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:subiendoNotaArchivo?0.6:1}}>
                         {subiendoNotaArchivo ? 'Guardando...' : 'Guardar'}
                       </button>
                     </div>
@@ -748,7 +753,7 @@ export default function PacientesPage() {
                       </div>
                     )}
                     {n.archivo_url && !tieneImagen && (
-                      <a href={n.archivo_url} target="_blank" rel="noopener noreferrer"
+                      <a href={verArchivo(n.archivo_url)} target="_blank" rel="noopener noreferrer"
                         style={{display:'inline-block',fontSize:'12px',color:'var(--accent)',fontWeight:600,marginBottom:'16px'}}>
                         📎 {n.archivo_nombre || 'Ver archivo'}
                       </a>

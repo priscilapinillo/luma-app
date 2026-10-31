@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import ToastProvider from "@/components/ToastProvider";
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -59,6 +60,7 @@ export default function RootLayout({
           } catch(e) {}
         `}}/>
         {children}
+        <ToastProvider />
         <script dangerouslySetInnerHTML={{__html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -77,4 +79,4 @@ export default function RootLayout({
       </body>
     </html>
   );
-}
+}

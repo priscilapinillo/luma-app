@@ -9,6 +9,7 @@ import {
   utcTimestampToLocalDate,
   utcTimestampToLocalTime,
 } from '@/lib/datetime'
+import { toast } from '@/components/ToastProvider'
 
 const HORAS = Array.from({length: 17}, (_, i) => i + 7)
 const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
@@ -75,14 +76,7 @@ export default function AgendaPage() {
   useEffect(() => {
     try { setDesdePagina(new URLSearchParams(window.location.search).get('desde') === 'pagina') } catch {}
   }, [])
-  const [toastMsg, setToastMsg] = useState('')
-const [toastVisible, setToastVisible] = useState(false)
-
-function toast(msg: string) {
-  setToastMsg(msg)
-  setToastVisible(true)
-  setTimeout(() => setToastVisible(false), 3000)
-}
+  // los avisos usan el toast común de toda la app (antes tenía uno propio, verde)
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<Turno | null>(null)
   const [vistaTab, setVistaTab] = useState<'calendario'|'carga'|'cancelados'>('calendario')
   const [modalBloqueo, setModalBloqueo] = useState(false)
@@ -127,7 +121,7 @@ function toast(msg: string) {
         const map: Record<string, string> = {}
         pacs.forEach(p => { map[p.id] = `${p.nombre} ${p.apellido}`.trim() })
         setTurnos(sess.map(s => ({
-          id: s.id, patient_id: s.patient_id, color: s.color || '#8B5CF6',
+          id: s.id, patient_id: s.patient_id, color: s.color || 'var(--accent)',
           paciente_nombre: map[s.patient_id] || 'Paciente',
           fecha: s.fecha?.split('T')[0] || '',
           hora: s.hora || '09:00',
@@ -233,14 +227,12 @@ function toast(msg: string) {
     })
   }
 
+  // Un día puede tener horario cortado (más de una franja, por ejemplo 10 a 13 y 16 a 20): se miran todas, no solo la primera
   function esFueraDeHorario(fecha: Date, hora: number): boolean {
-    const diaSemana = fecha.getDay()
-    const disp = disponibilidad.find(d => d.dia_semana === diaSemana)
-    if (!disp || !disp.activo) return true
+    const franjas = disponibilidad.filter(d => d.dia_semana === fecha.getDay() && d.activo)
+    if (franjas.length === 0) return true
     const horaMin = hora * 60
-    const ini = horaAMin(disp.hora_inicio)
-    const fin = horaAMin(disp.hora_fin)
-    return horaMin < ini || horaMin >= fin
+    return !franjas.some(f => horaMin >= horaAMin(f.hora_inicio) && horaMin < horaAMin(f.hora_fin))
   }
 
   async function moverTurno(turnoId: string, nuevaFecha: string, nuevaHora: string) {
@@ -302,11 +294,12 @@ function toast(msg: string) {
   }
 
   async function guardarDisponibilidad() {
+    if (guardandoDisp) return
     setGuardandoDisp(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { alert('Tu sesión expiró. Volvé a iniciar sesión para guardar tus horarios.'); return }
+      if (!user) { toast('Tu sesión expiró. Volvé a iniciar sesión para guardar tus horarios.', 'error'); return }
       // se guarda exactamente lo que se ve en la ventana
       // (antes, los horarios que venían cargados por defecto no se guardaban y la página quedaba sin horarios)
       const filas = dispLocal
@@ -328,14 +321,10 @@ function toast(msg: string) {
       }
       setDisponibilidad(dispLocal)
       setModalDisponibilidad(false)
-      if (desdePagina) {
-        setToastMsg('Horarios guardados. Tocá «Volver a Página de reservas» para seguir.')
-        setToastVisible(true)
-        setTimeout(() => setToastVisible(false), 3500)
-      }
+      toast(desdePagina ? 'Horarios guardados. Tocá «Volver a Página de reservas» para seguir.' : 'Horarios guardados')
     } catch (err) {
       console.error('Error guardando disponibilidad:', err)
-      alert('No se pudieron guardar tus horarios. Revisá tu conexión e intentá de nuevo.')
+      toast('No se pudieron guardar tus horarios. Revisá tu conexión e intentá de nuevo.', 'error')
     } finally {
       setGuardandoDisp(false)
     }
@@ -392,7 +381,7 @@ function toast(msg: string) {
         .a-tab.active{background:var(--accent-light);color:var(--accent)}
         .a-vista{display:flex;gap:2px;background:var(--bg-card);padding:3px;border-radius:10px;border:0.5px solid var(--border-light)}
         .a-vista-btn{padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s}
-        .a-vista-btn.active{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;box-shadow:0 2px 6px rgba(139,92,246,0.25)}
+        .a-vista-btn.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;box-shadow:0 2px 6px rgba(var(--accent-rgb),0.25)}
         .a-nav{display:flex;align-items:center;gap:4px}
         .a-nav-btn{width:28px;height:28px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary)}
         .a-nav-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -408,7 +397,7 @@ function toast(msg: string) {
         .sdh{padding:8px 4px;text-align:center;border-right:0.5px solid var(--border-light)}
         .sdh-dia{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase}
         .sdh-num{font-size:15px;font-weight:800;color:var(--text-primary);line-height:1;margin-top:2px;font-family:'Manrope',sans-serif}
-        .sdh-num.hoy{width:26px;height:26px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;margin:2px auto 0}
+        .sdh-num.hoy{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--accent-2));border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:12px;margin:2px auto 0}
         .semana-scroll{flex:1;overflow-y:auto;min-height:0}
         .semana-grid{display:grid;grid-template-columns:44px repeat(7,1fr)}
         .hora-lbl{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);height:56px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 5px 0;font-size:10px;color:var(--text-muted);font-weight:500;background:var(--bg-input)}
@@ -434,11 +423,11 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .mes-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;overflow:hidden}
         .mes-celda{border-right:0.5px solid var(--border-light);border-bottom:0.5px solid var(--border-light);padding:5px;cursor:pointer;overflow:hidden;transition:background 0.1s}
         .mes-celda:hover{background:var(--accent-hover)}
-        .mes-celda.hoy-c{background:rgba(139,92,246,0.04)}
+        .mes-celda.hoy-c{background:rgba(var(--accent-rgb),0.04)}
         .mes-celda.vacio{background:var(--bg-input);cursor:default}
         .mes-celda.fuera-rango{background:var(--bg-input);opacity:0.5}
         .mes-num{font-size:11px;font-weight:700;color:var(--text-secondary);width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;margin-bottom:3px}
-        .mes-num.hoy{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;font-size:10px}
+        .mes-num.hoy{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;font-size:10px}
         .mes-chip{font-size:9px;padding:2px 5px;border-radius:4px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;cursor:pointer}
         .mes-mas{font-size:9px;color:var(--text-muted);padding-left:3px}
 
@@ -449,7 +438,7 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .carga-dia-lbl{font-size:11px;font-weight:700;color:var(--text-primary);margin-bottom:2px;font-family:'Manrope',sans-serif}
         .carga-dia-fecha{font-size:9px;color:var(--text-muted);margin-bottom:10px}
         .carga-bar-bg{height:70px;background:var(--accent-light);border-radius:8px;display:flex;align-items:flex-end;overflow:hidden;margin-bottom:8px}
-        .carga-bar-fill{width:100%;background:linear-gradient(180deg,#8B5CF6,#A78BFA);border-radius:8px;transition:height 0.5s}
+        .carga-bar-fill{width:100%;background:linear-gradient(180deg,var(--accent),var(--accent-2));border-radius:8px;transition:height 0.5s}
         .carga-count{font-size:16px;font-weight:800;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .carga-lbl{font-size:9px;color:var(--text-muted)}
         .carga-h{font-size:10px;color:var(--text-secondary);margin-top:3px;font-weight:500}
@@ -465,8 +454,8 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .canc-restore{padding:5px 10px;border-radius:7px;background:var(--bg-card);border:0.5px solid var(--border);color:var(--accent);font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
         .canc-restore:hover{background:var(--accent-light)}
 
-        .det-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.35);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(3px)}
-        .det-panel{background:var(--bg-card);border-radius:20px;padding:22px;width:340px;box-shadow:0 24px 60px rgba(100,60,200,0.2)}
+        .det-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.35);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(3px)}
+        .det-panel{background:var(--bg-card);border-radius:20px;padding:22px;width:340px;box-shadow:0 24px 60px rgba(var(--shadow-rgb),0.2)}
         .det-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
         .det-nombre{font-size:15px;font-weight:800;color:var(--text-primary);letter-spacing:-0.3px;font-family:'Manrope',sans-serif}
         .det-serv{font-size:11px;color:var(--text-muted);margin-top:2px}
@@ -483,8 +472,8 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .det-btn.danger{background:#FEF2F2;color:#EF4444;border:0.5px solid #FECACA}
         .det-btn.sec{background:var(--accent-light);color:var(--accent)}
 
-        .mo-overlay{position:fixed;inset:0;background:rgba(26,16,53,0.5);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}
-        .mo-box{background:var(--bg-card);border-radius:20px;padding:22px;width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .mo-overlay{position:fixed;inset:0;background:rgba(var(--ink-rgb),0.5);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}
+        .mo-box{background:var(--bg-card);border-radius:20px;padding:22px;width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(var(--shadow-rgb),0.25)}
         .mo-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
         .mo-title{font-size:14px;font-weight:700;color:var(--text-primary);font-family:'Manrope',sans-serif}
         .mo-close{width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border);background:var(--bg-card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
@@ -493,12 +482,12 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
         .field input,.field select{padding:8px 10px;border-radius:9px;border:0.5px solid var(--border);font-size:12px;font-family:inherit;color:var(--text-primary);background:var(--bg-input);outline:none;width:100%}
         .field input:focus,.field select:focus{border-color:var(--accent)}
         .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .save-btn{width:100%;padding:10px;background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(139,92,246,0.3)}
+        .save-btn{width:100%;padding:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(var(--accent-rgb),0.3)}
         .save-btn:disabled{opacity:0.6;cursor:not-allowed}
         .tipo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:4px}
         .tipo-btn{padding:9px;border-radius:9px;border:0.5px solid var(--border);background:var(--bg-input);cursor:pointer;text-align:center;font-size:11px;font-weight:600;color:var(--text-secondary);transition:all 0.15s;font-family:inherit}
         .tipo-btn.sel{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
-        .disp-box{background:var(--bg-card);border-radius:20px;padding:22px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(100,60,200,0.25)}
+        .disp-box{background:var(--bg-card);border-radius:20px;padding:22px;width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(var(--shadow-rgb),0.25)}
         .disp-dia-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:0.5px solid var(--border-light);background:var(--bg-input);margin-bottom:8px}
         .disp-dia-nombre{font-size:12px;font-weight:700;color:var(--text-primary);min-width:80px}
         .disp-switch{position:relative;width:36px;height:20px;cursor:pointer;flex-shrink:0}
@@ -514,7 +503,7 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
       `}</style>
 
       {desdePagina && (
-        <a href="/settings?bloque=diseno" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,#8B5CF6,#A78BFA)',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(139,92,246,0.45)'}}>
+        <a href="/settings?bloque=diseno" style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(90px + env(safe-area-inset-bottom))',zIndex:300,borderRadius:'50px',whiteSpace:'nowrap',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',padding:'12px 20px',background:'linear-gradient(135deg,var(--accent),var(--accent-2))',color:'white',fontSize:'13px',fontWeight:700,textDecoration:'none',fontFamily:'inherit',boxShadow:'0 8px 24px rgba(var(--accent-rgb),0.45)'}}>
           ← Volver a Página de reservas
         </a>
       )}
@@ -602,7 +591,7 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
                             )
                           })}
                           {turnosHora.map((t, ti) => {
-                            const colorBase = t.color || '#8B5CF6'
+                            const colorBase = t.color || '#626B91'
                             const cs = { bg: colorBase + '22', text: colorBase }
                             const h = Math.max(((t.duracion||60)/60)*56-4, 22)
                             const minutos = parseInt(t.hora.split(':')[1] || '0')
@@ -638,14 +627,14 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
               return (
                 <div key={di} style={{background:'var(--bg-card)',borderRadius:'16px',padding:'12px 14px',border:`0.5px solid ${esHoy?'var(--accent)':'var(--border-light)'}`,boxShadow:'0 2px 10px var(--shadow)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:turnosDia.length>0?'10px':'0'}}>
-                    <div style={{width:'32px',height:'32px',borderRadius:'50%',background:esHoy?'linear-gradient(135deg,#8B5CF6,#A78BFA)':'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:700,color:esHoy?'white':'var(--text-primary)',fontFamily:"'Manrope',sans-serif",flexShrink:0}}>{dia.getDate()}</div>
+                    <div style={{width:'32px',height:'32px',borderRadius:'50%',background:esHoy?'linear-gradient(135deg,var(--accent),var(--accent-2))':'var(--bg-input)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',fontWeight:700,color:esHoy?'white':'var(--text-primary)',fontFamily:"'Manrope',sans-serif",flexShrink:0}}>{dia.getDate()}</div>
                     <div>
                       <div style={{fontSize:'12px',fontWeight:700,color:esHoy?'var(--accent)':'var(--text-primary)'}}>{DIAS_COMPLETO[dia.getDay()]}</div>
                       <div style={{fontSize:'10px',color:'var(--text-muted)'}}>{turnosDia.length === 0 ? 'Sin turnos' : `${turnosDia.length} turno${turnosDia.length>1?'s':''}`}</div>
                     </div>
                   </div>
                   {turnosDia.map((t, ti) => {
-                    const colorBase = t.color || '#8B5CF6'
+                    const colorBase = t.color || '#626B91'
                     return (
                       <div key={ti} style={{display:'flex',alignItems:'center',gap:'10px',background:colorBase+'15',borderRadius:'10px',padding:'8px 10px',marginBottom:'6px',border:`0.5px solid ${colorBase}33`,cursor:'pointer'}} onClick={() => setTurnoSeleccionado(t)}>
                         <div style={{width:'3px',height:'36px',borderRadius:'2px',background:colorBase,flexShrink:0}}/>
@@ -676,13 +665,12 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
                 if (!dia) return <div key={`v${i}`} className="mes-celda vacio"/>
                 const ts = turnosDelDia(dia)
                 const esHoy = formatDate(dia) === formatDate(hoy)
-                const disp = disponibilidad.find(d => d.dia_semana === dia.getDay())
-                const esFuera = !disp?.activo
+                const esFuera = !disponibilidad.some(d => d.dia_semana === dia.getDay() && d.activo)
                 return (
                   <div key={i} className={`mes-celda${esHoy?' hoy-c':''}${esFuera?' fuera-rango':''}`}>
                     <div className={`mes-num${esHoy?' hoy':''}`}>{dia.getDate()}</div>
                     {ts.slice(0,3).map((t,ti) => {
-                      const colorBase = t.color || '#8B5CF6'
+                      const colorBase = t.color || '#626B91'
                       const cs = { bg: colorBase + '22', text: colorBase }
                       return (
                         <div key={ti} className="mes-chip" style={{background:cs.bg,color:cs.text}}
@@ -902,11 +890,6 @@ html.dark .celda.bloqueada{background:repeating-linear-gradient(45deg,#3D2E00,#3
               {guardandoDisp ? 'Guardando...' : 'Guardar disponibilidad'}
             </button>
           </div>
-        </div>
-      )}
-          {toastVisible && (
-        <div style={{position:'fixed',bottom:'100px',left:'50%',transform:'translateX(-50%)',background:'#10B981',color:'white',padding:'12px 24px',borderRadius:'50px',fontSize:'13px',fontWeight:600,fontFamily:'inherit',boxShadow:'0 4px 20px rgba(16,185,129,0.4)',zIndex:9999,whiteSpace:'nowrap'}}>
-          ✓ {toastMsg}
         </div>
       )}
     </>

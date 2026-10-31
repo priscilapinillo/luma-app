@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
   const lecturasProhibidas = ['patients', 'sessions', 'subscriptions', 'enrollments', 'course_payments', 'mp_credenciales',
     'push_subscriptions', 'persons', 'lesson_progress', 'exam_options', 'exam_results', 'suscripcion_eventos', 'controles_diarios',
     'session_notes', 'payments', 'files', 'tasks', 'quick_notes', 'public_bookings',
-    'luma_pagos', 'luma_avisos', 'loops_contactos', 'luma_planes_mp', 'links_eventos']
+    'luma_pagos', 'luma_avisos', 'loops_contactos', 'luma_planes_mp', 'links_eventos',
+    'luma_intentos', 'luma_alertas', 'luma_actividad']
   for (const tabla of lecturasProhibidas) {
     try {
       const { data, error } = await anon.from(tabla).select('*').limit(1)
@@ -169,6 +170,14 @@ export async function POST(req: NextRequest) {
         if (sinCurso.length) hallazgos.push({ tipo: 'revisar', que: `${sinCurso.length} alumna(s) nueva(s) con cuenta pero sin ningún curso (la compra se cortó)`, detalle: sinCurso.map((x: any) => x.email) })
       }
     }
+  } catch {}
+
+  // espacio de archivos de Luma (giga gratis de Supabase): avisa con tiempo
+  try {
+    const { data: total } = await s.rpc('luma_espacio_total')
+    const mb = Math.round((Number(total) || 0) / 1048576)
+    if (mb >= 850) hallazgos.push({ tipo: 'revisar', que: `El espacio de archivos está en ${mb} MB de 1024: las subidas de descargables están pausadas. Es momento de pasar Supabase al plan pago o liberar espacio.` })
+    else if (mb >= 700) hallazgos.push({ tipo: 'revisar', que: `El espacio de archivos va por ${mb} MB de 1024. A los 850 se pausan las subidas de descargables.` })
   } catch {}
 
   const alarmas = hallazgos.filter(h => h.tipo === 'seguridad').length

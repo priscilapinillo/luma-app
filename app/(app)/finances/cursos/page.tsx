@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, GraduationCap, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { toast } from '@/components/ToastProvider'
 
 type Pago = {
   id: string; monto: number; fecha: string
+  monto_usd?: number | null
   metodo: string; tipo: string
   course_id: string | null; enrollment_id: string | null
 }
@@ -35,7 +37,7 @@ export default function HistorialCursosPage() {
       if (!user) { window.location.href = '/auth/login'; return }
 
       const [{ data: pagosData, error: errPagos }, { data: cursosData }] = await Promise.all([
-        supabase.from('course_payments').select('id,monto,fecha,metodo,tipo,course_id,enrollment_id')
+        supabase.from('course_payments').select('*')
           .eq('terapeuta_id', user.id).order('fecha', { ascending: false }),
         supabase.from('courses').select('id,titulo').eq('user_id', user.id),
       ])
@@ -74,7 +76,7 @@ export default function HistorialCursosPage() {
     try {
       const supabase = createClient()
       const { error: err } = await supabase.from('course_payments').delete().eq('id', id)
-      if (err) { alert('No se pudo borrar: ' + err.message); return }
+      if (err) { toast('No se pudo borrar: ' + err.message, 'error'); return }
       setPagos(prev => prev.filter(p => p.id !== id))
     } finally { setBorrando(null) }
   }
@@ -111,7 +113,7 @@ export default function HistorialCursosPage() {
         .hc-title{font-size:22px;font-weight:800;color:var(--text-primary);letter-spacing:-0.5px;font-family:'Manrope',sans-serif;display:flex;align-items:center;gap:8px}
         .hc-sub{font-size:12px;color:var(--text-muted);margin:4px 0 18px;line-height:1.5}
         .hc-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-        .hc-total{background:linear-gradient(135deg,#8B5CF6,#A78BFA);color:white;border-radius:16px;padding:12px 18px;font-family:'Manrope',sans-serif}
+        .hc-total{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:white;border-radius:16px;padding:12px 18px;font-family:'Manrope',sans-serif}
         .hc-total small{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;opacity:0.75}
         .hc-total b{font-size:20px;font-weight:800}
         .hc-select{padding:9px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:13px;font-family:inherit;outline:none;max-width:100%}
@@ -176,7 +178,7 @@ export default function HistorialCursosPage() {
                   <div className="hc-metodo">
                     {p.metodo === 'mercadopago' ? '💳 Mercado Pago' : '✋ Confirmado a mano'}{p.tipo === 'renovacion' ? ' · renovación' : ''}
                   </div>
-                  <div className="hc-monto">{formatPesos(Number(p.monto) || 0)}</div>
+                  <div className="hc-monto">{Number(p.monto_usd) > 0 ? `USD ${Number(p.monto_usd).toLocaleString('es-AR')}` : formatPesos(Number(p.monto) || 0)}</div>
                   <button className="hc-del" onClick={() => borrarPago(p.id)} disabled={borrando === p.id} aria-label="Borrar pago">
                     <Trash2 size={13}/>
                   </button>

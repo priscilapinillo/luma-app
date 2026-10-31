@@ -39,7 +39,7 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
   const [perfilR, servR, sesionR] = await Promise.all([
     supabase.from('therapist_profiles').select('slug, mp_activo').eq('user_id', therapistId).maybeSingle(),
     supabase.from('services').select('id, nombre, precio_base, user_id').eq('id', serviceId).maybeSingle(),
-    supabase.from('sessions').select('id, user_id, service_id, estado_pago, estado_sesion, created_at').eq('id', reservaId).maybeSingle(),
+    supabase.from('sessions').select('id, user_id, service_id, estado_pago, estado_sesion, created_at, precio, cupon_uso_id').eq('id', reservaId).maybeSingle(),
   ])
   if (sesionR.error) {
     console.error('create-preference: error leyendo el turno', sesionR.error)
@@ -81,7 +81,7 @@ async function preferenciaReserva(req: NextRequest, body: any, supabase: any) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      items: [{ title: serv.nombre, quantity: 1, currency_id: 'ARS', unit_price: Number(serv.precio_base) }],
+      items: [{ title: serv.nombre, quantity: 1, currency_id: 'ARS', unit_price: (sesion as any)?.cupon_uso_id && Number((sesion as any).precio) > 0 ? Number((sesion as any).precio) : Number(serv.precio_base) }],
       back_urls: {
         success: `${pagina}?status=approved&session_id=${reservaId}`,
         failure: `${pagina}?status=failure&session_id=${reservaId}`,
@@ -147,8 +147,9 @@ async function preferenciaLegacy(body: any, supabase: any) {
   let precio = Number(monto)
   if (externalReference && UUID.test(String(externalReference))) {
     const { data: insc } = await supabase
-      .from('enrollments').select('course_id, terapeuta_id')
+      .from('enrollments').select('course_id, terapeuta_id, estado, precio_acordado, precio_acordado_usd')
       .eq('id', externalReference).maybeSingle()
+    if (insc?.estado === 'baja') return NextResponse.json({ error: 'Acceso quitado', motivo: 'acceso_quitado' }, { status: 403 })
     if (insc) {
       const { data: curso } = await supabase
         .from('courses').select('titulo, precio, user_id')
@@ -157,7 +158,9 @@ async function preferenciaLegacy(body: any, supabase: any) {
         return NextResponse.json({ error: 'Curso inválido' }, { status: 400 })
       }
       titulo = curso.titulo
-      precio = Number(curso.precio)
+      // con cupón: se cobra el precio acordado (lo calculó el servidor al inscribirse)
+      const acordado = Number((insc as any).precio_acordado)
+      precio = acordado > 0 ? acordado : Number(curso.precio)
     }
   }
   if (!(precio > 0)) {

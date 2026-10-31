@@ -16,6 +16,7 @@ import {
   type ContextoLeccion, favoritosDe, marcarFavorito, guardarProgreso, preferenciasDe, guardarPreferencias,
   sincronizarPendientes, yaCelebrado, anotarCelebrado,
 } from '@/lib/aula'
+import { toast } from '@/components/ToastProvider'
 
 type Leccion = {
   id: string; titulo: string; tipo: string; contenido_url: string | null
@@ -68,11 +69,19 @@ export default function AulaCursoPage() {
   const [celebracion, setCelebracion] = useState<{ tipo: TipoCelebracion; titulo?: string } | null>(null)
   const [compartir, setCompartir] = useState<DatosLogro | null>(null)
   const [nombres, setNombres] = useState<{ alumna: string; terapeuta: string }>({ alumna: '', terapeuta: '' })
+  // "Ver como alumna": la dueña del curso lo recorre como una alumna. No se guarda NADA (progreso, examen, cuaderno).
+  // Los datos los protege la base: solo la dueña puede leer sus lecciones aunque no esté publicado.
+  const [modoPrevia, setModoPrevia] = useState(false)
   const textoRef = useRef<HTMLDivElement | null>(null)
   const controlRef = useRef<ControlVideo | null>(null)
   controlRef.current = control
 
   useEffect(() => { cargarDatos() }, [])
+  // un descargable no tiene aula: se descarga desde "Mis cursos"
+  useEffect(() => {
+    createClient().from('courses').select('tipo').eq('id', courseId).maybeSingle()
+      .then(({ data, error }) => { if (!error && (data as any)?.tipo === 'descargable') window.location.replace('/mi-cuenta/cursos') }, () => {})
+  }, [courseId])
 
   useEffect(() => {
     setAdjuntoAbierto(null)
@@ -92,6 +101,10 @@ export default function AulaCursoPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/aula'); return }
+
+      let pideVistaPrevia = false
+      try { pideVistaPrevia = new URLSearchParams(window.location.search).get('vista') === 'previa' } catch {}
+      if (pideVistaPrevia) { await cargarVistaPrevia(supabase, user.id); return }
 
       const { data: persona } = await supabase
         .from('persons').select('id, nombre, apellido').eq('auth_user_id', user.id).maybeSingle()
@@ -122,6 +135,7 @@ export default function AulaCursoPage() {
         if (errorEnroll) console.error('Error buscando la inscripción:', errorEnroll)
         setDebugInfo(
           !enrollment ? 'No encontramos tu inscripción a este curso. Si lo compraste con otro email, entrá con esa cuenta.'
+          : enrollment.estado === 'baja' ? 'Tu acceso a este curso terminó. Si querés volver, escribile a la terapeuta.'
           : enrollment.estado !== 'activa' ? 'Tu pago todavía no está confirmado. Cuando se confirme, vas a poder entrar.'
           : `Tu acceso venció el ${new Date(enrollment.fecha_vencimiento as string).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}. Podés renovarlo desde Mi cuenta → Mis cursos.`
         )
@@ -209,7 +223,46 @@ export default function AulaCursoPage() {
     } finally { setLoading(false) }
   }
 
+  // vista previa: carga el curso como lo vería una alumna, sin inscripción y sin guardar nada
+  async function cargarVistaPrevia(supabase: ReturnType<typeof createClient>, userId: string) {
+    const { data: cursoData } = await supabase
+      .from('courses').select('titulo, imagen_url, user_id').eq('id', courseId).maybeSingle()
+    if (!cursoData || cursoData.user_id !== userId) {
+      setDebugInfo('La vista previa es solo para la dueña del curso.')
+      setSinAcceso(true); setLoading(false); return
+    }
+    setModoPrevia(true)
+    setCurso(cursoData)
+    const { data: perfil } = await supabase.from('therapist_profiles').select('nombre_profesional').eq('user_id', userId).maybeSingle()
+    setNombres({ alumna: 'Tu alumna', terapeuta: perfil?.nombre_profesional || '' })
+    const { data: mods } = await supabase.from('modules').select('*').eq('course_id', courseId).order('orden')
+    if (mods && mods.length) {
+      const { data: lecs } = await supabase.from('lessons').select('*').in('module_id', mods.map(m => m.id)).order('orden')
+      const conLecciones = mods.map(m => ({ ...m, lecciones: (lecs || []).filter(l => l.module_id === m.id) }))
+      setModulos(conLecciones)
+      setModuloAbierto(conLecciones[0].id)
+      if (conLecciones[0].lecciones.length > 0) setLeccionActiva(conLecciones[0].lecciones[0])
+    }
+    const { data: examData } = await supabase.from('exams').select('id,titulo,puntaje_minimo,max_intentos').eq('course_id', courseId).maybeSingle()
+    if (examData) setExamen(examData)
+    const { data: encuentro } = await supabase
+      .from('course_live_sessions').select('titulo, fecha_hora, link_zoom')
+      .eq('course_id', courseId).gte('fecha_hora', new Date(Date.now() - 2 * 3600000).toISOString())
+      .order('fecha_hora').limit(1).maybeSingle()
+    if (encuentro) setProximoEncuentro(encuentro)
+    setLoading(false)
+  }
+
   async function toggleCompletada(leccionId: string) {
+    if (modoPrevia) {
+      // solo en pantalla: muestra cómo se ve, sin guardar ni anotar festejos
+      const yaCompletada = completadas.has(leccionId)
+      const next = new Set(completadas)
+      yaCompletada ? next.delete(leccionId) : next.add(leccionId)
+      setCompletadas(next)
+      if (!yaCompletada) setCelebracion({ tipo: 'leccion' })
+      return
+    }
     if (!enrollmentId || guardandoProgreso) return
     setGuardandoProgreso(true)
     try {
@@ -296,6 +349,10 @@ export default function AulaCursoPage() {
 
   // la nota y el certificado los decide el servidor (no se pueden falsificar desde el navegador)
   async function enviarExamen() {
+    if (modoPrevia) {
+      toast('En la vista previa el examen no se envía. Tus alumnas ven su nota apenas lo terminan.', 'info')
+      setVista('curso'); return
+    }
     if (!examen || !enrollmentId) return
     setEnviandoExamen(true)
     try {
@@ -306,12 +363,12 @@ export default function AulaCursoPage() {
         body: JSON.stringify({ examId: examen.id, enrollmentId, respuestas, accessToken: session?.access_token }),
       })
       const r = await res.json().catch(() => ({ ok: false }))
-      if (!r.ok) { alert(r.mensaje || 'No se pudo enviar tu examen. Probá de nuevo.'); return }
+      if (!r.ok) { toast(r.mensaje || 'No se pudo enviar tu examen. Probá de nuevo.', 'error'); return }
       setUltimoResultado({ puntaje: r.puntaje, aprobado: r.aprobado })
       setIntentosUsados(prev => prev + 1)
       setVista('curso')
       if (r.certificado) setCertificadoCodigo(r.certificado)
-    } catch (e) { console.error(e); alert('No se pudo enviar tu examen. Revisá tu conexión.') }
+    } catch (e) { console.error(e); toast('No se pudo enviar tu examen. Revisá tu conexión.', 'error') }
     finally { setEnviandoExamen(false) }
   }
 
@@ -343,6 +400,10 @@ export default function AulaCursoPage() {
   }
 
   async function cambiarFavorito() {
+    if (modoPrevia && leccionActiva) { // solo en pantalla
+      const id = leccionActiva.id
+      setFavoritos(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }); return
+    }
     if (!ctxLeccion || !leccionActiva) return
     const si = !favoritos.has(leccionActiva.id)
     setFavoritos(prev => { const n = new Set(prev); si ? n.add(leccionActiva.id) : n.delete(leccionActiva.id); return n })
@@ -409,6 +470,11 @@ export default function AulaCursoPage() {
         *{box-sizing:border-box;margin:0;padding:0}
         .aula-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:white;border-bottom:1px solid #E5E5E5}
         .aula-back{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#525252;cursor:pointer;background:none;border:none;font-family:inherit}
+        .aula-nav-previa{background:#F4F0FF;border-bottom-color:#DDD5F5;gap:8px 10px;position:sticky;top:0;z-index:20;flex-wrap:wrap;justify-content:flex-start}
+        .aula-previa-volver{margin-left:auto;white-space:nowrap}
+        @media(max-width:640px){ .aula-previa-txt{order:3;flex-basis:100%;font-size:11.5px} }
+        .aula-previa-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;background:#7C3AED;color:white;font-size:11px;font-weight:700;flex-shrink:0}
+        .aula-previa-txt{font-size:12px;color:#5B21B6;line-height:1.35}
         .aula-logout{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid #E5E5E5;background:white;font-size:12px;font-weight:600;color:#525252;cursor:pointer;font-family:inherit}
         .aula-layout{display:flex;flex-direction:column}
         @media(min-width:900px){ .aula-layout{flex-direction:row;align-items:flex-start} }
@@ -448,10 +514,18 @@ export default function AulaCursoPage() {
         .examen-opcion.sel .examen-opcion-radio{border-color:#8B5CF6;background:#8B5CF6}
       `}</style>
 
-      <nav className="aula-nav">
-        <button className="aula-back" onClick={() => router.push('/mi-cuenta/cursos')}><ArrowLeft size={15}/> Mis cursos</button>
-        <button className="aula-logout" onClick={cerrarSesion}><LogOut size={13}/> Cerrar sesión</button>
-      </nav>
+      {modoPrevia ? (
+        <nav className="aula-nav aula-nav-previa">
+          <span className="aula-previa-chip"><Eye size={13}/> Vista previa</span>
+          <span className="aula-previa-txt">Así ve el curso tu alumna. Nada de lo que hagas acá se guarda.</span>
+          <button className="aula-logout aula-previa-volver" onClick={() => router.push(`/courses/${courseId}`)}><ArrowLeft size={13}/> Volver a editar</button>
+        </nav>
+      ) : (
+        <nav className="aula-nav">
+          <button className="aula-back" onClick={() => router.push('/mi-cuenta/cursos')}><ArrowLeft size={15}/> Mis cursos</button>
+          <button className="aula-logout" onClick={cerrarSesion}><LogOut size={13}/> Cerrar sesión</button>
+        </nav>
+      )}
 
       <div className="aula-layout">
         <div className="aula-sidebar">
@@ -593,6 +667,12 @@ export default function AulaCursoPage() {
               <div className="aula-notas"><strong>Notas:</strong> {leccionActiva.notas}</div>
             )}
 
+            {modoPrevia && (
+              <div className="aula-notas" style={{display:'flex',gap:'10px',alignItems:'flex-start'}}>
+                <StickyNote size={16} color="#7C3AED" style={{flexShrink:0,marginTop:'2px'}}/>
+                <span>Acá tu alumna tiene su <strong>cuaderno</strong> para escribir notas y guardar capturas de cada lección. Es solo de ella: vos no lo ves.</span>
+              </div>
+            )}
             {ctxLeccion && (
               <Cuaderno key={leccionActiva.id} ctx={ctxLeccion} control={control}
                 esTexto={leccionActiva.tipo === 'texto' && !!leccionActiva.contenido_texto}

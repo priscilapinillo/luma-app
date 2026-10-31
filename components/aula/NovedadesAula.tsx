@@ -3,7 +3,7 @@
 import LunaProgreso from './LunaProgreso'
 
 // Cambiando esta fecha, el aviso le vuelve a aparecer una vez a cada alumna (para futuras novedades).
-export const FECHA_NOVEDADES = '2026-10-20T00:00:00Z'
+export const FECHA_NOVEDADES = '2026-10-01T00:00:00Z'
 
 export default function NovedadesAula({ onCerrar }: { onCerrar: () => void }) {
   const items = [

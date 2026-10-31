@@ -11,10 +11,12 @@ export async function POST(req: NextRequest) {
     const supabase = supabaseServicio()
 
     const { data: insc } = await supabase
-      .from('enrollments').select('id, estado, course_id, terapeuta_id, fecha_vencimiento')
+      .from('enrollments').select('id, estado, course_id, terapeuta_id, fecha_vencimiento, precio_acordado')
       .eq('id', enrollmentId).maybeSingle()
     if (!insc) return NextResponse.json({ ok: false, motivo: 'inscripcion_no_existe' }, { status: 404 })
     if (insc.estado === 'activa') return NextResponse.json({ ok: true })
+    // acceso quitado por la terapeuta: un pago no la reactiva sola
+    if (insc.estado === 'baja') return NextResponse.json({ ok: false, motivo: 'acceso_quitado' }, { status: 403 })
 
     // Un pago de Mercado Pago habilita UNA sola vez: si ese pago ya se usó, no vuelve a dar acceso
     const { data: yaUsado } = await supabase
@@ -50,7 +52,9 @@ export async function POST(req: NextRequest) {
 
     const aprobado = pago.status === 'approved'
     const esDeEstaInscripcion = String(pago.external_reference) === String(insc.id)
-    const montoOk = Number(pago.transaction_amount) >= Number(curso.precio)
+    // con cupón: alcanza con el precio acordado (nunca menos)
+    const esperado = Number((insc as any).precio_acordado) > 0 ? Number((insc as any).precio_acordado) : Number(curso.precio)
+    const montoOk = Number(pago.transaction_amount) >= esperado
 
     if (!aprobado || !esDeEstaInscripcion || !montoOk) {
       console.warn('Pago de curso rechazado:', { enrollmentId, paymentId, aprobado, esDeEstaInscripcion, montoOk })
