@@ -10,9 +10,16 @@ export const EMPRENDE = {
   // ⚠️ 3) Mismo precio que el curso en el panel (si no coinciden, la persona ve uno y paga otro)
   precioTexto: '$ 3.499',
   titulo: 'Postres en vaso, emprendé desde casa',
+  // ⚠️ 4) El segundo curso, IGUAL al primero pero SIN la parte de bonos. Se vende cuando se acaba el reloj.
+  //    Mismo precio. Es lo que hace que el cartel "se terminan los bonos" sea verdad.
+  cursoSinBonos: 'postres-en-vaso-sin-bonos',
 }
 
+// Reloj de los bonos (por visita): minutos de oferta y minutos que pasan hasta que le aparece de nuevo.
+export const OFERTA = { minutos: 10, espera: 10 }
+
 export const URL_CHECKOUT = `/p/${EMPRENDE.slug}/cursos/${EMPRENDE.curso}/checkout`
+export const URL_CHECKOUT_SIN_BONOS = `/p/${EMPRENDE.slug}/cursos/${EMPRENDE.cursoSinBonos}/checkout`
 export const SLUG_CONFIGURADO = !EMPRENDE.slug.startsWith('CAMBIAR')
 
 export const MODULOS = [

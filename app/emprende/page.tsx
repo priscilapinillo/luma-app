@@ -1,5 +1,6 @@
 import Preguntas from './Preguntas'
 import { EMPRENDE, URL_CHECKOUT, MODULOS, QUE_RECIBIS, VIDEOS_EXTRA, BONOS, BONOS_CHIPS, PARA_QUIEN, FAQ } from '@/lib/emprende'
+import Oferta from './Oferta'
 
 const COLOR: Record<string, string> = { p: '#FFC8DD', li: '#DCD0FF', mi: '#C9F0DD', pe: '#FFD6BC', am: '#FFEFA8', y: '#FFE27A' }
 const IMG = '/landing/emprende/'
@@ -22,7 +23,7 @@ export default function Emprende() {
       <div className="strip">Pago seguro con Mercado Pago · Acceso al instante por mail</div>
       <header className="top">
         <div className="logo"><Estrella />Luma Emprende</div>
-        <a className="pill" href={URL_CHECKOUT}>Comprar</a>
+        <a className="pill" data-compra href={URL_CHECKOUT}>Comprar</a>
       </header>
 
       <main>
@@ -36,7 +37,7 @@ export default function Emprende() {
               <h1>{EMPRENDE.titulo}</h1>
               <p className="lead">Un recetario con más de 30 recetas, herramientas y tips, planilla de costos, guías para vender y plantillas de mensajes. Todo en un aula que abrís desde el celu, tuya de por vida.</p>
               <div className="price"><b>{EMPRENDE.precioTexto}</b><span>pago único</span></div>
-              <a className="btn" href={URL_CHECKOUT}>Quiero entrar al curso <Flecha /></a>
+              <a className="btn" data-compra href={URL_CHECKOUT}>Quiero entrar al curso <Flecha /></a>
               <div className="small" style={{ textAlign: 'left' }}>Pagás con Mercado Pago: tarjeta, débito o saldo en cuenta.</div>
             </div>
             <div>
@@ -44,7 +45,7 @@ export default function Emprende() {
                 <img className="a" src={`${IMG}portada-v1.webp`} width={640} height={640} alt="Portada del curso Repostería en vasos" />
                 <img className="b" src={`${IMG}foto-rosa-v1.webp`} width={640} height={640} alt="Vasito de chocolate, crema y frutillas" />
               </div>
-              <div className="bonos-hero">
+              <div className="bonos-hero solo-bonos">
                 <div className="m">De regalo con tu compra</div>
                 <div className="chips">{BONOS_CHIPS.map(b => <span key={b}>{b}</span>)}</div>
               </div>
@@ -88,7 +89,7 @@ export default function Emprende() {
                 <i style={{ background: '#FFD6BC' }} aria-hidden="true">▶</i>
                 <div><b>{VIDEOS_EXTRA.titulo}</b><p>{VIDEOS_EXTRA.texto}</p></div>
               </div>
-              <div className="dash2"><span className="eyebrow">De regalo con tu compra</span>{BONOS.map(b => <div key={b}>{b}</div>)}</div>
+              <div className="dash2 solo-bonos"><span className="eyebrow">De regalo con tu compra</span>{BONOS.map(b => <div key={b}>{b}</div>)}</div>
             </div>
             <div>
               <div className="eyebrow">Cómo se ve por dentro</div>
@@ -135,8 +136,8 @@ export default function Emprende() {
             <div>
               <h2>Empezá hoy</h2>
               <div className="big bf">{EMPRENDE.precioTexto}</div>
-              <p style={{ fontSize: 15, lineHeight: 1.55, marginBottom: 16 }}>Recetario con más de 30 recetas, herramientas y tips, planilla de costos, marketing y fotografía, y videos extra. De regalo: las 54 recetas de helados y flanes, las estrategias de venta, las plantillas de mensajes y la guía de primeros clientes.</p>
-              <a className="btn" href={URL_CHECKOUT}>Quiero entrar al curso</a>
+              <p style={{ fontSize: 15, lineHeight: 1.55, marginBottom: 16 }}>Recetario con más de 30 recetas, herramientas y tips, planilla de costos, marketing y fotografía, y videos extra.<span className="solo-bonos"> De regalo: las 54 recetas de helados y flanes, las estrategias de venta, las plantillas de mensajes y la guía de primeros clientes.</span></p>
+              <a className="btn" data-compra href={URL_CHECKOUT}>Quiero entrar al curso</a>
               <div className="small" style={{ textAlign: 'left' }}>Medios de pago: tarjeta, débito y saldo en Mercado Pago.</div>
             </div>
             <div className="pic"><img loading="lazy" src={`${IMG}vasito-a-v1.webp`} width={640} height={551} alt="Cheesecake de frutilla en vaso" /></div>
@@ -152,7 +153,7 @@ export default function Emprende() {
 
         <div className="close">
           <h2>Tu primer vasito para vender te está esperando</h2>
-          <a className="btn" href={URL_CHECKOUT}>Quiero entrar al curso</a>
+          <a className="btn" data-compra href={URL_CHECKOUT}>Quiero entrar al curso</a>
         </div>
       </main>
 
@@ -164,9 +165,10 @@ export default function Emprende() {
 
       <div className="bar">
         <img className="th" src={`${IMG}portada-v1.webp`} width={44} height={44} alt="" />
-        <div className="t"><b>Postres en vaso</b>{EMPRENDE.precioTexto}</div>
-        <a className="go" href={URL_CHECKOUT}>Comprar</a>
+        <div className="t"><b>Postres en vaso</b>{EMPRENDE.precioTexto}<span className="reloj solo-bonos"> · bonos <span data-reloj>10:00</span></span></div>
+        <a className="go" data-compra href={URL_CHECKOUT}>Comprar</a>
       </div>
+      <Oferta />
     </>
   )
 }

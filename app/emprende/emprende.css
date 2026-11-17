@@ -187,3 +187,14 @@ section{padding:40px 0 8px}
 }
 .em .bonos-hero .chips span:nth-child(3){background:var(--hp,#FFC8DD)}
 .em .bonos-hero .chips span:nth-child(4){background:var(--y,#FFE27A)}
+.em[data-oferta="vencida"] .solo-bonos{display:none!important}
+.em .bar .reloj{font-weight:800;color:var(--hp)}
+.em.urgente .bar .reloj{animation:emLat 1s steps(2) infinite}
+@keyframes emLat{50%{opacity:.35}}
+.em .aviso{position:fixed;inset:0;z-index:100;background:rgba(42,24,56,.7);display:flex;align-items:center;justify-content:center;padding:20px}
+.em .aviso-box{background:var(--y);border:3px solid var(--ink);border-radius:28px;padding:26px 22px;max-width:380px;width:100%;box-shadow:0 8px 0 var(--ink);text-align:center}
+.em .aviso-box h3{font-family:var(--font-title,inherit);font-size:26px;line-height:1.1;letter-spacing:-.5px;margin:0 0 10px}
+.em .aviso-box p{font-size:15px;line-height:1.5;margin:0 0 16px}
+.em .aviso-box .btn{display:flex;justify-content:center}
+.em .aviso-x{all:unset;cursor:pointer;margin-top:12px;font-weight:700;font-size:14px;text-decoration:underline}
+@media(prefers-reduced-motion:reduce){.em.urgente .bar .reloj{animation:none}}
