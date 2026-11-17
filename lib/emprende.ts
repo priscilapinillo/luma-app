@@ -40,6 +40,13 @@ export const BONOS = [
   'Guía: cómo conseguir tus primeros clientes (PDF)',
 ]
 
+export const BONOS_CHIPS = [
+  'Bono: 54 recetas de helados y flanes',
+  'Bono: Estrategias de venta (Instagram, TikTok y WhatsApp)',
+  'Bono: Plantillas de mensajes',
+  'Bono: Guía de primeros clientes',
+]
+
 export const PARA_QUIEN = [
   { c: 'p', t: 'Sos mamá y querés trabajar desde casa' },
   { c: 'y', t: 'Estudiás y necesitás un ingreso extra' },

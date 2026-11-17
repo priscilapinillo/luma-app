@@ -185,3 +185,5 @@ section{padding:40px 0 8px}
 .em .mods .photo{grid-column:1/-1;max-height:300px;min-height:0!important;transform:rotate(-.8deg)}
 .em .mods .photo img{object-position:50% 62%}
 }
+.em .bonos-hero .chips span:nth-child(3){background:var(--hp,#FFC8DD)}
+.em .bonos-hero .chips span:nth-child(4){background:var(--y,#FFE27A)}

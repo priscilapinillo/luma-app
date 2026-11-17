@@ -1,5 +1,5 @@
 import Preguntas from './Preguntas'
-import { EMPRENDE, URL_CHECKOUT, MODULOS, QUE_RECIBIS, VIDEOS_EXTRA, BONOS, PARA_QUIEN, FAQ } from '@/lib/emprende'
+import { EMPRENDE, URL_CHECKOUT, MODULOS, QUE_RECIBIS, VIDEOS_EXTRA, BONOS, BONOS_CHIPS, PARA_QUIEN, FAQ } from '@/lib/emprende'
 
 const COLOR: Record<string, string> = { p: '#FFC8DD', li: '#DCD0FF', mi: '#C9F0DD', pe: '#FFD6BC', am: '#FFEFA8', y: '#FFE27A' }
 const IMG = '/landing/emprende/'
@@ -46,7 +46,7 @@ export default function Emprende() {
               </div>
               <div className="bonos-hero">
                 <div className="m">De regalo con tu compra</div>
-                <div className="chips"><span>Bono: 54 recetas de helados y flanes</span><span>Bono: Estrategias de venta</span></div>
+                <div className="chips">{BONOS_CHIPS.map(b => <span key={b}>{b}</span>)}</div>
               </div>
             </div>
           </div>
