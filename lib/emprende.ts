@@ -4,7 +4,7 @@
 
 export const EMPRENDE = {
   // ⚠️ 1) El slug de la cuenta que vende el curso (el de lumaapp.lat/p/ESTE-SLUG)
-  slug: 'CAMBIAR-POR-TU-SLUG',
+  slug: 'postres-en-vaso',
   // ⚠️ 2) El slug del curso creado en Cursos (lumaapp.lat/p/tu-slug/cursos/ESTE-SLUG)
   curso: 'postres-en-vaso',
   // ⚠️ 3) Mismo precio que el curso en el panel (si no coinciden, la persona ve uno y paga otro)
