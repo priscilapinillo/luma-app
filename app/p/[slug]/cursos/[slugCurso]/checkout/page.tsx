@@ -192,6 +192,8 @@ export default function CheckoutCursoPage() {
   }
 
   const t = temaPublico(terapeuta?.template, terapeuta?.template_modo)
+  // piel de Luma Emprende: solo cambia el aspecto, nunca la lógica de pago
+  const esEmprende = t.id === 'emprende'
   const tieneMP = !!terapeuta?.mp_activo
   const tieneTransferencia = !!(terapeuta?.acepta_transferencia && terapeuta?.alias_pago)
   // en dólares: el curso tiene precio en USD y la terapeuta configuró alguna forma de cobrar en dólares
@@ -533,7 +535,7 @@ export default function CheckoutCursoPage() {
           --bg:${t.bg};--bg2:${t.bg2};--primary:${t.primary};--primary-light:${t.primaryLight};
           --primary-dim:${t.primaryDim};--accent:${t.accent};--accent-dim:${t.accentDim};
           --text:${t.text};--text-dim:${t.textDim};--cream:${t.cream};--border:${t.border};
-          --card-bg:${t.cardBg};--font-body:${t.fontBody};--btn-bg:${t.btnBg};--btn-color:${t.btnColor};
+          --card-bg:${t.cardBg};--font-body:${t.fontBody};--font-title:${t.fontTitle};--btn-bg:${t.btnBg};--btn-color:${t.btnColor};
         }
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:var(--bg)}
@@ -561,9 +563,46 @@ export default function CheckoutCursoPage() {
         .exito-wrap{text-align:center;padding:40px 0}
         .exito-circle{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#10B981,#34D399);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
         .exito-btn{display:inline-block;margin-top:16px;padding:14px 30px;background:var(--btn-bg);color:var(--btn-color);border-radius:50px;font-size:14px;font-weight:700;text-decoration:none}
+        ${esEmprende ? `
+        /* ── piel Luma Emprende ── */
+        .wrap{max-width:480px}
+        h2{font-family:var(--font-title);letter-spacing:-.5px}
+        .em-strip{background:#2A1838;color:#FFE27A;font-size:12px;font-weight:700;letter-spacing:.4px;text-align:center;padding:10px 16px;line-height:1.4}
+        .em-marca{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+        .em-logo{display:flex;align-items:center;gap:8px;font-family:var(--font-title);font-weight:800;font-size:22px;letter-spacing:-.5px;color:var(--cream);text-decoration:none}
+        .em-volver{font-size:13px;font-weight:700;color:var(--cream);background:#FFC8DD;padding:9px 14px;border-radius:999px;text-decoration:none}
+        .resumen-curso{background:#FFE27A;border:2px solid #2A1838;border-radius:24px;box-shadow:6px 6px 0 #2A1838;padding:16px}
+        .resumen-img{width:64px;height:64px;border-radius:14px;border:2px solid #2A1838}
+        .resumen-titulo{font-family:var(--font-title);font-weight:800;font-size:17px;line-height:1.15}
+        .resumen-precio{font-family:var(--font-title);font-weight:800;font-size:34px;line-height:1.05;color:var(--cream)}
+        .em-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-8px 0 22px}
+        .em-chips span{font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;color:#2A1838}
+        .field label{color:var(--primary);letter-spacing:1.2px}
+        .field input{border:2px solid #2A1838;border-radius:14px;padding:14px;background:#fff}
+        .field input:focus{box-shadow:0 0 0 3px #FFC8DD}
+        .metodo-opt{border:2px solid #2A1838;border-radius:18px;background:#fff}
+        .metodo-opt.sel{background:#FFC8DD;border-color:#2A1838;box-shadow:4px 4px 0 #2A1838}
+        .metodo-radio{border-color:#2A1838}
+        .metodo-opt.sel .metodo-radio{background:#2A1838;border-color:#2A1838}
+        .metodo-sub{color:var(--text)}
+        .transferencia-datos{border:2px solid #2A1838;border-radius:18px}
+        .confirmar-btn{padding:18px 20px;font-size:17px;box-shadow:0 7px 0 #2A1838;margin-bottom:8px}
+        .confirmar-btn:active:not(:disabled){transform:translateY(4px);box-shadow:0 3px 0 #2A1838}
+        .exito-btn{padding:16px 30px;font-size:16px;font-weight:800;box-shadow:0 6px 0 #2A1838}
+        ` : ''}
       `}</style>
 
+      {esEmprende && <div className="em-strip">Pago seguro con Mercado Pago · Acceso al instante por mail</div>}
       <div className="wrap">
+        {esEmprende && (
+          <div className="em-marca">
+            <a className="em-logo" href="/emprende">
+              <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 1l3.2 7.3L24 9.4l-5.8 5.3 1.7 7.8L13 18.2 6.1 22.5l1.7-7.8L2 9.4l7.8-1.1z" fill="#D6246E"/></svg>
+              Luma Emprende
+            </a>
+            <a className="em-volver" href="/emprende">← Volver</a>
+          </div>
+        )}
         {volvioSinSesion && !sesionAlumna ? (
           <div className="exito-wrap">
             <div className="exito-circle"><Check size={32} color="white"/></div>
@@ -618,7 +657,7 @@ export default function CheckoutCursoPage() {
           <div className="exito-wrap">
             <h2 style={{fontSize:'22px',fontWeight:800,color:'var(--cream)',marginBottom:'10px'}}>Tu acceso a este curso terminó</h2>
             <p style={{fontSize:'14px',color:'var(--text-dim)',lineHeight:1.6}}>
-              Si querés volver a <strong>{curso.titulo}</strong>, escribile a la terapeuta.
+              Si querés volver a <strong>{curso.titulo}</strong>, {esEmprende ? 'escribinos por mail.' : 'escribile a la terapeuta.'}
             </p>
             <a className="exito-btn" href="/mi-cuenta/cursos">Ir a Mis cursos</a>
           </div>
@@ -666,6 +705,14 @@ export default function CheckoutCursoPage() {
                 {!!curso.bonusCant && <div style={{fontSize:'12px',color:'var(--primary-light)',marginTop:'2px'}}>+ {curso.bonusCant} bonus de regalo</div>}
               </div>
             </div>
+
+            {esEmprende && !esGratis && (
+              <div className="em-chips">
+                <span style={{background:'#C9F0DD'}}>Pago único</span>
+                <span style={{background:'#DCD0FF'}}>Acceso de por vida</span>
+                <span style={{background:'#FFC8DD'}}>Entrás desde el celu</span>
+              </div>
+            )}
 
             {!esGratis && (
               <div className="field">

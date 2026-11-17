@@ -2,7 +2,9 @@
 // Cada plantilla tiene una versión clara y una oscura sobre la misma estructura.
 // Los nombres son los mismos de antes (luna, violeta, aura, tierra, rosa, verde), así nadie se queda sin plantilla.
 
-export type IdPlantilla = 'tierra' | 'luna' | 'verde' | 'violeta' | 'aura' | 'rosa'
+// 'emprende' es la piel de Luma Emprende (curso de postres en vasito). No aparece en los selectores de
+// plantillas (PLANTILLAS no la incluye): solo la usa la cuenta que la tiene guardada. Solo existe en claro.
+export type IdPlantilla = 'tierra' | 'luna' | 'verde' | 'violeta' | 'aura' | 'rosa' | 'emprende'
 export type ModoPlantilla = 'claro' | 'oscuro'
 
 type Colores = {
@@ -23,7 +25,20 @@ export const PLANTILLAS: { id: IdPlantilla; nombre: string; desc: string; deco: 
 
 // Modo que tenía cada una antes de la renovación (las viejas Luna y Violeta eran oscuras)
 export const MODO_ANTERIOR: Record<IdPlantilla, ModoPlantilla> = {
-  luna: 'oscuro', violeta: 'oscuro', aura: 'claro', tierra: 'claro', rosa: 'claro', verde: 'claro',
+  luna: 'oscuro', violeta: 'oscuro', aura: 'claro', tierra: 'claro', rosa: 'claro', verde: 'claro', emprende: 'claro',
+}
+
+// Plantillas que existen pero no se ofrecen en los selectores
+const INFO_OCULTA: Record<string, { nombre: string; deco: string }> = {
+  emprende: { nombre: 'Emprende', deco: '✦' },
+}
+
+// Colores de Luma Emprende (landing y checkout del curso): tinta violeta, crema, amarillo y rosa fuerte
+const EMPRENDE_CLARO: Colores = {
+  fondo: '#FFF7E8', superficie: '#FFFFFF', banda: '#FFE27A', texto: '#2A1838', suave: '#5B4668', label: '#C21F64',
+  acento: '#D6246E', sobreAcento: '#FFFFFF', chip: '#FFC8DD', chipTxt: '#2A1838', foto: 'linear-gradient(170deg, #FFC8DD, #FFE27A)', fotoTxt: '#2A1838',
+  linea: '#2A1838', icono: '#D6246E', ondaOff: '#E9DCC8', final: '#2A1838', finalTxt: '#FFF7E8', finalSuave: '#FFE27A',
+  ctaFinalFondo: '#D6246E', ctaFinalTxt: '#FFFFFF',
 }
 
 const COLORES: Record<IdPlantilla, Record<ModoPlantilla, Colores>> = {
@@ -51,6 +66,8 @@ const COLORES: Record<IdPlantilla, Record<ModoPlantilla, Colores>> = {
     claro: { fondo: '#FFF4F0', superficie: '#FFFFFF', banda: '#FFE0EC', texto: '#4E2E22', suave: '#7A5446', label: '#B4466E', acento: '#FF9FC2', sobreAcento: '#4E2E22', chip: '#FCE8C8', chipTxt: '#6E4430', foto: 'linear-gradient(170deg, #F7DAA3, #FD8B7C)', fotoTxt: '#4E2E22', linea: '#F5E1DA', icono: '#C2577A', ondaOff: '#F2D3C8', final: '#A26952', finalTxt: '#FFF4F0', finalSuave: '#F7DAA3', ctaFinalFondo: '#FF9FC2', ctaFinalTxt: '#4E2E22' },
     oscuro: { fondo: '#3A2219', superficie: '#4E3024', banda: '#5A3428', texto: '#FFEFE6', suave: '#EBC9B8', label: '#FF9FC2', acento: '#FF9FC2', sobreAcento: '#3A2219', chip: '#6A4232', chipTxt: '#F7DAA3', foto: 'linear-gradient(170deg, #FD8B7C, #A26952)', fotoTxt: '#FFEFE6', linea: '#6A4232', icono: '#FF9FC2', ondaOff: '#7E5646', final: '#F7DAA3', finalTxt: '#3A2219', finalSuave: '#6E4430', ctaFinalFondo: '#3A2219', ctaFinalTxt: '#FFEFE6' },
   },
+  // Emprende solo existe en claro: el modo oscuro usa los mismos colores
+  emprende: { claro: EMPRENDE_CLARO, oscuro: EMPRENDE_CLARO },
 }
 
 // ── utilidades de color ─────────────────────────────────────────────────────
@@ -73,15 +90,20 @@ function mezclar(a: string, b: string, p: number): string {
 }
 
 export function plantillaValida(id: unknown): IdPlantilla {
-  return PLANTILLAS.some(p => p.id === id) ? (id as IdPlantilla) : 'luna'
+  return PLANTILLAS.some(p => p.id === id) || id === 'emprende' ? (id as IdPlantilla) : 'luna'
 }
 export function modoValido(modo: unknown, id: IdPlantilla): ModoPlantilla {
+  if (id === 'emprende') return 'claro'
   return modo === 'claro' || modo === 'oscuro' ? modo : MODO_ANTERIOR[id]
 }
 
 const TITULO = "'Cormorant Garamond', serif"
 const CUERPO = "'Inter', sans-serif"
 export const FUENTES_GOOGLE = 'Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Inter:wght@400;500;600;700;800'
+// Luma Emprende usa otra tipografía
+const TITULO_EMPRENDE = "'Bricolage Grotesque', 'Inter', sans-serif"
+const CUERPO_EMPRENDE = "'DM Sans', 'Inter', sans-serif"
+const FUENTES_EMPRENDE = 'Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Sans:wght@400;500;700'
 
 // Devuelve la plantilla con los nombres de siempre (bg, primary, cream…) para que todo lo que ya existía
 // en las páginas siga funcionando, más los colores nuevos (superficie, banda, acento…).
@@ -91,7 +113,8 @@ export function temaPublico(template?: string | null, modo?: string | null) {
   const m = modoValido(modo, id)
   const c = COLORES[id][m]
   const claro = luminosidad(c.fondo) > 0.5
-  const info = PLANTILLAS.find(p => p.id === id)!
+  const info = PLANTILLAS.find(p => p.id === id) || INFO_OCULTA[id]
+  const emprende = id === 'emprende'
   return {
     id, modo: m, nombre: `${info.nombre} ${m === 'claro' ? 'claro' : 'oscuro'}`,
     // nombres de siempre
@@ -100,8 +123,8 @@ export function temaPublico(template?: string | null, modo?: string | null) {
     accent: c.acento, accentLight: mezclar(c.acento, '#FFFFFF', 0.35), accentDim: alfa(c.acento, 0.16),
     text: c.suave, textDim: mezclar(c.suave, c.fondo, 0.25), cream: c.texto,
     border: alfa(c.texto, 0.14),
-    fontTitle: TITULO, fontBody: CUERPO, fontSubtitle: CUERPO,
-    googleFonts: FUENTES_GOOGLE,
+    fontTitle: emprende ? TITULO_EMPRENDE : TITULO, fontBody: emprende ? CUERPO_EMPRENDE : CUERPO, fontSubtitle: emprende ? CUERPO_EMPRENDE : CUERPO,
+    googleFonts: emprende ? FUENTES_EMPRENDE : FUENTES_GOOGLE,
     deco: info.deco, stars: !claro, dark: !claro,
     cardBg: c.superficie, heroBg: c.fondo,
     navBg: alfa(c.fondo, 0.94),
